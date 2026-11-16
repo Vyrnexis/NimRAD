@@ -1,0 +1,151 @@
+import std/[unittest, strutils, sets]
+import nimvcl/dsl/[props, props_std]
+import ide/codegen
+
+const unit = """import nimvcl, nimvcl/dsl/nfm
+
+loadForm Form1, "unit1.nfm"
+
+proc okButtonClick(self: Form1, sender: Control) =
+  self.label1.caption = "self.label1 # not a comment"
+
+proc helper(x: int): int = x + 1
+
+proc cancelClick(f: Form1, sender: Control) =
+  # f.label1 in a comment
+  f.label1.caption = "x"
+  discard helper(1)
+"""
+
+suite "ensureHandler":
+  test "inserts a stub after the last handler":
+    let r = ensureHandler(unit, "Form1", "exitClick", "sender: Control")
+    check r.inserted
+    let lines = r.text.splitLines
+    check lines[r.line - 1] == "proc exitClick(self: Form1, sender: Control) ="
+    check lines[r.line] == "  discard"
+    check r.col == 2
+    # after cancelClick, which is the last handler (helper is not one)
+    check r.text.find("proc cancelClick") < r.text.find("proc exitClick")
+    check r.text.endsWith("  discard\n")
+
+  test "idempotent":
+    let a = ensureHandler(unit, "Form1", "exitClick", "sender: Control")
+    let b = ensureHandler(a.text, "Form1", "exitClick", "sender: Control")
+    check not b.inserted
+    check b.text == a.text
+    check b.line == a.line
+
+  test "existing proc: caret on its body":
+    let r = ensureHandler(unit, "Form1", "okButtonClick", "sender: Control")
+    check not r.inserted
+    check r.text == unit
+    check unit.splitLines[r.line].startsWith("  self.label1")
+
+  test "after loadForm when there is no handler":
+    let src = "import nimvcl\n\nloadForm Form1, \"unit1.nfm\"\n\nproc helper() = discard\n"
+    let r = ensureHandler(src, "Form1", "aClick", "sender: Control")
+    let lines = r.text.splitLines
+    check lines[2].startsWith("loadForm")
+    check lines[4] == "proc aClick(self: Form1, sender: Control) ="
+    check r.line == 5
+    check lines[6] == ""            # separated from helper
+    check lines[7].startsWith("proc helper")
+
+  test "empty file and missing trailing newline":
+    let r = ensureHandler("", "Form1", "aClick", "sender: Control")
+    check r.text == "proc aClick(self: Form1, sender: Control) =\n  discard\n"
+    check r.line == 1
+    let r2 = ensureHandler("import nimvcl", "Form1", "aClick", "sender: Control")
+    check r2.text.endsWith("  discard\n")
+    check r2.text.splitLines[r2.line] == "  discard"
+
+  test "CRLF files keep their line endings":
+    let src = unit.replace("\n", "\r\n")
+    let r = ensureHandler(src, "Form1", "exitClick", "sender: Control")
+    check r.text.count("\r\n") == r.text.count("\n")
+    check r.text.startsWith(src[0 ..< src.len - 1])
+
+  test "event parameters from the registry":
+    check handlerParams("Button", "onClick") == "sender: Control"
+    check handlerParams("MenuItem", "onClick") == "sender: MenuItem"
+    check handlerParams("Form", "onClose") == "sender: Form, action: var CloseAction"
+    check handlerParams("Edit", "onKeyDown") == "sender: Control, key: var Key, shift: ShiftState"
+    let r = ensureHandlerFor(unit, "Form1", "Form", "onClose", "formClose")
+    check "proc formClose(self: Form1, sender: Form, action: var CloseAction) =" in r.text
+
+  test "every event type of the registry is in the table":
+    var missing: HashSet[string]
+    for ci in allClasses():
+      for p in ci.propsOf:
+        if p.kind == pkEvent and not knownEventType(eventTypeOf(p)):
+          missing.incl eventTypeOf(p)
+    check missing.len == 0
+    if missing.len > 0: echo "missing: ", missing
+
+suite "handlers":
+  test "handlerNames":
+    check handlerNames(unit, "Form1") == @["okButtonClick", "cancelClick"]
+    check handlerNames(unit, "Form2").len == 0
+
+  test "renameHandler renames the proc and its references":
+    let src = unit & "\nproc other(self: Form1) =\n  okButtonClick(self, nil)\n  self.okButtonClick = 1\n"
+    let r = renameHandler(src, "okButtonClick", "saveClick")
+    check "proc saveClick(self: Form1" in r
+    check "  saveClick(self, nil)" in r
+    check "self.okButtonClick = 1" in r          # member access untouched
+    check "okButtonClick" notin r.replace("self.okButtonClick", "")
+
+  test "empty handlers":
+    let src = ensureHandler(unit, "Form1", "exitClick", "sender: Control").text
+    check emptyHandlers(src, "Form1") == @["exitClick"]
+    let r = removeEmptyHandler(src, "exitClick")
+    check r == unit
+    check removeEmptyHandler(src, "okButtonClick") == src     # not empty
+    check removeEmptyHandler(src, "nope") == src
+
+suite "renameComponentRefs":
+  test "skips strings, comments and longer identifiers":
+    let src = "proc a(self: Form1, sender: Control) =\n" &
+              "  self.label1.caption = \"self.label1\"\n" &
+              "  # self.label1 here\n" &
+              "  f.label1.left = 3\n" &
+              "  self.label10.left = 1\n" &
+              "  self.mylabel1.left = 1\n" &
+              "  other.label1.left = 2\n" &
+              "  let s = \"\"\"\nself.label1\n\"\"\"\n" &
+              "  self.label1.top = 0 # self.label1\n"
+    let r = renameComponentRefs(src, "label1", "title")
+    check "  self.title.caption = \"self.label1\"" in r
+    check "  # self.label1 here" in r
+    check "  f.title.left = 3" in r
+    check "self.label10.left" in r
+    check "self.mylabel1.left" in r
+    check "  other.title.left = 2" in r          # no form type given: any receiver
+    check "\nself.label1\n\"\"\"" in r
+    check "  self.title.top = 0 # self.label1" in r
+
+  test "with a form type only the form's receivers":
+    let src = "proc a(f: Form1, sender: Control) =\n  f.label1.left = 3\n  self.label1.top = 1\n  other.label1.left = 2\n"
+    let r = renameComponentRefs(src, "label1", "title", "Form1")
+    check "  f.title.left = 3" in r
+    check "  self.title.top = 1" in r
+    check "  other.label1.left = 2" in r
+
+suite "imports":
+  test "renameImport":
+    check renameImport("import unit1\n", "unit1", "main_form") == "import main_form\n"
+    check renameImport("import std/os, unit1, nimvcl\n", "unit1", "u") == "import std/os, u, nimvcl\n"
+    check renameImport("import ./unit1\n", "unit1", "u") == "import ./u\n"
+    check renameImport("import foo/[unit1, bar]\n", "unit1", "u") == "import foo/[u, bar]\n"
+    check renameImport("import std/os,\n  unit1,\n  nimvcl\n", "unit1", "u") == "import std/os,\n  u,\n  nimvcl\n"
+    check renameImport("from unit1 import newForm1\n", "unit1", "u") == "from u import newForm1\n"
+    check renameImport("import unit1 as uu\n", "unit1", "u") == "import u as uu\n"
+
+  test "renameImport leaves other things alone":
+    let src = "import unit10, unit1/sub, other/unit1\nlet unit1 = 3\necho \"import unit1\"\n# import unit1\n"
+    check renameImport(src, "unit1", "u") == src
+
+  test "renameLoadFormPath":
+    check renameLoadFormPath("loadForm Form1, \"unit1.nfm\"\n", "unit1.nfm", "main.nfm") ==
+      "loadForm Form1, \"main.nfm\"\n"

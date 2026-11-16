@@ -1,0 +1,17 @@
+## ${name}: main program.
+import std/os
+import nimvcl
+import ${unit}
+
+proc main() =
+  Application.init()
+  let mainForm = new${form}()
+  if "--smoke" in commandLineParams():
+    # Hidden flag: show the form, paint one frame and exit (used by tests).
+    mainForm.show()
+    Application.processMessages()
+    Application.shutdown()
+  else:
+    Application.run(mainForm)
+
+main()

@@ -1,0 +1,388 @@
+## Edits to the source text of a form unit (`unit1.nim`): handler stubs,
+## renames and import updates. Everything works on plain text, line by line,
+## and keeps what the user wrote: the file's line ending and trailing newline
+## are preserved, and nothing outside the touched lines changes.
+##
+## Strings and comments are skipped with nimvcl's `NimHighlighter` lexer, so a
+## `"self.button1"` in a string or a `# button1` comment is never renamed.
+##
+## **Handler signatures** come from the property registry only in part: a
+## `PropInfo` knows the *name* of its event type (`eventTypeOf`, e.g.
+## `"KeyEvent"`) but not its parameters. `eventSignature` therefore resolves
+## the type name through a table that is built at compile time from the real
+## proc types (a macro reads each type's `FormalParams`), so it follows nimvcl
+## and cannot drift. The table covers the event types of the stock controls;
+## `handlerParams(className, eventName)` goes registry -> type name -> table.
+##
+## Line and column numbers are 0-based (as in `CodeEdit`).
+
+import std/[strutils, macros, tables, algorithm]
+import nimvcl/controls/nimlexer
+import nimvcl/dsl/[props, props_std]
+import nimvcl
+
+type
+  StubResult* = object
+    text*: string       ## the whole new source
+    line*, col*: int    ## caret position inside the handler (its first body line)
+    inserted*: bool     ## false when the proc already existed
+
+  EventSig* = tuple[params, ret: string]   ## "sender: Control, key: var Key", ""
+
+# --------------------------------------------------------------- event table
+
+macro sigOf(T: typedesc): untyped =
+  let impl = getTypeInst(T)[1].getTypeImpl
+  var params: seq[string]
+  var ret = ""
+  if impl.kind == nnkProcTy:
+    let fp = impl[0]
+    if fp[0].kind != nnkEmpty: ret = fp[0].repr
+    for i in 1 ..< fp.len:
+      let d = fp[i]
+      params.add d[0].repr & ": " & d[1].repr
+  result = newLit((params.join(", "), ret))
+
+const eventTable = {
+  "NotifyEvent": sigOf(NotifyEvent), "MouseEvent": sigOf(MouseEvent),
+  "MouseMoveEvent": sigOf(MouseMoveEvent), "MouseWheelEvent": sigOf(MouseWheelEvent),
+  "KeyEvent": sigOf(KeyEvent), "KeyPressEvent": sigOf(KeyPressEvent),
+  "PaintEvent": sigOf(PaintEvent), "TimerEvent": sigOf(TimerEvent),
+  "FormCloseEvent": sigOf(FormCloseEvent), "FormCloseQueryEvent": sigOf(FormCloseQueryEvent),
+  "MenuItemEvent": sigOf(MenuItemEvent), "ScrollEvent": sigOf(ScrollEvent),
+  "TabChangingEvent": sigOf(TabChangingEvent), "SelectCellEvent": sigOf(SelectCellEvent),
+  "DrawCellEvent": sigOf(DrawCellEvent), "GridCellEvent": sigOf(GridCellEvent),
+  "GridIndexEvent": sigOf(GridIndexEvent), "ListItemEvent": sigOf(ListItemEvent),
+  "ListSelectEvent": sigOf(ListSelectEvent), "ListColumnEvent": sigOf(ListColumnEvent),
+  "ListItemDblClickEvent": sigOf(ListItemDblClickEvent), "TreeNodeEvent": sigOf(TreeNodeEvent),
+  "TreeAllowEvent": sigOf(TreeAllowEvent), "ActionEvent": sigOf(ActionEvent),
+  "ActionListEvent": sigOf(ActionListEvent), "CaretMoveEvent": sigOf(CaretMoveEvent),
+  "GutterClickEvent": sigOf(GutterClickEvent),
+  "PopupEvent": ("sender: PopupMenu", ""),   # private type in props_std
+}.toTable
+## Event types of the stock controls (the test suite checks that every event
+## type of the registry is listed).
+
+proc eventSignature*(eventType: string): EventSig =
+  ## Parameters (after the form) and result type of an event type. An unknown
+  ## type gives `("sender: Control", "")`; see `knownEventType`.
+  if eventType in eventTable: eventTable[eventType]
+  else: ("sender: Control", "")
+
+proc knownEventType*(eventType: string): bool = eventType in eventTable
+
+proc handlerParams*(className, eventName: string): string =
+  ## The event's parameter list for a handler of `className.eventName`
+  ## (`"sender: Control"` for `Button.onClick`), through the registry.
+  let ci = classByName(className)
+  if ci == nil: return "sender: Control"
+  let p = ci.findProp(eventName)
+  if p == nil or p.kind != pkEvent: return "sender: Control"
+  eventSignature(eventTypeOf(p)).params
+
+# ------------------------------------------------------------------- lines
+
+type
+  Src = object
+    lines: seq[string]   ## without line ends; a trailing newline is a final ""
+    eol: string
+
+proc split(src: string): Src =
+  result.eol = if "\r\n" in src: "\r\n" else: "\n"
+  result.lines = src.split('\n')
+  for l in result.lines.mitems:
+    if l.endsWith('\r'): l.setLen l.len - 1
+
+proc join(s: Src): string = s.lines.join(s.eol)
+
+proc isBlank(l: string): bool = l.strip().len == 0
+
+proc codeLines(s: Src): int =
+  ## Number of lines excluding the empty piece after a final newline.
+  if s.lines.len > 0 and s.lines[^1].len == 0: s.lines.len - 1 else: s.lines.len
+
+type Tok = object
+  line, start, len: int
+  kind: TokenKind
+
+proc tokenize(s: Src): seq[Tok] =
+  ## Tokens of every line (comments and strings are single tokens).
+  let h = newNimHighlighter()
+  var state = 0
+  var toks: seq[Token]
+  for i, l in s.lines:
+    toks.setLen 0
+    state = h.lexLine(l, state, toks)
+    for t in toks: result.add Tok(line: i, start: t.start, len: t.len, kind: t.kind)
+
+proc text(s: Src, t: Tok): string = s.lines[t.line][t.start ..< t.start + t.len]
+
+proc isIdentChar(c: char): bool = c in IdentChars or ord(c) >= 0x80
+
+# ------------------------------------------------------------------ procs
+
+type ProcInfo = object
+  name: string
+  firstParam, firstType: string   ## "self", "Form1"
+  first, last: int                ## line range; `last` excludes trailing blanks
+  bodyLine: int                   ## first line after the header (== last+1 when none)
+
+proc identAt(l: string, i: int): string =
+  var j = i
+  while j < l.len and isIdentChar(l[j]): inc j
+  l[i ..< j]
+
+proc parseProcs(s: Src): seq[ProcInfo] =
+  ## Top-level `proc`/`func`/`method` definitions (column 0).
+  let n = s.codeLines
+  var i = 0
+  while i < n:
+    let l = s.lines[i]
+    var kw = 0
+    for k in ["proc ", "func ", "method "]:
+      if l.startsWith(k): kw = k.len
+    if kw == 0:
+      inc i
+      continue
+    var p = kw
+    while p < l.len and l[p] == ' ': inc p
+    var name = identAt(l, p)
+    p += name.len
+    if p < l.len and l[p] == '*': inc p
+    var info = ProcInfo(name: name, first: i)
+    # first parameter: look at the header text (joined while the paren is open)
+    var hdr = l[p .. ^1]
+    var j = i
+    while hdr.find(')') < 0 and hdr.find(':') < 0 and j + 1 < n and j < i + 3:
+      inc j
+      hdr.add " " & s.lines[j].strip()
+    let lp = hdr.find('(')
+    if lp >= 0:
+      let colon = hdr.find(':', lp)
+      if colon > lp:
+        info.firstParam = hdr[lp + 1 ..< colon].strip()
+        var ty = hdr[colon + 1 .. ^1].strip()
+        var e = 0
+        while e < ty.len and (isIdentChar(ty[e]) or ty[e] == '.'): inc e
+        info.firstType = ty[0 ..< e]
+    # extent: following lines that are blank or indented
+    var last = i
+    var k = i + 1
+    while k < n:
+      let m = s.lines[k]
+      if isBlank(m): inc k
+      elif m[0] in {' ', '\t'}:
+        last = k
+        inc k
+      else: break
+    info.last = last
+    # a one-line proc `proc f() = body` has its body on the header line
+    info.bodyLine = i + 1
+    result.add info
+    i = max(last, i) + 1
+
+proc findProc(procs: seq[ProcInfo], name: string): int =
+  for i, p in procs:
+    if p.name == name: return i
+  -1
+
+proc handlerNames*(src, formType: string): seq[string] =
+  ## Names of the top-level procs whose first parameter has type `formType`,
+  ## in source order.
+  for p in parseProcs(split(src)):
+    if p.firstType == formType: result.add p.name
+
+proc hasProc*(src, name: string): bool =
+  parseProcs(split(src)).findProc(name) >= 0
+
+proc firstBodyCol(s: Src, p: ProcInfo): int =
+  if p.bodyLine <= p.last:
+    let l = s.lines[p.bodyLine]
+    result = l.len - l.strip(trailing = false).len
+  else: result = 2
+
+proc ensureHandler*(src, formType, handlerName, eventParams: string,
+                    retType = ""): StubResult =
+  ## Makes sure a proc `handlerName` exists:
+  ## `proc handlerName(self: formType, eventParams) =` + `  discard`.
+  ## An existing proc of that name (any signature) is left alone. The stub goes
+  ## after the last proc whose first parameter is `formType`, else after the
+  ## `loadForm` line, else after the imports, else at the end. The caret is on
+  ## the first body line (column of the indentation).
+  var s = split(src)
+  let procs = parseProcs(s)
+  let ex = procs.findProc(handlerName)
+  if ex >= 0:
+    return StubResult(text: src, line: min(procs[ex].bodyLine, procs[ex].last),
+                      col: firstBodyCol(s, procs[ex]), inserted: false)
+  var at = -1                       # insert after this line
+  for p in procs:
+    if p.firstType == formType: at = p.last
+  if at < 0:
+    for i in 0 ..< s.codeLines:
+      if s.lines[i].startsWith("loadForm"): at = i
+  if at < 0:
+    for i in 0 ..< s.codeLines:
+      let l = s.lines[i]
+      if l.startsWith("import ") or l.startsWith("from ") or l.startsWith("export "):
+        at = i
+  if at < 0: at = s.codeLines - 1
+  let params = if eventParams.strip().len > 0: ", " & eventParams.strip() else: ""
+  let header = "proc " & handlerName & "(self: " & formType & params & ")" &
+               (if retType.len > 0: ": " & retType else: "") & " ="
+  var add = @["", header, "  discard"]
+  if at + 1 < s.codeLines and not isBlank(s.lines[at + 1]): add.add ""
+  if at < 0:                       # empty file: no blank line before
+    add.delete 0
+    at = -1
+  for k, l in add: s.lines.insert(l, at + 1 + k)
+  if s.lines[^1].len > 0: s.lines.add ""    # keep a final newline
+  result = StubResult(text: s.join, line: at + 1 + (if add[0].len == 0: 1 else: 0) + 1,
+                      col: 2, inserted: true)
+
+proc registrySig(className, eventName: string): EventSig =
+  let ci = classByName(className)
+  let p = if ci != nil: ci.findProp(eventName) else: nil
+  if p != nil and p.kind == pkEvent: eventSignature(eventTypeOf(p))
+  else: ("sender: Control", "")
+
+proc ensureHandlerFor*(src, formType, className, eventName, handlerName: string): StubResult =
+  ## `ensureHandler` with the parameters taken from the registry.
+  let sig = registrySig(className, eventName)
+  ensureHandler(src, formType, handlerName, sig.params, sig.ret)
+
+proc isEmptyBody(s: Src, p: ProcInfo): bool =
+  for i in p.first + 1 .. p.last:
+    let t = s.lines[i].strip()
+    if t.len > 0 and t != "discard": return false
+  # one-line procs (`proc f(...) = discard`) have the body in the header
+  p.last > p.first or s.lines[p.first].strip().endsWith("= discard")
+
+proc emptyHandlers*(src, formType: string): seq[string] =
+  ## Handlers whose body is only `discard`. The caller must also clear the
+  ## event in the .nfm before `removeEmptyHandler`, or the form no longer compiles.
+  let s = split(src)
+  for p in parseProcs(s):
+    if p.firstType == formType and isEmptyBody(s, p): result.add p.name
+
+proc removeEmptyHandler*(src, handlerName: string): string =
+  ## Deletes the proc when its body is empty (only `discard` or blank lines),
+  ## with one of the blank lines around it. Returns `src` unchanged otherwise.
+  var s = split(src)
+  let procs = parseProcs(s)
+  let i = procs.findProc(handlerName)
+  if i < 0 or not isEmptyBody(s, procs[i]): return src
+  let p = procs[i]
+  var first = p.first
+  var last = p.last
+  if last + 1 < s.lines.len and isBlank(s.lines[last + 1]) and
+     (last + 1 < s.codeLines): inc last
+  elif first > 0 and isBlank(s.lines[first - 1]): dec first
+  s.lines = s.lines[0 ..< first] & s.lines[last + 1 .. ^1]
+  s.join
+
+# ---------------------------------------------------------------- renames
+
+proc applyEdits(s: var Src, edits: seq[tuple[line, start, len: int, repl: string]]) =
+  ## Applies replacements, last first so positions stay valid.
+  var e = edits
+  e.sort(proc(a, b: tuple[line, start, len: int, repl: string]): int =
+    if a.line != b.line: cmp(b.line, a.line) else: cmp(b.start, a.start))
+  for x in e:
+    s.lines[x.line] = s.lines[x.line][0 ..< x.start] & x.repl & s.lines[x.line][x.start + x.len .. ^1]
+
+proc renameHandler*(src, oldName, newName: string): string =
+  ## Renames the proc and every identifier use of it (calls, other references).
+  ## Member accesses (`x.oldName`) are left alone.
+  var s = split(src)
+  var edits: seq[tuple[line, start, len: int, repl: string]]
+  for t in tokenize(s):
+    if t.kind == tkIdent and s.text(t) == oldName and
+       not (t.start > 0 and s.lines[t.line][t.start - 1] == '.'):
+      edits.add (t.line, t.start, t.len, newName)
+  s.applyEdits edits
+  s.join
+
+proc receivers(s: Src, formType: string): seq[string] =
+  result.add "self"
+  for p in parseProcs(s):
+    if p.firstType == formType and p.firstParam.len > 0 and p.firstParam notin result:
+      result.add p.firstParam
+
+proc renameComponentRefs*(src, oldName, newName: string, formType = ""): string =
+  ## Renames `self.oldName` / `f.oldName`. With `formType` the receiver must be
+  ## `self` or the name of the first parameter of a proc of that form type;
+  ## without it any `x.oldName` is renamed. Strings and comments are skipped,
+  ## and only whole identifiers match.
+  var s = split(src)
+  let recv = if formType.len > 0: receivers(s, formType) else: @[]
+  var edits: seq[tuple[line, start, len: int, repl: string]]
+  for t in tokenize(s):
+    if t.kind != tkIdent or s.text(t) != oldName or t.start == 0: continue
+    let l = s.lines[t.line]
+    if l[t.start - 1] != '.': continue
+    var e = t.start - 1                       # end of the receiver
+    var b = e
+    while b > 0 and isIdentChar(l[b - 1]): dec b
+    if b == e or (b > 0 and l[b - 1] == '.'): continue   # chained: a.b.old is not ours
+    if formType.len > 0 and l[b ..< e] notin recv: continue
+    edits.add (t.line, t.start, t.len, newName)
+  s.applyEdits edits
+  s.join
+
+# ---------------------------------------------------------------- imports
+
+proc renameImport*(src, oldUnit, newUnit: string): string =
+  ## Updates `import oldUnit`, `import a, oldUnit`, `import dir/[oldUnit, b]`
+  ## (as the last path part) and `from oldUnit import x` to the new name.
+  ## Longer paths such as `oldUnit/sub` and other identifiers are not touched.
+  var s = split(src)
+  var edits: seq[tuple[line, start, len: int, repl: string]]
+  var inImport = false
+  var depth = 0
+  var afterFrom = false
+  var lastText = ""
+  var prevLine = -1
+  let toks = tokenize(s)
+  for t in toks:
+    if t.line != prevLine:
+      # a new line: an import statement goes on after a trailing comma or an open bracket
+      if prevLine >= 0 and not (inImport and (lastText == "," or depth > 0)):
+        inImport = false
+      prevLine = t.line
+    let txt = s.text(t)
+    if t.kind == tkKeyword and t.start == (s.lines[t.line].len - s.lines[t.line].strip(trailing = false).len) and
+       txt in ["import", "export", "from", "include"]:
+      inImport = true
+      depth = 0
+      afterFrom = txt == "from"
+      lastText = txt
+      continue
+    if not inImport:
+      continue
+    if t.kind in {tkComment, tkDocComment}: continue
+    lastText = txt
+    if t.kind == tkPunct or t.kind == tkOperator:
+      for c in txt:
+        if c == '[': inc depth
+        elif c == ']': dec depth
+    if t.kind == tkIdent and txt == oldUnit:
+      let l = s.lines[t.line]
+      let after = t.start + t.len
+      let nextCh = if after < l.len: l[after] else: ' '
+      let prevCh = if t.start > 0: l[t.start - 1] else: ' '
+      let prev2 = if t.start > 1: l[t.start - 2] else: ' '
+      let startsPath = prevCh in {' ', ',', '[', '\t'} or (prevCh == '/' and prev2 == '.')
+      if startsPath and nextCh != '/':
+        edits.add (t.line, t.start, t.len, newUnit)
+    if afterFrom and txt == "import": afterFrom = false
+  s.applyEdits edits
+  s.join
+
+proc renameLoadFormPath*(src, oldNfm, newNfm: string): string =
+  ## Updates the file name in `loadForm Type, "old.nfm"`.
+  var s = split(src)
+  for i in 0 ..< s.lines.len:
+    if s.lines[i].startsWith("loadForm"):
+      s.lines[i] = s.lines[i].replace("\"" & oldNfm & "\"", "\"" & newNfm & "\"")
+  s.join
