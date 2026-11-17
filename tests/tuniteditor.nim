@@ -257,6 +257,17 @@ suite "unit editor":
     check readFile(r.proj.dir / "unit1.nfm").contains("onShow = FormShow")
     check r.proj.compiles()
 
+  test "resizing the design root resizes the form and its frame":
+    let r = rig("app6b")
+    let body = r.ed.designedForm
+    let frame = body.parent
+    body.setBounds(body.left, body.top, 420, 260)
+    check frame.width > 420 and frame.height > 260
+    r.ed.save()
+    let nfm = readFile(r.proj.dir / "unit1.nfm")
+    check nfm.contains("width = 420")
+    check nfm.contains("height = 260")
+
   test "line endings are preserved":
     let r = rig("app7")
     let nfm = readFile(r.proj.dir / "unit1.nfm").replace("\n", "\r\n")

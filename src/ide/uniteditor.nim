@@ -441,6 +441,16 @@ proc buildDesign(e: UnitEditor, text: string) =
   e.fBody = body
   e.fForm = form
   e.syncGeometry()
+  # the designer resizes the design root: the form and the frame follow
+  body.onResize = proc(s: Control) =
+    if e.fForm == nil or e.fBody == nil: return
+    let w = int(e.fBody.width)
+    let h = int(e.fBody.height)
+    if w != int(e.fForm.width) or h != int(e.fForm.height):
+      e.fForm.width = float32(w)
+      e.fForm.height = float32(h)
+      e.syncGeometry()
+      e.touchDesign()
   # tiles: menus and the components that are not controls
   var seen: HashSet[Obj]
   collectKids(Obj(form), seen)
