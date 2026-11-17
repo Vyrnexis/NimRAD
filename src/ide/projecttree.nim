@@ -1,6 +1,7 @@
 ## The Project Manager: a TreeView with the project as the root and its units
 ## below it (form units carry a window icon). Double click or Enter on a unit
-## calls `onOpenUnit(unitName)`.
+## calls `onOpenUnit(unitName)`, on the project node `onOpenMain()` (the
+## program file).
 
 import nimvcl
 import ./[project, icons]
@@ -9,6 +10,7 @@ type
   ProjectTree* = ref object
     tree*: TreeView
     onOpenUnit*: proc(unitName: string)
+    onOpenMain*: proc()
     unitNames: seq[string]        ## node.tag = index into this
 
 proc newProjectTree*(parent: Container, images: ImageList): ProjectTree =
@@ -23,6 +25,8 @@ proc newProjectTree*(parent: Container, images: ImageList): ProjectTree =
     let n = t.tree.selected
     if n != nil and n.tag >= 0 and n.tag < t.unitNames.len and t.onOpenUnit != nil:
       t.onOpenUnit(t.unitNames[n.tag])
+    elif n != nil and n.tag == -1 and n.parent == nil and t.onOpenMain != nil:
+      t.onOpenMain()
   t.tree.onDblClick = proc(sender: Control) = open()
   t.tree.onKeyDown = proc(sender: Control, key: var Key, shift: ShiftState) =
     if key == keyEnter and shift == {}:

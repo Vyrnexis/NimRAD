@@ -1,4 +1,4 @@
-import std/[unittest, os, osproc, strutils, json]
+import std/[unittest, os, osproc, strutils, json, sequtils]
 import ide/[project, builder]
 
 let root = getTempDir() / ("nimvclide-proj-" & $getCurrentProcessId())
@@ -46,6 +46,23 @@ suite "project file":
     let p = Project(filePath: root / "x.nimproj", nimvclPath: "../elsewhere/src")
     check p.nimvclSrc == root.parentDir / "elsewhere" / "src"
 
+suite "project options and names":
+  test "defines, title and version are saved and become compiler arguments":
+    let p = Project(filePath: root / "o" / "o.nimproj", name: "o", mainFile: "o.nim",
+                    outputDir: "build", defines: @["foo", "level=2"], title: "My App",
+                    version: "1.0")
+    createDir root / "o"
+    p.save()
+    let q = loadProject(p.filePath)
+    check q.defines == @["foo", "level=2"] and q.title == "My App" and q.version == "1.0"
+    check "\"defines\"" in readFile(p.filePath)
+    let a = compileArgs(q)
+    check "-d:foo" in a and "-d:level=2" in a
+    check "-d:appTitle=My App" in a and "-d:appVersion=1.0" in a
+    let e = loadProject(root / "min.nimproj")
+    check e.defines.len == 0 and e.title == "" and e.version == ""
+    check not compileArgs(e).anyIt(it.startsWith("-d:app"))
+
 suite "new application":
   test "files are created from the templates":
     let p = newApplicationProject(root / "app", "hello")
@@ -83,9 +100,10 @@ suite "new application":
     p.removeUnit("unit3", deleteFiles = true)
     check not fileExists(root / "app" / "unit3.nim")
     p.save()
-    # the main file must import it to compile it; add an import and a handler
-    let main = root / "app" / "hello.nim"
-    writeFile(main, readFile(main).replace("import unit1\n", "import unit1, unit2\n"))
+    # the main file imports it and creates the form (between the markers)
+    let main = readFile(root / "app" / "hello.nim")
+    check "import unit2\n" in main and "let form2 {.used.} = newForm2()\n" in main
+    check "unit3" notin main and "Form3" notin main        # removed again with its unit
     let r = p.build()
     check r.ok
     check p.smoke().exitCode == 0
@@ -96,7 +114,8 @@ suite "new application":
     check p.findUnit("second") >= 0 and p.findUnit("unit2") < 0
     check fileExists(root / "app" / "second.nim") and fileExists(root / "app" / "second.nfm")
     check not fileExists(root / "app" / "unit2.nim")
-    check readFile(root / "app" / "hello.nim").contains("import unit1, second")
+    check readFile(root / "app" / "hello.nim").contains("import second\n")
+    check not readFile(root / "app" / "hello.nim").contains("import unit2")
     check readFile(root / "app" / "second.nim").contains("loadForm Form2, \"second.nfm\"")
     expect ProjectError: p.renameUnit("second", "unit1")
     expect ProjectError: p.renameUnit("nope", "x")
@@ -105,5 +124,25 @@ suite "new application":
     let r = p.build()
     check r.ok
     check p.smoke().exitCode == 0
+
+suite "rename the project":
+  test "the project file and the main file move, the units stay":
+    let p = loadProject(root / "app" / "hello.nimproj")
+    expect ProjectError: p.renameProject("1bad")
+    expect ProjectError: p.renameProject("unit1")           # a unit has that name
+    writeFile(root / "app" / "taken.nimproj", "{}")
+    expect ProjectError: p.renameProject("taken")
+    check fileExists(root / "app" / "hello.nimproj")        # nothing happened
+    p.renameProject("world")
+    check p.name == "world" and p.mainFile == "world.nim"
+    check p.filePath == root / "app" / "world.nimproj"
+    check fileExists(root / "app" / "world.nimproj") and fileExists(root / "app" / "world.nim")
+    check not fileExists(root / "app" / "hello.nimproj") and not fileExists(root / "app" / "hello.nim")
+    let q = loadProject(p.filePath)
+    check q.name == "world" and q.units.len == 2
+    check readFile(root / "app" / "world.nim").contains("import unit1")
+    check q.build().ok
+    check q.exePath.extractFilename == "world" & ExeExt
+    check q.smoke().exitCode == 0
 
 removeDir root

@@ -6,7 +6,7 @@
 ## `openUnit`, `compile`, `run`, ...), so the scripted session and the tests
 ## drive the same code as the menu. The few modal dialogs (save changes,
 ## errors, text input, file choice) are hooks (`askSave`, `showError`,
-## `askText`, `pickFile`) that tests replace.
+## `askText`, `pickFile`, `pickItem`) that tests replace.
 ##
 ## Where things live:
 ##
@@ -20,7 +20,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import nimvcl/dsl/[props, props_std]
 import ./[project, builder, messages, ideconfig, icons, actions, palette,
-          projecttree, messagespanel, uniteditor]
+          projecttree, messagespanel, uniteditor, editortabs, mainfile]
 
 const
   AppName* = "nimvcl IDE"
@@ -38,7 +38,7 @@ type
     palIcons: ImageList
     palIndex: Table[string, int]
     menu: MainMenu
-    recentMenu: MenuItem
+    recentMenu*: MenuItem
     palette*: ComponentPalette
     site*: DockSite
     pnlTree*, pnlInspector*, pnlProject*, pnlMessages*, pnlEditors*: DockPanel
@@ -46,7 +46,7 @@ type
     inspector*: ObjectInspector
     projectTree*: ProjectTree
     messages*: MessagesPanel
-    pages*: PageControl
+    pages*: EditorPages
     status*: StatusBar
     editors*: seq[UnitEditor]
     sheets: seq[TabSheet]
@@ -57,8 +57,12 @@ type
     treeNodes: seq[TreeNode]
     syncingTree: bool
     pendingRun: bool
+    optionsChanged: bool       ## compiler options changed since the last build
+    running: bool
+    stopRequested: bool
     buildStart: float
     runUnits: int
+    lastExitCode*: int          ## exit code of the program that ran last
     lastBuildOk*: bool
     lastBuildInfo*: string
     buildCount*: int
@@ -67,6 +71,12 @@ type
     showError*: proc(text: string)
     askText*: proc(caption, prompt: string, value: var string): bool
     pickFile*: proc(title: string, filters: seq[(string, string)]): string
+    pickItem*: proc(title: string, items: seq[string], selected: int): int
+      ## A list to choose from; the index, or -1 when cancelled.
+
+  ProjectOptions* = object
+    ## The fields of the Project Options dialog (text as typed).
+    outputDir*, flags*, defines*, title*, version*: string
 
   StatusPart = enum spState, spBuild, spCaret, spModified, spMessage
 
@@ -92,6 +102,25 @@ proc askSaveDefault(unitName: string): SaveChoice =
   of mrYes: scSave
   of mrNo: scDiscard
   else: scCancel
+
+proc pickItemDefault(title: string, items: seq[string], selected: int): int =
+  let d = newForm(nil, 380, 380)
+  d.caption = title
+  d.borderStyle = bsSingle
+  d.position = poScreenCenter
+  let lb = newListBox(d, 16, 16, 348, 270)
+  for it in items: lb.items.add it
+  lb.itemIndex = clamp(selected, 0, max(items.len - 1, 0))
+  lb.onDblClick = proc(sender: Control) = d.modalResult = mrOk
+  let ok = newButton(d, "OK", 188, 306, 84, 32)
+  ok.modalResult = mrOk
+  ok.isDefault = true
+  let cancel = newButton(d, "Cancel", 280, 306, 84, 32)
+  cancel.modalResult = mrCancel
+  cancel.isCancel = true
+  d.activeControl = lb
+  result = if d.showModal() == mrOk: lb.itemIndex else: -1
+  d.freeWindow()
 
 proc defaultProjectsDir*(): string = getHomeDir() / "nimvcl-projects"
 
@@ -139,7 +168,17 @@ proc applyEditorFont*(ide: IdeForm) =
   ide.messages.output.font = ide.editorFont
 
 proc updateCaption(ide: IdeForm) =
-  ide.caption = AppName & (if ide.project != nil: " - " & ide.project.name else: "")
+  ide.caption = AppName & (if ide.project != nil: " - " & ide.project.name else: "") &
+                (if ide.running: " [Running]" else: "")
+
+proc isMainEditor*(ide: IdeForm, ed: UnitEditor): bool =
+  ## The editor of the program file (it is not a unit of the project).
+  ide.project != nil and ed != nil and ed.unitName == ide.project.name and
+    ide.project.findUnit(ed.unitName) < 0
+
+proc tabCaption(ide: IdeForm, ed: UnitEditor): string =
+  (if ide.isMainEditor(ed): ed.unitName & ".nim" else: ed.unitName) &
+    (if ed.modified: "*" else: "")
 
 proc modifiedUnits*(ide: IdeForm): seq[string] =
   for e in ide.editors:
@@ -147,7 +186,7 @@ proc modifiedUnits*(ide: IdeForm): seq[string] =
 
 proc updateTabs(ide: IdeForm) =
   for i, e in ide.editors:
-    let cap = e.unitName & (if e.modified: "*" else: "")
+    let cap = ide.tabCaption(e)
     if ide.sheets[i].caption != cap: ide.sheets[i].caption = cap
 
 # --------------------------------------------------------------- object tree
@@ -349,6 +388,8 @@ proc refreshActions*(ide: IdeForm) =
   let hasSel = designer and ed.designer.selection.len > 0
   a[aNewForm].enabled = hasProject
   a[aSave].enabled = ed != nil
+  a[aSaveAs].enabled = ed != nil
+  a[aSaveProjectAs].enabled = hasProject
   a[aSaveAll].enabled = hasProject
   a[aClose].enabled = ed != nil
   a[aUndo].enabled = ed != nil and (not designer or ed.designer.canUndo)
@@ -361,7 +402,14 @@ proc refreshActions*(ide: IdeForm) =
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
   a[aToggleView].enabled = ed != nil and ed.isForm
   a[aAddToProject].enabled = hasProject
-  a[aRemoveFromProject].enabled = ed != nil
+  a[aRemoveFromProject].enabled = ed != nil and not ide.isMainEditor(ed)
+  a[aViewSource].enabled = hasProject
+  a[aViewUnits].enabled = hasProject
+  a[aViewForms].enabled = hasProject
+  a[aRunParameters].enabled = hasProject
+  a[aShowHints].checked = ide.settings.showHints
+  for id in [aNextMessage, aNextMessageAlt]:
+    a[id].enabled = ide.messages.nextJumpable() >= 0
   a[aProjectOptions].enabled = hasProject
   a[aCompile].enabled = hasProject and not busy
   a[aRun].enabled = hasProject and not busy
@@ -413,11 +461,19 @@ proc openUnit*(ide: IdeForm, unitName: string): UnitEditor =
     ide.pages.activePageIndex = i
     ide.bindActive()
     return ide.editors[i]
-  if ide.project.findUnit(unitName) < 0: return nil
+  let isMain = unitName == ide.project.name and ide.project.findUnit(unitName) < 0
+  if ide.project.findUnit(unitName) < 0 and not isMain: return nil
   let sheet = newTabSheet(ide.pages, unitName)
   var ed: UnitEditor
   try:
-    ed = newUnitEditor(ide.project, unitName, sheet)
+    if isMain:
+      # the program file is not a unit: the editor gets a one-unit project of its own
+      let p = ide.project
+      let shadow = Project(filePath: p.filePath, name: p.name, mainFile: p.mainFile,
+                           units: @[ProjectUnit(name: p.name, nimPath: p.mainFile)])
+      ed = newUnitEditor(shadow, unitName, sheet)
+    else:
+      ed = newUnitEditor(ide.project, unitName, sheet)
   except CatchableError as e:
     sheet.free()
     ide.fail "Cannot open " & unitName & ": " & e.msg
@@ -431,6 +487,23 @@ proc openUnit*(ide: IdeForm, unitName: string): UnitEditor =
   ide.bindActive()
   ide.say "Opened " & unitName
   ed
+
+proc openMain*(ide: IdeForm): UnitEditor =
+  ## Project > View Source: the program file in the editor.
+  if ide.project == nil: return nil
+  ide.openUnit(ide.project.name)
+
+proc mainEditor*(ide: IdeForm): UnitEditor =
+  if ide.project == nil: nil else: ide.editorOf(ide.project.name)
+
+proc beforeMainEdit(ide: IdeForm): UnitEditor =
+  ## Call before the project edits the main file on disk: an open editor of it
+  ## is saved first, so no change of the user is lost, and returned for `afterMainEdit`.
+  result = ide.mainEditor
+  if result != nil: result.save()
+
+proc afterMainEdit(ide: IdeForm, ed: UnitEditor) =
+  if ed != nil: ed.reloadFromDisk()
 
 proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
   ## Closes a unit's tab; asks what to do with unsaved changes (false = the
@@ -501,14 +574,16 @@ proc openProject*(ide: IdeForm, path: string): bool
 proc openHandler(ide: IdeForm, path: string): MenuItemEvent =
   result = proc(s: MenuItem) = discard ide.openProject(path)
 
-proc rebuildRecentMenu(ide: IdeForm) =
+proc rebuildRecentMenu*(ide: IdeForm) =
+  ## File > Reopen: the recent projects (at most `MaxRecent`), newest first.
   ide.recentMenu.clear()
   if ide.settings.recentProjects.len == 0:
     let none = ide.recentMenu.addItem("(none)")
     none.enabled = false
     return
-  for path in ide.settings.recentProjects:
-    ide.recentMenu.addItem(path.extractFilename.changeFileExt("") & "   " & path.parentDir,
+  for i, path in ide.settings.recentProjects:
+    let num = if i < 9: "&" & $(i + 1) else: "1&0"
+    ide.recentMenu.addItem(num & "  " & path.extractFilename.changeFileExt("") & "   " & path.parentDir,
                            openHandler(ide, path))
 
 proc openProject*(ide: IdeForm, path: string): bool =
@@ -517,10 +592,12 @@ proc openProject*(ide: IdeForm, path: string): bool =
   try:
     p = loadProject(path)
   except CatchableError as e:
+    let gone = not fileExists(path)
     ide.settings.removeRecent(path)
     ide.saveSettings()
     ide.rebuildRecentMenu()
-    ide.fail "Cannot open " & path & ": " & e.msg
+    ide.fail(if gone: "The project " & path & " no longer exists; it was removed from the Reopen list."
+             else: "Cannot open " & path & ": " & e.msg)
     return false
   if not ide.closeProject(): return false
   ide.project = p
@@ -564,9 +641,11 @@ proc newApplication*(ide: IdeForm, dir = "", name = ""): bool =
 proc newForm*(ide: IdeForm): UnitEditor =
   ## File > New Form: adds a form unit to the project and opens it.
   if ide.project == nil: return nil
+  let mainEd = ide.beforeMainEdit()
   try:
-    let u = ide.project.newFormUnit()
+    let u = ide.project.newFormUnit()       # also imports and creates it in the main file
     ide.project.save()
+    ide.afterMainEdit(mainEd)
     ide.refreshProject()
     result = ide.openUnit(u.name)
   except CatchableError as e:
@@ -589,13 +668,20 @@ proc addToProject*(ide: IdeForm, path: string): bool =
   if ide.project == nil: return false
   let name = path.splitFile.name
   let nfm = path.changeFileExt(".nfm")
+  let mainEd = ide.beforeMainEdit()
   try:
     if not validName(name): raise newException(ProjectError, "bad unit name " & name)
+    if name == ide.project.name: raise newException(ProjectError, name & " is the program file")
+    var u: ProjectUnit
     if fileExists(nfm):
-      discard ide.project.addUnit(name, path, nfm, true, formTypeOfNfm(nfm))
+      u = ide.project.addUnit(name, path, nfm, true, formTypeOfNfm(nfm))
     else:
-      discard ide.project.addUnit(name, path)
+      u = ide.project.addUnit(name, path)
     ide.project.save()
+    if not ide.project.addToMain(u) and fileExists(ide.project.mainPath) and
+       not readFile(ide.project.mainPath).hasBlock(ImportsBlock):
+      ide.say "The main file has no nimvcl-ide markers: import " & name & " there yourself"
+    ide.afterMainEdit(mainEd)
     ide.refreshProject()
     discard ide.openUnit(name)
     result = true
@@ -609,62 +695,142 @@ proc removeFromProject*(ide: IdeForm, unitName: string): bool =
   let i = ide.project.findUnit(unitName)
   if i < 0: return false
   let u = ide.project.units[i]
-  let mainSrc = try: readFile(ide.project.mainPath) except CatchableError: ""
-  if u.isForm and ("new" & u.formType & "(") in mainSrc:
+  if ide.project.isMainForm(u):
     ide.fail "The main form (" & u.formType & ") cannot be removed from the project."
     return false
   let ed = ide.editorOf(unitName)
   if ed != nil and not ide.closeEditor(ed): return false
-  ide.project.removeUnit(unitName)
+  let mainEd = ide.beforeMainEdit()
+  ide.project.removeUnit(unitName)         # also drops its import and create line from the main file
   ide.project.save()
-  # drop the import line from the main file
-  var kept: seq[string]
-  var changed = false
-  for l in mainSrc.splitLines:
-    if l.strip == "import " & unitName: changed = true
-    else: kept.add l
-  if changed: writeFile(ide.project.mainPath, kept.join("\n"))
+  ide.afterMainEdit(mainEd)
   ide.refreshProject()
   true
 
-proc showProjectOptions*(ide: IdeForm) =
-  ## Project > Options: output folder, extra compiler flags, run arguments.
+proc cleanDefine(d: string): string =
+  ## `-d:foo`, `--define:foo` and `foo` all name the define `foo`.
+  result = d.strip
+  for pre in ["--define:", "-d:", "--define=", "-d="]:
+    if result.startsWith(pre):
+      result = result[pre.len .. ^1]
+      break
+
+proc splitDefines*(text: string): seq[string] =
+  ## "a b,c=1 -d:d" -> `@["a", "b", "c=1", "d"]`.
+  for w in text.replace(',', ' ').splitWhitespace:
+    let d = w.cleanDefine
+    if d.len > 0 and d notin result: result.add d
+
+proc currentOptions*(ide: IdeForm): ProjectOptions =
+  let p = ide.project
+  ProjectOptions(outputDir: p.outputDir, flags: p.nimFlags.join(" "),
+                 defines: p.defines.join(" "), title: p.title, version: p.version)
+
+proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
+  ## Project > Options, after OK: stores the options and saves the project.
   if ide.project == nil: return
   let p = ide.project
-  let d = newForm(nil, 480, 250)
+  p.outputDir = if o.outputDir.strip.len > 0: o.outputDir.strip else: "build"
+  p.nimFlags = o.flags.splitWhitespace
+  p.defines = splitDefines(o.defines)
+  p.title = o.title.strip
+  p.version = o.version.strip
+  p.save()
+  ide.optionsChanged = true
+  ide.say "Project options saved"
+
+proc showProjectOptions*(ide: IdeForm) =
+  ## Project > Options: output folder, compiler flags, conditional defines,
+  ## application title and version.
+  if ide.project == nil: return
+  let o = ide.currentOptions
+  let d = newForm(nil, 520, 330)
   d.caption = "Project Options"
   d.borderStyle = bsSingle
   d.position = poScreenCenter
-  newLabel(d, "Output folder:", 20, 20, 120)
-  let outDir = newEdit(d, p.outputDir, 150, 16, 310)
-  newLabel(d, "Compiler flags:", 20, 62, 120)
-  let flags = newEdit(d, p.nimFlags.join(" "), 150, 58, 310)
-  newLabel(d, "Run arguments:", 20, 104, 120)
-  let args = newEdit(d, p.runArgs.join(" "), 150, 100, 310)
-  let hint = newLabel(d, "Flags are passed to `nim c`, e.g.  -d:release --threads:on", 20, 142, 440)
+  newLabel(d, "Output folder:", 20, 24, 130)
+  let outDir = newEdit(d, o.outputDir, 160, 20, 340)
+  newLabel(d, "Compiler flags:", 20, 66, 130)
+  let flags = newEdit(d, o.flags, 160, 62, 340)
+  newLabel(d, "Conditional defines:", 20, 108, 130)
+  let defs = newEdit(d, o.defines, 160, 104, 340)
+  let hint = newLabel(d, "Flags go to `nim c`, e.g.  --threads:on.  Defines are -d: names, e.g.  release  level=2", 20, 142, 480)
   hint.muted = true
-  let ok = newButton(d, "OK", 284, 190, 84, 32)
+  newLabel(d, "Application title:", 20, 186, 130)
+  let title = newEdit(d, o.title, 160, 182, 340)
+  newLabel(d, "Version:", 20, 228, 130)
+  let version = newEdit(d, o.version, 160, 224, 340)
+  let ok = newButton(d, "OK", 324, 276, 84, 32)
   ok.modalResult = mrOk
   ok.isDefault = true
-  let cancel = newButton(d, "Cancel", 376, 190, 84, 32)
+  let cancel = newButton(d, "Cancel", 416, 276, 84, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
   if d.showModal() == mrOk:
-    p.outputDir = if outDir.text.strip.len > 0: outDir.text.strip else: "build"
-    p.nimFlags = flags.text.splitWhitespace
-    p.runArgs = args.text.splitWhitespace
-    p.save()
-    ide.say "Project options saved"
+    ide.applyOptions ProjectOptions(outputDir: outDir.text, flags: flags.text,
+                                    defines: defs.text, title: title.text, version: version.text)
   d.freeWindow()
+
+proc quoteArg(a: string): string =
+  if a.len == 0 or a.anyIt(it in {' ', '\t', '"'}): "\"" & a.replace("\"", "\\\"") & "\"" else: a
+
+proc runParameters*(ide: IdeForm): string =
+  ## The program arguments as one line (as shown by Run > Parameters).
+  if ide.project != nil: ide.project.runArgs.map(quoteArg).join(" ") else: ""
+
+proc setRunParameters*(ide: IdeForm, text: string) =
+  if ide.project == nil: return
+  ide.project.runArgs = parseCmdLine(text)
+  ide.project.save()
+  ide.say "Run parameters saved"
+
+proc showRunParameters*(ide: IdeForm) =
+  ## Run > Parameters: the command line arguments of the program.
+  if ide.project == nil: return
+  var v = ide.runParameters
+  let ok =
+    if ide.askText != nil: ide.askText("Run Parameters", "Parameters:", v)
+    else: inputQuery("Run Parameters", "Parameters:", v)
+  if ok: ide.setRunParameters v
+
+# ----------------------------------------------------------- units and forms
+
+proc chooseUnit(ide: IdeForm, title: string, formsOnly: bool): string =
+  ## Asks which unit to open from the list; "" when cancelled. The program
+  ## file comes first in the Units list and is returned as the project name.
+  var names, labels: seq[string]
+  if not formsOnly:
+    names.add ide.project.name
+    labels.add ide.project.name & " (program)"
+  for u in ide.project.units:
+    if formsOnly and not u.isForm: continue
+    names.add u.name
+    labels.add(if u.isForm: u.name & " (" & u.formType & ")" else: u.name)
+  if names.len == 0: return ""
+  var cur = 0
+  let ed = ide.activeEditor
+  if ed != nil: cur = max(names.find(ed.unitName), 0)
+  let i =
+    if ide.pickItem != nil: ide.pickItem(title, labels, cur)
+    else: pickItemDefault(title, labels, cur)
+  if i >= 0 and i < names.len: names[i] else: ""
+
+proc viewUnits*(ide: IdeForm, formsOnly = false): UnitEditor =
+  ## View > Units... (Ctrl+F12) and View > Forms... (Shift+F12): choose, open.
+  if ide.project == nil: return nil
+  let n = ide.chooseUnit(if formsOnly: "View Form" else: "View Unit", formsOnly)
+  if n.len > 0: result = ide.openUnit(n)
 
 # ------------------------------------------------------------------- jumping
 
 proc unitOfFile*(ide: IdeForm, file: string): string =
-  ## The unit whose `.nim` is `file` ("" when it is not a unit of the project).
+  ## The unit whose `.nim` is `file` ("" when it is not a unit of the project);
+  ## the program file gives the project's name (what `openUnit` accepts for it).
   if ide.project == nil: return ""
   let f = normalizedPath(file)
   for u in ide.project.units:
     if normalizedPath(ide.project.nimPathOf(u)) == f: return u.name
+  if normalizedPath(ide.project.mainPath) == f: return ide.project.name   # the program file
 
 proc jumpTo*(ide: IdeForm, file: string, line, col: int): bool =
   ## Opens the unit of `file` in its code view with the caret at `line`,
@@ -684,6 +850,7 @@ proc jumpTo*(ide: IdeForm, file: string, line, col: int): bool =
 proc buildOptions(ide: IdeForm): BuildOptions =
   result = defaultBuildOptions()
   result.nimExe = ide.settings.nimPath
+  result.hints = ide.settings.showHints
 
 proc countLines(ide: IdeForm): int =
   if ide.project == nil: return 0
@@ -707,16 +874,27 @@ proc markErrors(ide: IdeForm) =
 proc startProgram(ide: IdeForm) =
   let p = ide.project
   ide.messages.addOutput "--- running " & p.exePath.extractFilename & " ---"
+  # the program's stdout and stderr arrive line by line while it runs
   let onLine = proc(line: string) = ide.messages.addOutput(line)
   let onExit = proc(code: int) =
-    ide.messages.addOutput("--- program ended with exit code " & $code & " ---")
+    ide.running = false
+    ide.lastExitCode = code
+    let how = if ide.stopRequested: "stopped" else: "ended"
+    ide.messages.addNote("Program " & how & " with exit code " & $code,
+                         if code == 0: icSuccess elif ide.stopRequested: icInfo else: icError)
+    ide.stopRequested = false
     ide.setPart(spState, "Ready")
-    ide.say "Program ended (exit code " & $code & ")"
+    ide.say "Program " & how & " (exit code " & $code & ")"
+    ide.updateCaption()
     ide.refreshActions()
+  ide.stopRequested = false
   let started = runProject(p, onLine, onExit)
   if started:
+    ide.running = true
+    ide.messages.showOutput()
     ide.setPart(spState, "Running")
     ide.say "Running " & p.name
+    ide.updateCaption()
   else:
     ide.fail "Cannot start " & p.exePath
   ide.refreshActions()
@@ -752,6 +930,7 @@ proc compile*(ide: IdeForm): bool =
   ## background. Returns false when busy or without a project.
   if ide.project == nil or ide.busy: return false
   ide.saveAll()
+  ide.optionsChanged = false
   ide.messages.clear()
   ide.clearErrorMarkers()
   ide.messages.showMessages()
@@ -769,7 +948,7 @@ proc compile*(ide: IdeForm): bool =
 
 proc needsBuild(ide: IdeForm): bool =
   let p = ide.project
-  if not fileExists(p.exePath): return true
+  if not fileExists(p.exePath) or ide.optionsChanged: return true
   if ide.modifiedUnits.len > 0: return true
   let t = getLastModificationTime(p.exePath)
   var files = @[p.mainPath, p.dir / "nim.cfg"]
@@ -796,7 +975,9 @@ proc programReset*(ide: IdeForm) =
   ## Run > Program Reset: stops the running program (or the compiler).
   ide.pendingRun = false
   case buildState()
-  of bsRunning: stopProject()
+  of bsRunning:
+    ide.stopRequested = true
+    stopProject()
   of bsCompiling: cancelCompile()
   of bsIdle: discard
 
@@ -808,6 +989,107 @@ proc waitIdle*(ide: IdeForm, seconds = 120.0): bool =
     Application.processMessages(20)
   Application.processMessages(0)
   true
+
+# ------------------------------------------------------------------ messages
+
+proc setShowHints*(ide: IdeForm, on: bool) =
+  ## Run > Show Hints: asks the compiler for hints (from the next build) and
+  ## shows or hides the ones listed.
+  ide.settings.showHints = on
+  ide.messages.showHints = on
+  ide.saveSettings()
+  ide.refreshActions()
+  ide.say(if on: "Hints are shown (they come with the next build)" else: "Hints are hidden")
+
+proc nextMessage*(ide: IdeForm): bool =
+  ## F8 / Ctrl+Alt+Down: the next message that has a location, opened in the
+  ## editor (after the last one it starts again at the first).
+  result = ide.messages.jumpNext()
+  if not result: ide.say "No more messages"
+
+# ------------------------------------------------------------------ save as
+
+proc reloadOthers(ide: IdeForm) =
+  ## Re-reads every open unit (their files may have been rewritten on disk).
+  for e in ide.editors: e.reloadFromDisk()
+
+proc renameUnit*(ide: IdeForm, oldName, newName: string): bool =
+  ## File > Save As: saves everything, then renames the unit through
+  ## `Project.renameUnit` (its files, the imports and the `loadForm` path);
+  ## the unit stays open under its new name. The form type keeps its name.
+  if ide.project == nil: return false
+  let name = newName.strip
+  if ide.project.findUnit(oldName) < 0:
+    ide.fail oldName & " is not a unit of the project"
+    return false
+  if name == oldName: return true
+  ide.saveAll()
+  let ed = ide.editorOf(oldName)
+  let wasOpen = ed != nil
+  let wasDesigner = ed != nil and ed.designerVisible
+  if wasOpen and not ide.closeEditor(ed): return false
+  try:
+    ide.project.renameUnit(oldName, name)
+    ide.project.save()
+  except CatchableError as e:
+    ide.fail "Cannot rename " & oldName & ": " & e.msg
+    if wasOpen: discard ide.openUnit(oldName)
+    return false
+  ide.reloadOthers()
+  ide.refreshProject()
+  if wasOpen:
+    let ne = ide.openUnit(name)
+    if ne != nil and ne.isForm and not wasDesigner: ne.showCode()
+  ide.say "Saved as " & name
+  true
+
+proc renameProject*(ide: IdeForm, newName: string): bool =
+  ## File > Save Project As: renames the project (the `.nimproj` and the main
+  ## file), the units stay.
+  if ide.project == nil: return false
+  let name = newName.strip
+  if name == ide.project.name: return true
+  ide.saveAll()
+  let oldPath = ide.project.filePath
+  let mainEd = ide.mainEditor
+  if mainEd != nil and not ide.closeEditor(mainEd): return false
+  try:
+    ide.project.renameProject(name)
+  except CatchableError as e:
+    ide.fail "Cannot rename the project: " & e.msg
+    if mainEd != nil: discard ide.openMain()
+    return false
+  ide.settings.removeRecent(oldPath)
+  ide.rememberProject()
+  ide.rebuildRecentMenu()
+  ide.refreshProject()
+  if mainEd != nil: discard ide.openMain()
+  ide.say "Project saved as " & name
+  true
+
+proc askName(ide: IdeForm, caption, prompt: string, value: var string): bool =
+  if ide.askText != nil: ide.askText(caption, prompt, value)
+  else: inputQuery(caption, prompt, value)
+
+proc saveAs*(ide: IdeForm, newName = ""): bool =
+  ## File > Save As: the active unit gets a new name (asked for when `newName`
+  ## is empty); for the program file it is the same as Save Project As.
+  let ed = ide.activeEditor
+  if ed == nil: return false
+  var v = newName
+  let isMain = ide.isMainEditor(ed)
+  if v.len == 0:
+    v = if isMain: ide.project.name else: ed.unitName
+    if not ide.askName("Save As", if isMain: "Project name:" else: "Unit name:", v): return false
+  if isMain: ide.renameProject(v) else: ide.renameUnit(ed.unitName, v)
+
+proc saveProjectAs*(ide: IdeForm, newName = ""): bool =
+  if ide.project == nil: return false
+  var v = newName
+  if v.len == 0:
+    v = ide.project.name
+    if not ide.askName("Save Project As", "Project name:", v): return false
+  ide.renameProject(v)
 
 # --------------------------------------------------------------------- theme
 
@@ -852,6 +1134,8 @@ proc connectActions(ide: IdeForm) =
         if dlg.executeModal(): dlg.fileName else: ""
     if f.len > 0: discard ide.openProject(f)
   on aSave: ide.saveActive()
+  on aSaveAs: discard ide.saveAs()
+  on aSaveProjectAs: discard ide.saveProjectAs()
   on aSaveAll: ide.saveAll()
   on aClose:
     let ed = ide.activeEditor
@@ -889,7 +1173,14 @@ proc connectActions(ide: IdeForm) =
   on aRemoveFromProject:
     let ed = ide.activeEditor
     if ed != nil: discard ide.removeFromProject(ed.unitName)
+  on aViewUnits: discard ide.viewUnits()
+  on aViewForms: discard ide.viewUnits(formsOnly = true)
+  on aViewSource: discard ide.openMain()
   on aProjectOptions: ide.showProjectOptions()
+  on aRunParameters: ide.showRunParameters()
+  on aShowHints: ide.setShowHints(not ide.settings.showHints)
+  on aNextMessage: discard ide.nextMessage()
+  on aNextMessageAlt: discard ide.nextMessage()
   on aCompile: discard ide.compile()
   on aRun: discard ide.run()
   on aReset: ide.programReset()
@@ -931,9 +1222,11 @@ proc buildMenu(ide: IdeForm) =
   file.addAct a[aNewApp]
   file.addAct a[aNewForm]
   file.addAct a[aOpenProject]
-  ide.recentMenu = file.addItem("Recent &Projects")
+  ide.recentMenu = file.addItem("&Reopen")
   file.addSeparator()
   file.addAct a[aSave]
+  file.addAct a[aSaveAs]
+  file.addAct a[aSaveProjectAs]
   file.addAct a[aSaveAll]
   file.addAct a[aClose]
   file.addSeparator()
@@ -953,14 +1246,21 @@ proc buildMenu(ide: IdeForm) =
   view.addSeparator()
   view.addAct a[aToggleView]
   view.addSeparator()
+  view.addAct a[aViewUnits]
+  view.addAct a[aViewForms]
+  view.addSeparator()
   view.addAct a[aTheme]
   view.addItem("Reset &Layout", proc(s: MenuItem) = ide.resetLayout())
   let proj = m.addItem("&Project")
-  for id in [aAddToProject, aRemoveFromProject]: proj.addAct a[id]
+  for id in [aAddToProject, aRemoveFromProject, aViewSource]: proj.addAct a[id]
   proj.addSeparator()
   proj.addAct a[aProjectOptions]
   let run = m.addItem("&Run")
   for id in [aCompile, aRun, aReset]: run.addAct a[id]
+  run.addSeparator()
+  run.addAct a[aRunParameters]
+  run.addSeparator()
+  for id in [aNextMessage, aShowHints]: run.addAct a[id]
   let comp = m.addItem("&Component")
   comp.addAct a[aPointer]
   comp.addSeparator()
@@ -1009,14 +1309,18 @@ proc buildDocking(ide: IdeForm) =
     if ed != nil and node.tag >= 0 and node.tag < ide.treeComps.len:
       ed.selectComponent(ide.treeComps[node.tag])
   ide.inspector = newObjectInspector(nil)
-  ide.pages = newPageControl(nil)
+  ide.pages = newEditorPages()
+  ide.pages.onCloseTab = proc(i: int) =
+    if i >= 0 and i < ide.editors.len: discard ide.closeEditor(ide.editors[i])
   ide.pages.onChange = proc(sender: Control) =
     ide.bindActive()
     ide.sync()
   ide.projectTree = newProjectTree(nil, ide.ideIcons)
   ide.projectTree.onOpenUnit = proc(name: string) = discard ide.openUnit(name)
+  ide.projectTree.onOpenMain = proc() = discard ide.openMain()
   ide.messages = newMessagesPanel(nil, ide.ideIcons)
   ide.messages.onJump = proc(file: string, line, col: int) = discard ide.jumpTo(file, line, col)
+  ide.messages.showHints = ide.settings.showHints
 
   ide.pnlTree = mk("tree", "Object TreeView", ide.objTree, icTreeIc)
   ide.pnlInspector = mk("inspector", "Object Inspector", ide.inspector, icInspectorIc)
@@ -1106,9 +1410,21 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   Application.addIdleHook("ide-sync", proc() = ide.sync())
   ide
 
-proc startup*(ide: IdeForm, defaultDir = "") =
-  ## Opens the last project, else a fresh `Project1` in `defaultDir`
-  ## (`~/nimvcl-projects/Project1`; an existing one is reopened).
+proc projectArg*(args: openArray[string]): string =
+  ## The path after `--project` (or of `--project=path`) on the command line,
+  ## "" when there is none.
+  for i, a in args:
+    if a == "--project":
+      if i + 1 < args.len: return args[i + 1]
+    elif a.startsWith("--project="):
+      return a["--project=".len .. ^1]
+
+proc startup*(ide: IdeForm, defaultDir = "", project = "") =
+  ## Opens `project` when given (`--project path`), else the last project,
+  ## else a fresh `Project1` in `defaultDir` (`~/nimvcl-projects/Project1`; an
+  ## existing one is reopened). A `project` that cannot be opened is reported
+  ## and the usual choice follows.
+  if project.len > 0 and ide.openProject(absolutePath(project)): return
   for path in ide.settings.recentProjects:
     if fileExists(path) and ide.openProject(path): return
   let dir = if defaultDir.len > 0: defaultDir else: defaultProjectsDir() / "Project1"

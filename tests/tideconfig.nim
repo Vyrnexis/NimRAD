@@ -10,7 +10,7 @@ suite "settings":
   test "missing file gives defaults":
     let s = loadSettings(path)
     check s.theme == "light" and s.nimPath == "nim" and s.editorFontSize == DefaultFontSize
-    check s.recentProjects.len == 0 and s.layout == ""
+    check s.recentProjects.len == 0 and s.layout == "" and not s.showHints
 
   test "save and load":
     var s = defaultSettings()
@@ -18,6 +18,7 @@ suite "settings":
     s.editorFontSize = 16
     s.nimPath = "/usr/bin/nim"
     s.layout = "a|b\nc"
+    s.showHints = true
     s.addRecent("/p/one.nimproj")
     check saveSettings(s, path)
     check fileExists(path)
@@ -43,11 +44,11 @@ suite "settings":
     check loadSettings(path) == defaultSettings()
 
   test "wrong field types fall back per field":
-    writeFile(path, """{"theme": 3, "editorFontSize": "big", "nimPath": "", "recentProjects": ["/a", 4, "/a", "/b"], "layout": "L"}""")
+    writeFile(path, """{"theme": 3, "editorFontSize": "big", "nimPath": "", "recentProjects": ["/a", 4, "/a", "/b"], "layout": "L", "showHints": "yes"}""")
     let s = loadSettings(path)
     check s.theme == "light" and s.editorFontSize == DefaultFontSize and s.nimPath == "nim"
     check s.recentProjects == @["/a", "/b"]
-    check s.layout == "L"
+    check s.layout == "L" and not s.showHints
 
   test "unwritable location":
     check not saveSettings(defaultSettings(), "/proc/nope/settings.json")

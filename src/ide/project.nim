@@ -16,6 +16,9 @@
 ##   ],
 ##   "outputDir": "build",
 ##   "nimFlags": ["-d:release"],
+##   "defines": ["useFoo", "level=2"],
+##   "title": "My App",
+##   "version": "1.0.0",
 ##   "runArgs": [],
 ##   "nimvclPath": ""
 ## }
@@ -34,7 +37,7 @@
 ## `${placeholder}` substitution.
 
 import std/[json, os, strutils, sequtils]
-import ./codegen
+import ./[codegen, mainfile]
 
 const
   ProjectExt* = ".nimproj"
@@ -61,6 +64,9 @@ type
     units*: seq[ProjectUnit]
     outputDir*: string
     nimFlags*: seq[string]
+    defines*: seq[string]  ## conditional defines, passed as `-d:<entry>`
+    title*: string         ## application title, passed as `-d:appTitle=<title>`
+    version*: string       ## version info, passed as `-d:appVersion=<version>`
     runArgs*: seq[string]
     nimvclPath*: string  ## "" = detect
 
@@ -145,8 +151,8 @@ proc toJson*(p: Project): JsonNode =
     us.add %*{"name": u.name, "nim": u.nimPath, "nfm": u.nfmPath,
               "isForm": u.isForm, "formType": u.formType}
   %*{"version": 1, "name": p.name, "mainFile": p.mainFile, "units": us,
-     "outputDir": p.outputDir, "nimFlags": p.nimFlags, "runArgs": p.runArgs,
-     "nimvclPath": p.nimvclPath}
+     "outputDir": p.outputDir, "nimFlags": p.nimFlags, "defines": p.defines, "title": p.title,
+     "version": p.version, "runArgs": p.runArgs, "nimvclPath": p.nimvclPath}
 
 proc save*(p: Project) =
   writeFile(p.filePath, p.toJson.pretty & "\n")
@@ -163,7 +169,9 @@ proc loadProject*(path: string): Project =
     raise newException(ProjectError, abs & " is not a project file")
   result = Project(filePath: abs, name: j.str("name", abs.splitFile.name),
                    mainFile: j.str("mainFile", ""), outputDir: j.str("outputDir", "build"),
-                   nimFlags: j.strs("nimFlags"), runArgs: j.strs("runArgs"),
+                   nimFlags: j.strs("nimFlags"), defines: j.strs("defines"),
+                   title: j.str("title", ""), version: j.str("version", ""),
+                   runArgs: j.strs("runArgs"),
                    nimvclPath: j.str("nimvclPath", ""))
   if result.mainFile.len == 0: result.mainFile = result.name & ".nim"
   if result.outputDir.len == 0: result.outputDir = "build"
@@ -187,12 +195,43 @@ proc addUnit*(p: Project, name, nimPath: string, nfmPath = "", isForm = false,
                        isForm: isForm or nfmPath.len > 0, formType: formType)
   p.units.add result
 
+# ------------------------------------------------------------------ main file
+
+proc editMain(p: Project, change: proc(src: string): string): bool =
+  ## Applies `change` to the main file; true when the file changed.
+  let f = p.mainPath
+  if not fileExists(f): return false
+  let src = readFile(f)
+  let res = change(src)
+  if res == src: return false
+  writeFile(f, res)
+  true
+
+proc addToMain*(p: Project, u: ProjectUnit): bool {.discardable.} =
+  ## Adds `import <unit>` to the main file and, for a form, its create line
+  ## (only between the `nimvcl-ide:` markers, see `mainfile`). True when the
+  ## file changed; false when it is missing or has no markers.
+  let ft = if u.isForm: u.formType else: ""
+  p.editMain(proc(src: string): string = mainfile.addUnit(src, u.name, ft))
+
+proc removeFromMain*(p: Project, u: ProjectUnit): bool {.discardable.} =
+  ## The reverse of `addToMain`.
+  let ft = if u.isForm: u.formType else: ""
+  p.editMain(proc(src: string): string = mainfile.removeUnit(src, u.name, ft))
+
+proc isMainForm*(p: Project, u: ProjectUnit): bool =
+  ## Whether the unit's form is the one the main program shows.
+  u.isForm and fileExists(p.mainPath) and
+    mainfile.isMainForm(readFile(p.mainPath), u.formType)
+
 proc removeUnit*(p: Project, name: string, deleteFiles = false) =
-  ## Drops the unit from the project; with `deleteFiles` its files go too.
+  ## Drops the unit from the project (and its import and create line from the
+  ## main file, see `removeFromMain`); with `deleteFiles` its files go too.
   let i = p.findUnit(name)
   if i < 0: raise newException(ProjectError, "no unit " & name)
   let u = p.units[i]
   p.units.delete i
+  p.removeFromMain(u)
   if deleteFiles:
     for f in [p.nimPathOf(u), p.nfmPathOf(u)]:
       if f.len > 0 and fileExists(f): removeFile f
@@ -230,6 +269,29 @@ proc renameUnit*(p: Project, oldName, newName: string) =
       out0 = renameLoadFormPath(out0, oldNfm.extractFilename, newNfm.extractFilename)
     if out0 != src: writeFile(f, out0)
 
+proc renameProject*(p: Project, newName: string) =
+  ## Renames the project: the `.nimproj` and, when it is named after the
+  ## project, the main file move to the new name (same folder). Units are not
+  ## touched; the program is built under the new name.
+  if not validName(newName): raise newException(ProjectError, "bad project name " & newName)
+  if newName == p.name: return
+  if p.findUnit(newName) >= 0:
+    raise newException(ProjectError, "unit " & newName & " already exists")
+  let newProj = p.dir / newName & ProjectExt
+  let renameMain = p.mainFile == p.name & ".nim"
+  let newMain = p.dir / newName & ".nim"
+  if fileExists(newProj): raise newException(ProjectError, newProj & " already exists")
+  if renameMain and fileExists(newMain):
+    raise newException(ProjectError, newMain & " already exists")
+  let oldProj = p.filePath
+  if renameMain:
+    if fileExists(p.mainPath): moveFile(p.mainPath, newMain)
+    p.mainFile = newName & ".nim"
+  p.name = newName
+  p.filePath = newProj
+  p.save()
+  if fileExists(oldProj): removeFile oldProj
+
 proc nextFormNumber(p: Project): int =
   result = 1
   while true:
@@ -247,6 +309,7 @@ proc writeUnitFiles(p: Project, unit, form: string) =
 proc newFormUnit*(p: Project, name = ""): ProjectUnit =
   ## Adds `unitN.nim` / `unitN.nfm` (form `FormN`) and registers it; `name`
   ## chooses another unit name (the form type is then its capitalised form).
+  ## The main file imports it and creates the form (`addToMain`).
   var unit = name
   var form: string
   if unit.len == 0:
@@ -262,6 +325,7 @@ proc newFormUnit*(p: Project, name = ""): ProjectUnit =
     raise newException(ProjectError, "unit " & unit & " already exists")
   p.writeUnitFiles(unit, form)
   result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form)
+  p.addToMain(result)
 
 proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =
   ## Creates `dir` (if needed) with `<name>.nimproj`, `<name>.nim`, a first

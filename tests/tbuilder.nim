@@ -93,6 +93,20 @@ suite "sync":
     check a[^1] == p.mainPath
     check a.anyIt(it.startsWith("--path:")) == (p.nimvclSrc.len > 0)
 
+  test "defines, title and version":
+    let p = mkProject("defargs", okSrc)
+    p.defines = @["foo", "level=2"]
+    p.title = "My App"
+    p.version = "1.2"
+    let a = p.compileArgs()
+    for x in ["-d:foo", "-d:level=2", "-d:appTitle=My App", "-d:appVersion=1.2"]: check x in a
+    var o = defaultBuildOptions()
+    o.hints = true
+    check "--hints:off" notin p.compileArgs(o)
+    p.title = ""
+    p.version = ""
+    check not p.compileArgs().anyIt(it.startsWith("-d:app"))
+
   test "missing compiler":
     let p = mkProject("nocomp", okSrc)
     var o = defaultBuildOptions()

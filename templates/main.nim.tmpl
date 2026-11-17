@@ -1,11 +1,28 @@
 ## ${name}: main program.
+##
+## The IDE keeps the lines between the `nimvcl-ide:` markers up to date
+## (File > New Form, Project > Add to / Remove from Project); the rest of this
+## file is yours. The first form is the main form; the other forms are created
+## here but stay hidden until your code shows them.
 import std/os
 import nimvcl
+# nimvcl-ide: imports begin
+{.push warning[UnusedImport]: off.}
 import ${unit}
+{.pop.}
+# nimvcl-ide: imports end
+
+const
+  appTitle {.strdefine.} = ""            # Project > Options: Application title
+  appVersion {.strdefine, used.} = ""    # Project > Options: Version
 
 proc main() =
   Application.init()
+  # nimvcl-ide: forms begin
   let mainForm = new${form}()
+  # nimvcl-ide: forms end
+  when appTitle.len > 0:
+    mainForm.caption = appTitle
   if "--smoke" in commandLineParams():
     # Hidden flag: show the form, paint one frame and exit (used by tests).
     mainForm.show()

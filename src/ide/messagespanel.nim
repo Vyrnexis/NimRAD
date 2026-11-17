@@ -5,19 +5,32 @@
 ## Double click on a message with a location calls `onJump(file, line, col)`
 ## (1-based, as the compiler prints them). Lines are fed one at a time with
 ## `feed`; `finish` completes the last message.
+##
+## Errors, warnings and hints have an icon each. `showHints = false` hides the
+## hint rows (the messages are kept, so showing them again needs no rebuild).
+## `jumpNext` goes to the next message that has a location, after the one
+## last jumped to, wrapping at the end.
 
 import std/[os, strutils]
 import nimvcl
 import ./[messages, icons]
 
 type
+  Row = object
+    msg: int                   ## index into `msgs`, -1 for a note of the IDE
+    text: string               ## notes only
+    icon: int
+
   MessagesPanel* = ref object
     root*: PageControl
     list*: ListView
     output*: Memo
     onJump*: proc(file: string, line, col: int)
-    msgs*: seq[Message]        ## the messages that have a row (item.tag = index)
+    msgs*: seq[Message]        ## every message that has a row, hidden hints too (item.tag = index)
     errorCount*, warningCount*: int
+    cursor*: int               ## index into `msgs` of the message last jumped to, -1 none
+    fShowHints: bool
+    rows: seq[Row]
     parser: MessageParser
 
 proc iconOfKind(m: Message): int =
@@ -31,7 +44,17 @@ proc firstLine(s: string): string =
   let i = s.find('\n')
   if i < 0: s.strip else: s[0 ..< i].strip
 
-proc addRow(p: MessagesPanel, m: Message) =
+func shown(p: MessagesPanel, m: Message): bool =
+  p.fShowHints or m.kind != MessageKind.mkHint
+
+proc addItem(p: MessagesPanel, r: Row) =
+  if r.msg < 0:
+    let it = p.list.items.add(r.text)
+    it.imageIndex = r.icon
+    it.tag = -1
+    return
+  let m = p.msgs[r.msg]
+  if not p.shown(m): return
   let label = case m.kind
     of MessageKind.mkError: "Error: "
     of MessageKind.mkWarning: "Warning: "
@@ -41,10 +64,23 @@ proc addRow(p: MessagesPanel, m: Message) =
   let pos = if m.hasLocation: $m.line & ":" & $m.col else: ""
   let it = p.list.items.add((if m.isTrace: "  at " else: label) & firstLine(m.text), where, pos)
   it.imageIndex = iconOfKind(m)
-  it.tag = p.msgs.len
+  it.tag = r.msg
+
+proc addRow(p: MessagesPanel, m: Message) =
+  let r = Row(msg: p.msgs.len)
   p.msgs.add m
+  p.rows.add r
+  p.addItem r
   if m.kind == MessageKind.mkError: inc p.errorCount
   elif m.kind == MessageKind.mkWarning: inc p.warningCount
+
+func showHints*(p: MessagesPanel): bool = p.fShowHints
+proc `showHints=`*(p: MessagesPanel, v: bool) =
+  ## Shows or hides the hint rows (rebuilds the list).
+  if v == p.fShowHints: return
+  p.fShowHints = v
+  p.list.items.clear()
+  for r in p.rows: p.addItem r
 
 proc wanted(m: Message): bool =
   ## Plain output lines (`CC: x.nim`, config hints) stay in the Output tab only.
@@ -52,7 +88,7 @@ proc wanted(m: Message): bool =
 
 proc newMessagesPanel*(parent: Container, images: ImageList): MessagesPanel =
   ## `images` is the IDE icon list (`makeIdeIcons`).
-  result = MessagesPanel()
+  result = MessagesPanel(cursor: -1, fShowHints: true)
   let p = result
   p.root = newPageControl(parent)
   p.root.align = alClient
@@ -71,6 +107,7 @@ proc newMessagesPanel*(parent: Container, images: ImageList): MessagesPanel =
     if index < 0 or index >= p.list.items.count: return
     let k = p.list.items[index].tag
     if k >= 0 and k < p.msgs.len and p.msgs[k].hasLocation and p.onJump != nil:
+      p.cursor = k
       p.onJump(p.msgs[k].file, p.msgs[k].line, p.msgs[k].col)
 
   p.output = newMemo(t2)
@@ -82,12 +119,16 @@ proc clear*(p: MessagesPanel) =
   p.list.items.clear()
   p.output.clear()
   p.msgs.setLen 0
+  p.rows.setLen 0
+  p.cursor = -1
   p.errorCount = 0
   p.warningCount = 0
   p.parser = MessageParser()
 
 proc addOutput*(p: MessagesPanel, line: string) =
+  ## A line of raw text for the Output tab (which scrolls to the end).
   p.output.lines.add line
+  p.output.caretPos = (p.output.lines.count - 1, 0)
 
 proc feed*(p: MessagesPanel, line: string) =
   ## One line of compiler output: to the Output tab and to the parser.
@@ -103,9 +144,9 @@ proc finish*(p: MessagesPanel) =
 
 proc addNote*(p: MessagesPanel, text: string, icon = icInfo) =
   ## A line of the IDE itself ("Build succeeded"), not from the compiler.
-  let it = p.list.items.add(text)
-  it.imageIndex = icon
-  it.tag = -1
+  let r = Row(msg: -1, text: text, icon: icon)
+  p.rows.add r
+  p.addItem r
   p.addOutput text
 
 proc firstError*(p: MessagesPanel): int =
@@ -133,5 +174,22 @@ proc jump*(p: MessagesPanel, msgIndex: int) =
   ## Does what a double click on that message does.
   if msgIndex >= 0 and msgIndex < p.msgs.len and p.msgs[msgIndex].hasLocation and p.onJump != nil:
     p.select msgIndex
+    p.cursor = msgIndex
     let m = p.msgs[msgIndex]
     p.onJump(m.file, m.line, m.col)
+
+proc nextJumpable*(p: MessagesPanel): int =
+  ## The next message with a location (and a visible row) after `cursor`,
+  ## wrapping around; -1 when there is none.
+  let n = p.msgs.len
+  for k in 1 .. n:
+    let i = (p.cursor + k + n) mod n
+    if p.msgs[i].hasLocation and p.shown(p.msgs[i]): return i
+  -1
+
+proc jumpNext*(p: MessagesPanel): bool {.discardable.} =
+  ## F8: selects the next message and jumps to it (false: there is none).
+  let i = p.nextJumpable()
+  if i < 0: return false
+  p.jump i
+  true

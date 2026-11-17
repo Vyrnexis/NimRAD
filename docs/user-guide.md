@@ -16,6 +16,10 @@ build/nimvcl_ide
 The IDE needs a nimvcl checkout next to it (`../nimvcl`) and `nim` on your
 `PATH` (Settings: `nimPath` in `settings.json` to use another compiler).
 
+`build/nimvcl_ide --project path/to/app.nimproj` opens that project instead of
+the last one (when it cannot be opened, the IDE says so and carries on as
+usual).
+
 On start it reopens the project you had open last. The very first time (or
 when that project is gone) it creates `Project1` in
 `~/nimvcl-projects/Project1`, or reopens it when it is already there. The
@@ -29,9 +33,9 @@ title bar always reads `nimvcl IDE - <project name>`.
 | Component palette | top right | Tabs Standard, Additional, Views, System. The arrow button is the pointer |
 | Object TreeView | left, upper | The components of the current form as a tree. Click a node to select that component |
 | Object Inspector | left, lower | Properties and events of the selection. Double click an empty event row to create its handler |
-| Editor | centre | One tab per open unit. A tab shows `*` after the name while the unit has unsaved changes |
-| Project Manager | right | The project and its units (form units have a window icon). Double click opens a unit |
-| Messages | bottom | `Messages` lists compiler errors and warnings; `Output` keeps the raw compiler and program text |
+| Editor | centre | One tab per open unit. A tab shows `*` after the name while the unit has unsaved changes. Every tab has a close button (the cross); a middle click on a tab closes it too. Both ask before they drop unsaved changes |
+| Project Manager | right | The project and its units (form units have a window icon). Double click opens a unit; double click on the project node opens the program file |
+| Messages | bottom | `Messages` lists compiler errors, warnings and hints; `Output` keeps the raw compiler text and, live, what the running program writes |
 | Status bar | bottom | State (`Ready`, `Compiling...`, `Running`), lines and time of the last build, caret position, `Modified` |
 
 Panels dock like in Delphi 10 or Visual Studio: drag a tab to another side,
@@ -49,16 +53,17 @@ closed; **View > Reset Layout** brings back the default arrangement.
 3. Click the Button. The Object Inspector shows its properties. Change
    `caption` there.
 4. **Double click the Button.** The IDE adds
-   `proc button1Click(self: Form1, sender: Control)` to `unit1.nim`, names it in
+   `proc Button1Click(self: Form1, sender: Control)` to `unit1.nim`, names it in
    the form and switches to the code.
 5. Replace `discard` with the code you want:
 
    ```nim
-   proc button1Click(self: Form1, sender: Control) =
+   proc Button1Click(self: Form1, sender: Control) =
      self.Label1.caption = "Hi"
    ```
 
-   Components are fields of the form under their own names (`Label1`).
+   Components are fields of the form: write `self.<ComponentName>` with the exact,
+   capitalised name from the Object Inspector (`self.Label1`).
 6. Press **F9**. The IDE saves everything, compiles, and starts the program.
 
 ![Code of the handler and a successful build](images/ide-code-build.png)
@@ -77,8 +82,12 @@ closed; **View > Reset Layout** brings back the default arrangement.
   the selection.
 * Non-visual components (Timer, ImageList, ActionList, MainMenu, PopupMenu)
   appear as small tiles on the form.
-* **File > New Form** adds `unitN.nim` / `unitN.nfm` to the project.
-  To show it from another form, `import unit2` there and call `newForm2()`.
+* **File > New Form** adds `unitN.nim` / `unitN.nfm` to the project and to the
+  program file (see below). To show it from another form, `import unit2`
+  there and call `newForm2()`.
+* **View > Units...** (`Ctrl+F12`) and **View > Forms...** (`Shift+F12`) list
+  the units (the program file first) or the forms of the project; pick one
+  and press Enter (or double click) to open it.
 
 ## Building and running
 
@@ -87,19 +96,30 @@ closed; **View > Reset Layout** brings back the default arrangement.
 | Run > Compile | `Ctrl+F9` | Saves all, compiles in the background |
 | Run > Run | `F9` | Compiles when something changed, then starts the program |
 | Run > Program Reset | `Ctrl+F2` | Stops the running program (or the compiler) |
+| Run > Parameters... | | The command line arguments of the program, written like a shell line (`--fast "a b"`) |
+| Run > Next Message | `F8` or `Ctrl+Alt+Down` | Goes to the next compiler message that has a place in a file |
+| Run > Show Hints | | Asks the compiler for hints and lists them in Messages |
 
-The compiler runs `nim c` with the options of **Project > Options** (extra
-flags such as `-d:release`, the output folder, program arguments). While it
+The compiler runs `nim c` with the options of **Project > Options** (the
+output folder, extra flags, conditional defines, application title and
+version). While it
 works you can keep editing; the status bar shows `Compiling...`.
 
-Errors and warnings appear in **Messages** with an icon, the file and
-`line:column`. The first error is opened for you: the editor switches to the
-code, puts the caret there and marks the line in the gutter. Double click any
-message to jump to it again.
+Errors, warnings and hints appear in **Messages**, each kind with its own icon
+(a red cross, an amber triangle, a blue "i"), the file and `line:column`. The
+first error is opened for you: the editor switches to the code, puts the caret
+there and marks the line in the gutter. Double click any message to jump to it
+again, or press `F8` (or `Ctrl+Alt+Down`) to go to the next one; after the last
+message it starts again at the first. **Run > Show Hints** switches hints on
+(the compiler prints them from the next build on) or off; messages you already
+have stay in the list, and the hints in it appear and disappear at once.
 
 ![A compile error and the jump to it](images/ide-compile-error.png)
 
-The text a running program writes is shown in the `Output` tab.
+While the program runs the title bar reads `nimvcl IDE - Project1 [Running]`
+and the `Output` tab shows what the program writes to stdout and stderr, line
+by line as it happens. When the program ends (or you stop it with
+`Ctrl+F2`), `Messages` gets a line `Program ended with exit code N`.
 
 ## Projects
 
@@ -107,19 +127,63 @@ The text a running program writes is shown in the `Output` tab.
 |---|---|
 | File > New Application | A new project with one form |
 | File > Open Project... (`Ctrl+F11`) | Opens a `.nimproj` file |
-| File > Recent Projects | The last ten projects |
+| File > Reopen | The last ten projects. An entry whose project file is gone is removed when you click it |
 | File > Save (`Ctrl+S`) / Save All (`Shift+Ctrl+S`) | Saves the unit / everything and the project |
+| File > Save As... | Renames the current unit: its `.nim` and `.nfm`, the `import` lines in the program and in the other units, and the `loadForm` file name all follow. The form type (`Form2`) keeps its name. On the program file it renames the project |
+| File > Save Project As... | Renames the project: `<name>.nimproj` and `<name>.nim` |
 | File > Close (`Ctrl+W`) | Closes the current unit (asks when it has changes) |
 | Project > Add to Project... | Adds an existing `.nim` unit (and its `.nfm`) |
 | Project > Remove from Project | Drops a unit from the project; the files stay on disk. The main form cannot be removed |
-| Project > Options... | Output folder, compiler flags, run arguments |
+| Project > View Source | Opens the program file (`<name>.nim`) in the editor; so does a double click on the project node |
+| Project > Options... | Output folder, compiler flags, conditional defines, application title, version |
 
 Closing a unit, closing the project or quitting with unsaved changes asks
 **Save**, **Don't Save** or **Cancel**.
 
 A project is a folder with `<name>.nimproj` (JSON), `<name>.nim` (the program),
 `nim.cfg` (the nimvcl path), and for each form `unitN.nim` and `unitN.nfm`.
-Everything is plain text and builds with a plain `nim c <name>.nim` too.
+Everything is plain text and builds with a plain `nim c <name>.nim` too (the
+options of the project then have to be given on the command line).
+
+### Project options
+
+* **Conditional defines** are the `-d:` list: `release level=2` passes
+  `-d:release -d:level=2` (`-d:` in front of a name is accepted too).
+* **Application title** is passed as `-d:appTitle=...`; the generated program
+  shows it as the caption of its main form. Leave it empty to keep the form's
+  own caption.
+* **Version** is passed as `-d:appVersion=...`. The program file declares
+  `appVersion` (a `{.strdefine.}` constant) so you can show it in an About box
+  or print it.
+
+### The program file
+
+`<name>.nim` is the program: it imports the units, creates the forms and runs
+the application. The first form is the main form (the one that is shown); the
+other forms are created too but stay hidden until your code shows them, like
+Delphi's `Application.CreateForm` list. The IDE edits the file in exactly two
+places, between marker comments:
+
+```nim
+# nimvcl-ide: imports begin
+{.push warning[UnusedImport]: off.}
+import unit1
+import unit2
+{.pop.}
+# nimvcl-ide: imports end
+...
+  # nimvcl-ide: forms begin
+  let mainForm = newForm1()
+  let form2 {.used.} = newForm2()
+  # nimvcl-ide: forms end
+```
+
+**New Form** and **Add to Project** add the `import` (and, for a form, the
+create line); **Remove from Project** takes both out; **Save As** renames the
+import. Everything outside the markers is yours and is never touched, and so
+are your own lines inside them. If you delete a marker, the IDE leaves that
+part of the file alone (add the import yourself). The generated code compiles
+without unused-import warnings.
 
 ## Search and editing
 
@@ -151,18 +215,21 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 | `Ctrl+Alt+P` | Show or hide the Project Manager |
 | `Shift+Alt+F11` | Show or hide the Object TreeView |
 | `Alt+0` | Show or hide Messages |
+| `Ctrl+F12` | View Units... |
+| `Shift+F12` | View Forms... |
 | `Shift+F11` | Add to Project |
 | `Shift+Ctrl+F11` | Project Options |
 | `Ctrl+F9` | Compile |
 | `F9` | Run |
 | `Ctrl+F2` | Program Reset |
+| `F8` / `Ctrl+Alt+Down` | Next compiler message |
 | `Alt+F4` | Exit |
 
 ## Files the IDE keeps
 
 `~/.config/nimvcl-ide/settings.json` (`$XDG_CONFIG_HOME` is honoured) holds the
-recent projects, the theme, the editor font size, the compiler to run and the
-docking layout.
+recent projects, the theme, the editor font size, the compiler to run, whether
+hints are shown and the docking layout.
 
 ## Screenshots and tests
 
@@ -179,8 +246,11 @@ same session as an automated test, followed by a smoke run of the built program.
 
 ## Known limits
 
-* The program file (`<name>.nim`) is not opened in the editor yet; edit it
-  with another editor.
-* A new form is not imported by the main program automatically.
+* Save As keeps the form type (`Form2`) of a renamed form unit; rename the type
+  in the code by hand if you want.
+* The IDE only edits the program file between its markers; a project whose
+  program has no markers (an older one) needs its imports added by hand.
+* The Output tab shows a line of the program when it is complete; text
+  without a newline at the end appears when the program ends.
 * Cut, copy and paste in the form designer use the clipboard as text, so they
   also work between two IDE windows.

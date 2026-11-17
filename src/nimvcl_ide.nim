@@ -3,6 +3,7 @@
 ## Usage:
 ##
 ##     nimvcl_ide                 start the IDE (opens the last project)
+##     nimvcl_ide --project FILE  start the IDE with the project FILE (.nimproj)
 ##     nimvcl_ide --shots DIR     run the scripted session headless and save
 ##                                a PNG of every step into DIR
 ##
@@ -15,6 +16,7 @@ import ide/[mainform, session, uniteditor, project]
 
 const usage = """nimvcl IDE
   nimvcl_ide              start the IDE
+  nimvcl_ide --project F  start the IDE and open the project F (.nimproj)
   nimvcl_ide --shots DIR  run the scripted session and save screenshots into DIR"""
 
 proc shots(dir: string): int =
@@ -53,7 +55,7 @@ proc main() =
   else:
     Application.init()
     let ide = newIdeForm()
-    ide.startup()
+    ide.startup(project = projectArg(args))
     Application.run(ide)
 
 main()

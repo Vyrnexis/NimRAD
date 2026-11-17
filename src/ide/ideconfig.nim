@@ -3,7 +3,7 @@
 ##
 ## ```json
 ## {"recentProjects": ["/home/me/app/app.nimproj"], "theme": "light",
-##  "editorFontSize": 13, "nimPath": "nim", "layout": ""}
+##  "editorFontSize": 13, "nimPath": "nim", "layout": "", "showHints": false}
 ## ```
 ##
 ## `loadSettings` never fails: a missing or corrupt file, or a field of the
@@ -23,6 +23,7 @@ type
     editorFontSize*: int
     nimPath*: string               ## the compiler to run ("nim" = look in PATH)
     layout*: string                ## docking layout string (opaque to this module)
+    showHints*: bool               ## compiler hints are requested and listed
 
 proc defaultSettings*(): Settings =
   Settings(theme: "light", editorFontSize: DefaultFontSize, nimPath: "nim")
@@ -65,6 +66,8 @@ proc loadSettings*(path = settingsPath()): Settings =
     result.nimPath = j["nimPath"].getStr
   if j.hasKey("layout") and j["layout"].kind == JString:
     result.layout = j["layout"].getStr
+  if j.hasKey("showHints") and j["showHints"].kind == JBool:
+    result.showHints = j["showHints"].getBool
 
 proc saveSettings*(s: Settings, path = settingsPath()): bool =
   ## Returns false when the file cannot be written.
@@ -72,7 +75,7 @@ proc saveSettings*(s: Settings, path = settingsPath()): bool =
     createDir(parentDir(path))
     let j = %*{"recentProjects": s.recentProjects, "theme": s.theme,
                "editorFontSize": s.editorFontSize, "nimPath": s.nimPath,
-               "layout": s.layout}
+               "layout": s.layout, "showHints": s.showHints}
     let tmp = path & ".tmp"
     writeFile(tmp, j.pretty & "\n")
     moveFile(tmp, path)

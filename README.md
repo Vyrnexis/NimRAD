@@ -21,8 +21,13 @@ designer, an object inspector, code editor tabs, and one-key build and run.
   Object TreeView. Forms are saved as `.nfm` files.
 - Double click a component to create its event handler in the unit's code.
 - Code editor with Nim highlighting; F12 switches between form and code.
-- Compile (Ctrl+F9) and Run (F9) in the background; errors are listed in
-  Messages and the first one is opened for you.
+- Compile (Ctrl+F9) and Run (F9) in the background; errors, warnings and
+  hints are listed in Messages, the first error is opened for you and F8 goes
+  to the next message. The running program's output is shown live, with its
+  exit code when it ends.
+- The program file is part of the project: it is editable (Project > View
+  Source), and New Form / Add to Project / Remove from Project keep its
+  imports and form list up to date between marker comments.
 - Docking panels (saved layout), project manager, recent projects, light and
   dark theme. One action list drives the menu, the toolbars and the shortcuts.
 
@@ -32,7 +37,8 @@ nimvcl-ide expects a nimvcl checkout next to it (`../nimvcl`).
 
 ```sh
 nim c -d:release -o:build/nimvcl_ide src/nimvcl_ide.nim
-build/nimvcl_ide
+build/nimvcl_ide                          # opens the last project
+build/nimvcl_ide --project app.nimproj    # or a given one
 ```
 
 The first start creates `~/nimvcl-projects/Project1`. See the
@@ -52,6 +58,8 @@ The first start creates `~/nimvcl-projects/Project1`. See the
 | `Ctrl+F` / `Ctrl+H` | Find / Replace | `Alt+0` | Messages |
 | `F3` | Find Next | `Shift+F11` | Add to Project |
 | `Alt+G` | Go to Line | `Shift+Ctrl+F11` | Project Options |
+| `Ctrl+F12` | View Units | `F8` / `Ctrl+Alt+Down` | Next compiler message |
+| `Shift+F12` | View Forms | `Alt+F4` | Exit |
 
 ## Screenshots and tests
 

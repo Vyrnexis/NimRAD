@@ -4,7 +4,7 @@
 ## 1. a new application, 2. a Button and a Label dropped on the form (palette
 ## click, then a click on the form), 3. the Button selected so the inspector
 ## shows it, 4. a double click creating its click handler (code view),
-## 5. `self.label1.caption = "Hi"` typed into the handler, 6. Compile (the
+## 5. `self.Label1.caption = "Hi"` typed into the handler, 6. Compile (the
 ## event loop runs until the background build ends), 7. the messages, 8. dark theme.
 
 import std/[os, strutils, times]
@@ -31,9 +31,10 @@ proc settle*(ide: IdeForm, rounds = 2) =
     discard ide.paintIfDirty()
     ide.sync()
 
-proc fire(ide: IdeForm, kind: EventKind, p: PointF, clicks = 1, shift: ShiftState = {}) =
+proc fire(ide: IdeForm, kind: EventKind, p: PointF, clicks = 1, shift: ShiftState = {},
+          button = mbLeft) =
   Application.dispatch(PlatformEvent(kind: kind, windowId: ide.win.id, x: p.x, y: p.y,
-                                     button: mbLeft, clicks: clicks, shift: shift))
+                                     button: button, clicks: clicks, shift: shift))
 
 proc center*(r: RectF): PointF = pointF(r.x + r.w / 2, r.y + r.h / 2)
 
@@ -41,6 +42,12 @@ proc click*(ide: IdeForm, p: PointF) =
   ide.fire(ekMouseMove, p)
   ide.fire(ekMouseDown, p)
   ide.fire(ekMouseUp, p)
+  ide.settle
+
+proc middleClick*(ide: IdeForm, p: PointF) =
+  ide.fire(ekMouseMove, p)
+  ide.fire(ekMouseDown, p, button = mbMiddle)
+  ide.fire(ekMouseUp, p, button = mbMiddle)
   ide.settle
 
 proc doubleClick*(ide: IdeForm, p: PointF) =
@@ -130,14 +137,14 @@ proc runScriptedSession*(ide: IdeForm, workDir: string, shot: ShotProc = nil): S
   check not ed.designerVisible, "double click did not switch to the code"
   let line = ed.code.caretPos.line
   result.handlerLine = line
-  check (button.name & "Click").toLowerAscii in ed.code.text.toLowerAscii, "no handler for " & button.name
+  check (button.name & "Click") in ed.code.text, "no handler for " & button.name
   step "04-handler"
 
   # 5. type the body (replacing the stub's `discard`)
   ide.activeControl = ed.code
   let l = ed.code.lineAt(line)
   ed.code.select((line, l.len - l.strip(trailing = false).len), (line, l.len))
-  # components are fields under their own name (`Label1`): Nim keeps the case of the first letter
+  # components are fields under their own name (`Label1`), so the exact name is used
   ide.typeText "self." & label.name & ".caption = \"Hi\""
   check ed.code.lineAt(line).contains("caption = \"Hi\""), "typing did not reach the code"
   check ed.modified, "the unit is not marked modified"

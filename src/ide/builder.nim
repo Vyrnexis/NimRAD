@@ -53,6 +53,10 @@ proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
   result = @["c", "--colors:off", "--listFullPaths:on"]
   if not opts.hints: result.add "--hints:off"
   result.add p.nimFlags
+  for d in p.defines:
+    result.add "-d:" & d
+  if p.title.len > 0: result.add "-d:appTitle=" & p.title
+  if p.version.len > 0: result.add "-d:appVersion=" & p.version
   let src = p.nimvclSrc
   if src.len > 0: result.add "--path:" & src
   result.add "--outdir:" & p.outputPath
