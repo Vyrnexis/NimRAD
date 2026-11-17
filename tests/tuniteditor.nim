@@ -119,16 +119,16 @@ suite "unit editor":
     check b.caption == "Go"
     # double click: stub + code view
     r.host.click(b.center, 2)
-    check r.ed.code.text.contains("proc button1Click(self: Form1, sender: Control) =")
+    check r.ed.code.text.contains("proc Button1Click(self: Form1, sender: Control) =")
     check not r.ed.designerVisible
     check r.ed.code.caretLine > 0
     r.ed.save()
     check not r.ed.modified
     let nfm = readFile(r.proj.dir / "unit1.nfm")
     check nfm.contains("object Button1: Button")
-    check nfm.contains("onClick = button1Click")
+    check nfm.contains("onClick = Button1Click")
     check nfm.contains("caption = 'Go'")
-    check readFile(r.proj.dir / "unit1.nim").contains("proc button1Click")
+    check readFile(r.proj.dir / "unit1.nim").contains("proc Button1Click")
     check r.proj.compiles()
     let (o, c) = smoke(r.proj)
     check c == 0
@@ -137,7 +137,7 @@ suite "unit editor":
   test "rename a component updates the code and still compiles":
     let r = rig("app2")
     let b = r.dropButton()
-    r.host.click(b.center, 2)           # stub button1Click
+    r.host.click(b.center, 2)           # stub Button1Click
     r.ed.showCode()
     # use the button in the handler
     r.ed.code.text = r.ed.code.text.replace("  discard\n", "  self.Button1.caption = \"x\"\n")
@@ -146,7 +146,7 @@ suite "unit editor":
     check b.name == "okButton"
     check r.ed.code.text.contains("self.okButton.caption")
     check not r.ed.code.text.contains("Button1.caption")
-    check r.ed.code.text.contains("proc button1Click")      # handlers keep their names
+    check r.ed.code.text.contains("proc Button1Click")      # handlers keep their names
     r.ed.save()
     check readFile(r.proj.dir / "unit1.nfm").contains("object okButton: Button")
     check r.proj.compiles()
@@ -192,7 +192,7 @@ suite "unit editor":
     r.ed.selectComponent(r.ed.find("Button1"))
     check r.ed.deleteSelection()
     check r.ed.find("Button1") == nil
-    check r.ed.code.text.contains("proc button1Click")
+    check r.ed.code.text.contains("proc Button1Click")
     check r.ed.undo()
     check r.ed.find("Button1") != nil
 
@@ -205,11 +205,11 @@ suite "unit editor":
     check r.ed.designer.nonVisuals.len == 2
     # events: double click on a tile creates onTimer
     r.host.click(r.ed.tileCenter(0), 2)
-    check r.ed.code.text.contains("proc timer1Timer(self: Form1,")
+    check r.ed.code.text.contains("proc Timer1Timer(self: Form1,")
     r.ed.save()
     let nfm = readFile(r.proj.dir / "unit1.nfm")
     check nfm.contains("object Timer1: Timer")
-    check nfm.contains("onTimer = timer1Timer")
+    check nfm.contains("onTimer = Timer1Timer")
     check nfm.contains("object ImageList1: ImageList")
     check r.proj.compiles()
     r.ed.reloadFromDisk()
@@ -252,9 +252,9 @@ suite "unit editor":
     r.insp.tab = itEvents
     r.insp.selectProp("onShow")
     r.insp.dispatchDouble(r.insp.indexOfProp("onShow"))
-    check r.ed.code.text.contains("proc formShow(self: Form1, sender: Control) =")
+    check r.ed.code.text.contains("proc FormShow(self: Form1, sender: Control) =")
     r.ed.save()
-    check readFile(r.proj.dir / "unit1.nfm").contains("onShow = formShow")
+    check readFile(r.proj.dir / "unit1.nfm").contains("onShow = FormShow")
     check r.proj.compiles()
 
   test "line endings are preserved":
@@ -273,7 +273,7 @@ suite "unit editor":
     let c2 = readFile(r.proj.dir / "unit1.nim")
     check "\r\n" in c2
     check not c2.replace("\r\n", "").contains("\n")
-    check c2.contains("button1Click")
+    check c2.contains("Button1Click")
 
   test "gotoLine is 1-based and shows the code":
     let r = rig("app8")

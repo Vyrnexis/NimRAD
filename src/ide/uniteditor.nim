@@ -94,10 +94,6 @@ method paint(p: DesignBody, c: Canvas) =
 
 # ------------------------------------------------------------------- helpers
 
-proc lowerFirst(s: string): string =
-  result = s
-  if result.len > 0: result[0] = result[0].toLowerAscii
-
 proc styleKey(s: string): string =
   ## Nim identifier equality: the first letter counts, the rest ignores case
   ## and underscores.
@@ -294,7 +290,8 @@ proc defaultEvent(c: Component): string =
 
 proc handlerNameFor(e: UnitEditor, c: Component, event: string): string =
   let tail = if event.startsWith("on") and event.len > 2: event[2 .. ^1] else: event
-  (if c == Component(e.fForm): "form" else: c.name.lowerFirst) & tail
+  ## Delphi style: component name plus the event, e.g. `Button1Click`, `FormShow`.
+  (if c == Component(e.fForm): "Form" else: c.name) & tail
 
 proc createHandler(e: UnitEditor, target: Component, event, handler: string): StubResult =
   ## Makes sure the handler exists in the code (the stub is inserted when it
