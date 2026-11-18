@@ -267,3 +267,33 @@ suite "lists and collections in the designer":
     r.ed.save()
     check readFile(r.proj.dir / "unit1.nfm").contains("popupMenu = PopupMenu1")
     check r.proj.compiles()
+
+suite "colours in the designer":
+  test "color and font.color set in the inspector are saved to the .nfm and compile":
+    let r = rig("fc1")
+    r.drop "Panel"
+    r.drop "Label", 60, 200
+    let p = Panel(r.ed.find("Panel1"))
+    let l = Label(r.ed.find("Label1"))
+    r.ed.designer.select(Control(p))
+    check r.insp.setValue("color", pvColor(hex"#336699"))
+    check p.color == hex"#336699" and not p.parentColor
+    check r.insp.isBold("color")
+    r.ed.designer.select(Control(l))
+    r.insp.setExpanded("font", true)
+    check r.insp.setValue("font.color", pvColor(hex"#aa0000"))
+    check l.fontColor == hex"#aa0000"
+    check r.insp.valueTextOf("font.color").toLowerAscii.contains("aa0000")
+    check r.insp.indexOfProp("textColor") < 0
+    check r.ed.modified
+    r.ed.save()
+    let nfm = readFile(r.proj.dir / "unit1.nfm")
+    check nfm.contains("color = #336699")
+    check nfm.contains("font.color = #aa0000")
+    check nfm.count("font.color") == 1          # nothing else gets a font colour
+    check not nfm.contains("textColor")
+    check r.proj.compiles()
+    # reopening the files shows both again
+    r.ed.reloadFromDisk()
+    check Panel(r.ed.find("Panel1")).color == hex"#336699"
+    check Label(r.ed.find("Label1")).fontColor == hex"#aa0000"

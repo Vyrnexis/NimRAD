@@ -43,9 +43,10 @@ writer skips it), *not restored* (`loadNfm` / `loadForm` cannot read it),
 | PopupMenu | items | no editor | Fixed (same collection editor) |
 | ActionList | actions | no way to add Actions | Fixed: `actions` collection editor (no reordering) |
 | Action | caption, hint, imageIndex, shortcut, category, ... | registered | Works; `imageIndex` needs the ActionList's `images` link |
-| Label | textColor | not registered: the text colour could not be set | Fixed (fixed colour; `muted` stays) |
+| All controls | font.color | the text colour could not be set (`Label.textColor` only) | Fixed: `font.color` is a part of `font` (shown under it in the inspector, written only when set); `textColor` is a deprecated alias and an old `textColor` line still loads |
+| All controls | color | only some controls painted their own `color` | Fixed: every control with a background fills with it |
 | Label | textRole | not registered (theme colour role) | Later |
-| Panel, GroupBox | textColor | not registered (Panel; GroupBox has no own text colour) | Fixed for Panel; GroupBox later |
+| Panel, GroupBox | caption colour | `textColor` was not registered | Fixed: `font.color` (Panel caption; GroupBox caption too) |
 | Edit | passwordChar | not registered (`password` is) | Later |
 | Edit | textHint | alias of `placeholder`, which is registered | Works |
 | Button | image / glyph | the control has no image support | Later (library feature) |
