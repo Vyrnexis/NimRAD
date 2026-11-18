@@ -210,6 +210,41 @@ are your own lines inside them. If you delete a marker, the IDE leaves that
 part of the file alone (add the import yourself). The generated code compiles
 without unused-import warnings.
 
+### A form unit's imports
+
+A form unit (`unit1.nim`) imports only what its form needs, so the compiler
+does not analyse the whole library on every build:
+
+```nim
+{.push warning[UnusedImport]: off.}
+import nimvcl/core/[control, form, application]
+import nimvcl/controls/common
+import nimvcl/dsl/formload
+# nimvcl-ide: imports begin
+import nimvcl/controls/button
+import nimvcl/controls/edit
+import nimvcl/controls/label
+# nimvcl-ide: imports end
+{.pop.}
+
+loadForm Form1, "unit1.nfm"
+```
+
+The lines between the markers follow the form: **File > Save** adds the module
+of each kind of control on the form (a ListBox adds
+`import nimvcl/controls/listbox`) and takes it out again when the last control
+of that kind is deleted. Only lines of the form `import nimvcl/<folder>/<module>`
+inside the markers are managed; any other line there, and everything outside the
+markers, stays as you wrote it. Add your own imports (`import std/strutils`,
+`import nimvcl/graphics/image`, a control of your own) above the markers.
+The fixed lines import the base classes, the shared types (`Orientation`,
+colours, `Canvas`, ...) and `loadForm`; `import nimvcl` would also work but
+makes every build slower (about 3 times for a small form).
+
+A unit without the markers (a project made by an older version that says
+`import nimvcl`) is never changed and keeps building as before. A control class
+that the IDE does not know (your own) needs its import added by hand.
+
 ## Search and editing
 
 `Ctrl+F` find, `Ctrl+H` replace, `F3` next match, `Alt+G` go to line. The code

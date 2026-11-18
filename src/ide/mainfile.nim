@@ -34,12 +34,12 @@ const
   FormsBlock* = "forms"
   MainFormVar* = "mainForm"
 
-type BlockRange = tuple[b, e: int]   ## line index of the begin and end marker; -1 = none
+type BlockRange* = tuple[b, e: int]   ## line index of the begin and end marker; -1 = none
 
 func beginMarker*(name: string): string = "# nimvcl-ide: " & name & " begin"
 func endMarker*(name: string): string = "# nimvcl-ide: " & name & " end"
 
-proc findBlock(lines: seq[string], name: string): BlockRange =
+proc findBlock*(lines: seq[string], name: string): BlockRange =
   result = (-1, -1)
   for i, l in lines:
     let t = l.strip
@@ -69,10 +69,10 @@ func formVar*(formType: string): string =
   if result.len > 0: result[0] = result[0].toLowerAscii
   if cmpIgnoreStyle(result, MainFormVar) == 0: result.add "Created"
 
-func crlf(lines: seq[string]): bool =
+func crlf*(lines: seq[string]): bool =
   lines.len > 1 and lines[0].endsWith('\r')
 
-proc insertBefore(lines: var seq[string], at: int, text: string, indent: string) =
+proc insertBefore*(lines: var seq[string], at: int, text: string, indent: string) =
   let tail = if lines.crlf: "\r" else: ""
   lines.insert(indent & text & tail, at)
 
@@ -80,7 +80,7 @@ proc blockHas(lines: seq[string], r: BlockRange, pred: proc(l: string): bool): b
   for i in r.b + 1 ..< r.e:
     if pred(lines[i]): return true
 
-proc blockIndent(lines: seq[string], r: BlockRange): string =
+proc blockIndent*(lines: seq[string], r: BlockRange): string =
   let l = lines[r.b]
   l[0 ..< l.len - l.strip(trailing = false).len]
 

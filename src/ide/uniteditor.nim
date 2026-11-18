@@ -16,7 +16,7 @@ import std/[os, strutils, tables, sets, sequtils, hashes]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
-import ./[project, codegen]
+import ./[project, codegen, unitimports]
 
 type
   UnitEditor* = ref object of RootObj
@@ -765,10 +765,15 @@ proc designNfm(e: UnitEditor): string =
 
 proc save*(e: UnitEditor) =
   ## Writes the `.nfm` (when the form changed) and the `.nim` (when the code
-  ## changed); both are clean afterwards.
+  ## changed); both are clean afterwards. The control imports between the
+  ## `nimvcl-ide: imports` markers of the `.nim` follow the classes of the form
+  ## (see `unitimports`).
   if e.fDesigner != nil and e.fDesignDirty:
-    writeFile(e.project.nfmPathOf(e.fUnit), e.designNfm)
+    let nfm = e.designNfm
+    writeFile(e.project.nfmPathOf(e.fUnit), nfm)
     e.fDesignDirty = false
+    if e.fUnit.isForm:
+      e.setCodeText(syncFromNfm(e.codeOf, nfm))
   if e.fCode.modified or not fileExists(e.project.nimPathOf(e.fUnit)):
     e.fCode.saveToFile(e.project.nimPathOf(e.fUnit))
   e.checkModified()
