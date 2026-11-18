@@ -165,7 +165,7 @@ proc firstBodyCol(s: Src, p: ProcInfo): int =
   else: result = 2
 
 proc ensureHandler*(src, formType, handlerName, eventParams: string,
-                    retType = ""): StubResult =
+                    retType = "", hint = ""): StubResult =
   ## Makes sure a proc `handlerName` exists:
   ## `proc handlerName(self: formType, eventParams) =` + `  discard`.
   ## An existing proc of that name (any signature) is left alone. The stub goes
@@ -204,7 +204,9 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
   let params = if eventParams.strip().len > 0: ", " & eventParams.strip() else: ""
   let header = "proc " & handlerName & "(self: " & formType & params & ")" &
                (if retType.len > 0: ": " & retType else: "") & " ="
-  var add = @["", header, "  discard"]
+  var add = @["", header]
+  if hint.len > 0: add.add "  # " & hint
+  add.add "  discard"
   if at + 1 < s.codeLines and not isBlank(s.lines[at + 1]): add.add ""
   if at < 0:                       # empty file: no blank line before
     add.delete 0
@@ -214,10 +216,22 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
   result = StubResult(text: s.join, line: at + 1 + (if add[0].len == 0: 1 else: 0) + 1,
                       col: 2, inserted: true)
 
-proc ensureHandlerFor*(src, formType, className, eventName, handlerName: string): StubResult =
-  ## `ensureHandler` with the parameters taken from the registry.
+proc ensureHandlerFor*(src, formType, className, eventName, handlerName: string,
+                       ancestorType = ""): StubResult =
+  ## `ensureHandler` with the parameters taken from the registry. With
+  ## `ancestorType` (a form that inherits from that type) the stub carries a
+  ## comment on how to call the ancestor's handler of the same name.
   let sig = registrySig(className, eventName)
-  ensureHandler(src, formType, handlerName, sig.params, sig.ret)
+  var hint = ""
+  if ancestorType.len > 0:
+    var args: seq[string]
+    for seg in sig.params.split(','):
+      let a = seg.split(':')[0].strip
+      if a.len > 0: args.add a
+    hint = "replaces " & ancestorType & "'s " & handlerName & "; its version (exported with `*`): " &
+           handlerName & "(" & ancestorType & "(self)" &
+           (if args.len > 0: ", " & args.join(", ") else: "") & ")"
+  ensureHandler(src, formType, handlerName, sig.params, sig.ret, hint)
 
 proc isEmptyBody(s: Src, p: ProcInfo): bool =
   for i in p.first + 1 .. p.last:

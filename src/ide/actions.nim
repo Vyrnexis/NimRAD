@@ -10,14 +10,14 @@ import ./icons
 
 type
   ActId* = enum
-    aNewApp, aNewForm, aOpenProject, aSave, aSaveAs, aSaveProjectAs, aSaveAll, aClose, aExit,
+    aNewApp, aNewForm, aNewInheritedForm, aOpenProject, aSave, aSaveAs, aSaveProjectAs, aSaveAll, aClose, aExit,
     aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll,
     aFind, aReplace, aFindNext, aGotoLine,
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
     aAddToProject, aAddFont, aRemoveFromProject, aViewSource, aProjectOptions,
     aCompile, aRun, aReset, aRunParameters, aShowHints, aNextMessage, aNextMessageAlt,
-    aPointer, aBringToFront, aSendToBack, aAlignLefts, aAlignTops, aCenterH, aCenterV,
+    aPointer, aFindComponent, aBringToFront, aSendToBack, aAlignLefts, aAlignTops, aCenterH, aCenterV,
     aEditorOptions, aAbout
 
   IdeActions* = ref object
@@ -30,6 +30,7 @@ type
 const defs: array[ActId, ActDef] = [
   (aNewApp, "New &Application", "Create a new application", "", icNewApp),
   (aNewForm, "New &Form", "Add a new form to the project", "", icNewForm),
+  (aNewInheritedForm, "New &Inherited Form...", "Add a form that inherits from another form of the project", "", icFormUnit),
   (aOpenProject, "&Open Project...", "Open a project", "Ctrl+F11", icOpen),
   (aSave, "&Save", "Save the current unit", "Ctrl+S", icSave),
   (aSaveAs, "Save &As...", "Save the current unit under another name", "", icSave),
@@ -69,6 +70,7 @@ const defs: array[ActId, ActDef] = [
   (aNextMessage, "&Next Message", "Go to the next compiler message", "F8", -1),
   (aNextMessageAlt, "Next Message", "Go to the next compiler message", "Ctrl+Alt+Down", -1),
   (aPointer, "&Pointer", "Stop placing components", "", icPointer),
+  (aFindComponent, "Find &Component", "Search the component palette", "Ctrl+Alt+C", -1),
   (aBringToFront, "Bring to &Front", "Bring the selection to the front", "", -1),
   (aSendToBack, "&Send to Back", "Send the selection to the back", "", -1),
   (aAlignLefts, "Align &Left Edges", "Align the selection to the left edge", "", -1),

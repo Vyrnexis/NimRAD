@@ -1,0 +1,19 @@
+## ${unit}: the code of ${form}, which inherits from ${ancestorForm} (unit ${ancestor}).
+## The form itself is described in ${unit}.nfm: only what differs from
+## ${ancestor}.nfm. Everything on ${ancestorForm} (its components and handlers) is
+## available here, e.g. `self.someButton`. A handler named in ${unit}.nfm is
+## looked up in this unit and replaces the ancestor's binding of that event.
+##
+## The IDE keeps the lines between the `nimvcl-ide:` markers up to date: one
+## import per kind of control on the form. Other imports are yours; add them
+## outside the markers.
+{.push warning[UnusedImport]: off.}
+import nimvcl/core/[control, form, application]
+import nimvcl/controls/common
+import nimvcl/dsl/formload
+import ${ancestor}
+# nimvcl-ide: imports begin
+# nimvcl-ide: imports end
+{.pop.}
+
+loadForm ${form}, "${unit}.nfm"

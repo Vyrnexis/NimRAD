@@ -12,7 +12,9 @@
 ##   "mainFile": "hello.nim",
 ##   "units": [
 ##     {"name": "unit1", "nim": "unit1.nim", "nfm": "unit1.nfm",
-##      "isForm": true, "formType": "Form1"}
+##      "isForm": true, "formType": "Form1"},
+##     {"name": "unit2", "nim": "unit2.nim", "nfm": "unit2.nfm",
+##      "isForm": true, "formType": "Form2", "ancestor": "unit1"}
 ##   ],
 ##   "fonts": [{"file": "fonts/Foo-Regular.ttf", "family": "Foo", "style": "regular"}],
 ##   "outputDir": "build",
@@ -25,6 +27,9 @@
 ## }
 ## ```
 ##
+## * `ancestor` (form units only) is the unit whose form this one inherits
+##   from (File > New Inherited Form); the `.nfm` names the ancestor file too
+##   (`ancestor = 'unit1.nfm'`), the project keeps the unit name for the IDE.
 ## * `fonts` lists the font files copied into `<project>/fonts/` (`Project >
 ##   Add Font File...`); `style` is `regular`, `bold`, `italic` or `bolditalic`.
 ##   The main file registers them at startup, embedded at compile time.
@@ -42,6 +47,7 @@
 
 import std/[json, os, strutils, sequtils]
 import nimvcl/graphics/[font, context]
+import nimvcl/dsl/nfmsyntax
 import ./[codegen, mainfile]
 
 const
@@ -50,6 +56,8 @@ const
   tmplUnit = staticRead("../../templates/unit.nim.tmpl")
   tmplNfm = staticRead("../../templates/unit.nfm.tmpl")
   tmplCfg = staticRead("../../templates/nim.cfg.tmpl")
+  tmplInhNim = staticRead("../../templates/inherited.nim.tmpl")
+  tmplInhNfm = staticRead("../../templates/inherited.nfm.tmpl")
   ideRoot = currentSourcePath().parentDir.parentDir.parentDir
 
 type
@@ -61,6 +69,7 @@ type
     nfmPath*: string     ## "" for a plain unit
     isForm*: bool
     formType*: string    ## `Form1` for a form unit
+    ancestor*: string    ## unit of the ancestor form when this form is inherited, else ""
 
   ProjectFont* = object
     file*: string        ## relative to the project folder, `fonts/Foo-Regular.ttf`
@@ -161,6 +170,7 @@ proc toJson*(p: Project): JsonNode =
   for u in p.units:
     us.add %*{"name": u.name, "nim": u.nimPath, "nfm": u.nfmPath,
               "isForm": u.isForm, "formType": u.formType}
+    if u.ancestor.len > 0: us[us.len - 1]["ancestor"] = %u.ancestor
   var fs = newJArray()
   for f in p.fonts: fs.add %*{"file": f.file, "family": f.family, "style": f.style}
   %*{"version": 1, "name": p.name, "mainFile": p.mainFile, "units": us, "fonts": fs,
@@ -192,7 +202,8 @@ proc loadProject*(path: string): Project =
     for e in j["units"]:
       if e.kind != JObject: continue
       var u = ProjectUnit(name: e.str("name", ""), nimPath: e.str("nim", ""),
-                          nfmPath: e.str("nfm", ""), formType: e.str("formType", ""))
+                          nfmPath: e.str("nfm", ""), formType: e.str("formType", ""),
+                          ancestor: e.str("ancestor", ""))
       u.isForm = e.hasKey("isForm") and e["isForm"].kind == JBool and e["isForm"].getBool
       if u.name.len > 0 and u.nimPath.len > 0: result.units.add u
   if j.hasKey("fonts") and j["fonts"].kind == JArray:
@@ -205,14 +216,37 @@ proc loadProject*(path: string): Project =
 # ------------------------------------------------------------------- editing
 
 proc addUnit*(p: Project, name, nimPath: string, nfmPath = "", isForm = false,
-              formType = ""): ProjectUnit =
+              formType = "", ancestor = ""): ProjectUnit =
   ## Registers a unit (paths absolute or relative to the project folder).
   if p.findUnit(name) >= 0:
     raise newException(ProjectError, "unit " & name & " already exists")
   result = ProjectUnit(name: name, nimPath: p.relativeTo(nimPath),
                        nfmPath: (if nfmPath.len > 0: p.relativeTo(nfmPath) else: ""),
-                       isForm: isForm or nfmPath.len > 0, formType: formType)
+                       isForm: isForm or nfmPath.len > 0, formType: formType,
+                       ancestor: ancestor)
   p.units.add result
+
+proc ancestorUnitOf*(p: Project, nfmPath: string): string =
+  ## For the form file `nfmPath` that starts with `inherited`, the project unit
+  ## whose form file it names as `ancestor`; "" otherwise.
+  try:
+    let root = parseNfm(readFile(nfmPath))
+    if not root.inherited: return ""
+    let target = normalizedPath(if root.ancestor.isAbsolute: root.ancestor
+                                else: nfmPath.parentDir / root.ancestor)
+    for u in p.units:
+      if u.nfmPath.len > 0 and normalizedPath(p.nfmPathOf(u)) == target: return u.name
+  except CatchableError: discard
+
+proc descendantsOf*(p: Project, unitName: string): seq[string] =
+  ## Units whose form inherits (directly or through others) from `unitName`'s.
+  var todo = @[unitName]
+  while todo.len > 0:
+    let a = todo.pop()
+    for u in p.units:
+      if u.ancestor == a and u.name notin result:
+        result.add u.name
+        todo.add u.name
 
 # --------------------------------------------------------------------- fonts
 
@@ -355,6 +389,10 @@ proc removeUnit*(p: Project, name: string, deleteFiles = false) =
   let i = p.findUnit(name)
   if i < 0: raise newException(ProjectError, "no unit " & name)
   let u = p.units[i]
+  let kids = p.units.filterIt(it.ancestor == name).mapIt(it.name)
+  if kids.len > 0:
+    raise newException(ProjectError, "unit " & name & " is the ancestor of " &
+                       kids.join(", ") & "; remove those forms first")
   p.units.delete i
   p.removeFromMain(u)
   if deleteFiles:
@@ -386,6 +424,23 @@ proc renameUnit*(p: Project, oldName, newName: string) =
   u.nimPath = p.relativeTo(newNim)
   if newNfm.len > 0: u.nfmPath = p.relativeTo(newNfm)
   p.units[i] = u
+  if newNfm.len > 0:
+    # forms that inherit from this one name its file: `ancestor = 'unit1.nfm'`
+    for k in 0 ..< p.units.len:
+      if p.units[k].ancestor != oldName: continue
+      p.units[k].ancestor = newName
+      let kidNfm = p.nfmPathOf(p.units[k])
+      if kidNfm.len > 0 and fileExists(kidNfm):
+        let src = readFile(kidNfm)
+        let rel = unixPath(relativePath(newNfm, kidNfm.parentDir))
+        let lines = src.split('\n')
+        var outp: seq[string]
+        for l in lines:
+          if l.strip.startsWith("ancestor = "):
+            outp.add l[0 ..< l.len - l.strip(trailing = false).len] & "ancestor = " & quoteNfm(rel)
+          else: outp.add l
+        let res = outp.join("\n")
+        if res != src: writeFile(kidNfm, res)
   for f in p.sourceFiles:
     if not fileExists(f): continue
     var src = readFile(f)
@@ -450,6 +505,45 @@ proc newFormUnit*(p: Project, name = ""): ProjectUnit =
     raise newException(ProjectError, "unit " & unit & " already exists")
   p.writeUnitFiles(unit, form)
   result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form)
+  p.addToMain(result)
+
+proc formUnits*(p: Project): seq[ProjectUnit] =
+  ## The form units (what File > New Inherited Form offers as ancestors).
+  for u in p.units:
+    if u.isForm and u.formType.len > 0 and u.nfmPath.len > 0: result.add u
+
+proc newInheritedFormUnit*(p: Project, ancestorUnit: string, name = ""): ProjectUnit =
+  ## Adds a form unit that inherits from the form of `ancestorUnit`
+  ## (`unitN.nim` / `unitN.nfm`, form `FormN`), registers it and puts it in the
+  ## main file. The `.nfm` is only `inherited FormN: FormN` and the ancestor's
+  ## file name; the `.nim` imports the ancestor unit and runs `loadForm`.
+  let ancIdx = p.findUnit(ancestorUnit)
+  if ancIdx < 0: raise newException(ProjectError, "no unit " & ancestorUnit)
+  let anc = p.units[ancIdx]
+  if not anc.isForm or anc.formType.len == 0 or anc.nfmPath.len == 0:
+    raise newException(ProjectError, "unit " & ancestorUnit & " is not a form")
+  if not fileExists(p.nfmPathOf(anc)):
+    raise newException(ProjectError, "the form file of " & ancestorUnit & " is missing")
+  var unit = name
+  var form: string
+  if unit.len == 0:
+    let n = p.nextFormNumber
+    unit = "unit" & $n
+    form = "Form" & $n
+  else:
+    if not validName(unit): raise newException(ProjectError, "bad unit name " & unit)
+    form = unit.capitalizeAscii
+    if form == unit: form &= "Form"
+  if p.findUnit(unit) >= 0 or fileExists(p.dir / unit & ".nim") or
+     fileExists(p.dir / unit & ".nfm"):
+    raise newException(ProjectError, "unit " & unit & " already exists")
+  let rel = unixPath(relativePath(p.nfmPathOf(anc), p.dir))
+  writeFile(p.dir / unit & ".nim",
+            expand(tmplInhNim, {"unit": unit, "form": form, "ancestor": anc.name,
+                                "ancestorForm": anc.formType}))
+  writeFile(p.dir / unit & ".nfm",
+            expand(tmplInhNfm, {"form": form, "ancestorNfm": rel}))
+  result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form, anc.name)
   p.addToMain(result)
 
 proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =

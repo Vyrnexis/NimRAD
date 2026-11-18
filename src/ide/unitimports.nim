@@ -21,7 +21,7 @@
 ##
 ## Pure string functions plus the class table; no UI.
 
-import std/[strutils, algorithm, sets, sequtils]
+import std/[strutils, algorithm, sets, sequtils, os]
 import nimvcl/dsl/nfmsyntax
 import ./mainfile
 
@@ -81,15 +81,28 @@ proc moduleOf*(className: string): string =
   for (c, m) in classModules:
     if c == className: return m
 
-proc importsFor*(nfmText: string): seq[string] =
+proc collectClasses(root: NfmNode, baseDir: string, classes: var HashSet[string],
+                    depth = 0) =
+  for n in walk(root): classes.incl n.className
+  if root.inherited and baseDir.len > 0 and depth < 16:
+    # an inherited form also uses the classes of its ancestors
+    let apath = if root.ancestor.isAbsolute: root.ancestor else: baseDir / root.ancestor
+    try:
+      collectClasses(parseNfm(readFile(apath)), apath.parentDir, classes, depth + 1)
+    except CatchableError: discard
+
+proc importsFor*(nfmText: string, baseDir = ""): seq[string] =
   ## The module paths (sorted, no duplicates) of the classes a form file uses.
-  ## A form file that does not parse needs none.
+  ## A form file that does not parse needs none. `baseDir` (the folder of the
+  ## file) lets an inherited form count the classes of its ancestors' files too.
   var root: NfmNode
   try: root = parseNfm(nfmText)
   except NfmError: return
+  var classes = initHashSet[string]()
+  collectClasses(root, baseDir, classes)
   var seen = initHashSet[string]()
-  for n in walk(root):
-    let m = moduleOf(n.className)
+  for c in classes:
+    let m = moduleOf(c)
     if m.len > 0 and m notin seen:
       seen.incl m
       result.add m
@@ -132,6 +145,6 @@ proc syncImports*(src: string, wanted: seq[string]): string =
       inc at
   lines.join("\n")
 
-proc syncFromNfm*(src, nfmText: string): string =
+proc syncFromNfm*(src, nfmText: string, baseDir = ""): string =
   ## `syncImports` for the classes of a form file.
-  syncImports(src, importsFor(nfmText))
+  syncImports(src, importsFor(nfmText, baseDir))

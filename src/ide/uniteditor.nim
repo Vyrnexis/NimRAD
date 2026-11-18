@@ -289,12 +289,17 @@ proc handlerNameFor(e: UnitEditor, c: Component, event: string): string =
   ## Delphi style: component name plus the event, e.g. `Button1Click`, `FormShow`.
   (if c == Component(e.fForm): "Form" else: c.name) & tail
 
-proc createHandler(e: UnitEditor, target: Component, event, handler: string): StubResult =
+proc createHandler(e: UnitEditor, target: Component, event, handler: string,
+                   inheritedBinding = false): StubResult =
   ## Makes sure the handler exists in the code (the stub is inserted when it
   ## does not) and returns where its body starts.
   let ci = classOf(Obj(target))
+  var ancType = ""
+  if inheritedBinding and target.inherited and e.fUnit.ancestor.len > 0:
+    let ai = e.project.findUnit(e.fUnit.ancestor)
+    if ai >= 0: ancType = e.project.units[ai].formType
   result = ensureHandlerFor(e.codeOf, e.fUnit.formType,
-                            if ci != nil: ci.name else: "", event, handler)
+                            if ci != nil: ci.name else: "", event, handler, ancType)
   if result.inserted: e.setCodeText(result.text)
 
 proc refreshInspector(e: UnitEditor)
@@ -304,11 +309,12 @@ proc openHandler(e: UnitEditor, target: Component, event: string) =
   ## and shows the code at it.
   if event.len == 0: return
   var h = handlerNameOf(Obj(target), event)
+  let hadName = h.len > 0
   if h.len == 0:
     h = e.handlerNameFor(target, event)
     setProp(Obj(target), event, pvEvent(h))
     e.touchDesign()
-  let r = e.createHandler(target, event, h)
+  let r = e.createHandler(target, event, h, hadName)
   e.refreshInspector()
   e.showCode()
   e.fCode.gotoLine(r.line, r.col)
@@ -662,8 +668,15 @@ proc copySelection*(e: UnitEditor): bool {.discardable.} =
   true
 
 proc deleteSelection*(e: UnitEditor): bool {.discardable.} =
-  ## Deletes the selection; the handlers stay in the code.
-  e.fDesigner != nil and e.fDesigner.deleteSelection()
+  ## Deletes the selection; the handlers stay in the code. Components that come
+  ## from the ancestor of an inherited form are never deleted.
+  if e.fDesigner == nil: return false
+  for c in e.fDesigner.selection:
+    if c.inherited or (c of NonVisualTile and NonVisualTile(c).component != nil and
+                       NonVisualTile(c).component.inherited):
+      e.say "`" & c.name & "` comes from the ancestor form and cannot be deleted"
+      return false
+  e.fDesigner.deleteSelection()
 
 proc cutSelection*(e: UnitEditor): bool {.discardable.} =
   if e.copySelection(): e.deleteSelection() else: false
@@ -736,15 +749,23 @@ proc redo*(e: UnitEditor): bool {.discardable.} =
 # ---------------------------------------------------------------- save / load
 
 proc designNfm(e: UnitEditor): string =
-  ## The `.nfm` text of the designed form.
-  let root = objectToNfmNode(Obj(e.fForm))
-  root.children = @[]
-  for c in e.fBody.children:
-    let n = objectToNfmNode(Obj(c))
-    if n != nil: root.children.add n
-  for t in e.tiles:
-    let n = objectToNfmNode(Obj(t.component))
-    if n != nil: root.children.add n
+  ## The `.nfm` text of the designed form. An inherited form is written as the
+  ## difference from its ancestor's file (read afresh).
+  var root: NfmNode
+  if e.fForm.ancestorPath.len > 0:
+    var kids: seq[Obj]
+    for c in e.fBody.children: kids.add Obj(c)
+    for t in e.tiles: kids.add Obj(t.component)
+    root = formToNfmNode(e.fForm, kids)
+  else:
+    root = objectToNfmNode(Obj(e.fForm))
+    root.children = @[]
+    for c in e.fBody.children:
+      let n = objectToNfmNode(Obj(c))
+      if n != nil: root.children.add n
+    for t in e.tiles:
+      let n = objectToNfmNode(Obj(t.component))
+      if n != nil: root.children.add n
   result = writeNfm(root)
   if e.fNfmEol == "\r\n": result = result.replace("\n", "\r\n")
 
@@ -758,7 +779,7 @@ proc save*(e: UnitEditor) =
     writeFile(e.project.nfmPathOf(e.fUnit), nfm)
     e.fDesignDirty = false
     if e.fUnit.isForm:
-      e.setCodeText(syncFromNfm(e.codeOf, nfm))
+      e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir))
   if e.fCode.modified or not fileExists(e.project.nimPathOf(e.fUnit)):
     e.fCode.saveToFile(e.project.nimPathOf(e.fUnit))
   e.checkModified()
@@ -774,7 +795,7 @@ proc syncLoadedImports(e: UnitEditor) =
   ## The imports of the unit follow the classes of the `.nfm` as it is on disk
   ## (it may have been edited outside the designer).
   if e.fUnit.isForm and e.fDesigner != nil and fileExists(e.project.nfmPathOf(e.fUnit)):
-    e.setCodeText(syncFromNfm(e.codeOf, readFile(e.project.nfmPathOf(e.fUnit))))
+    e.setCodeText(syncFromNfm(e.codeOf, readFile(e.project.nfmPathOf(e.fUnit)), e.nfmDir))
 
 proc reloadFromDisk*(e: UnitEditor) =
   ## Re-reads the `.nim` and the `.nfm`, dropping every unsaved change.

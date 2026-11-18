@@ -30,7 +30,7 @@ title bar always reads `nimvcl IDE - <project name>`.
 | Part | Where | What it does |
 |---|---|---|
 | Menu and toolbars | top | Every command; all of them share one set of actions, so a menu item, a toolbar button and a shortcut always agree |
-| Component palette | top right | Tabs Standard, Additional, Views, System. The arrow button is the pointer |
+| Component palette | top right | Tabs Standard, Additional, Views, System. The arrow button is the pointer. The edit above the tabs searches all of them (see below) |
 | Object TreeView | left, upper | The components of the current form as a tree. Click a node to select that component |
 | Object Inspector | left, lower | Properties and events of the selection. Double click an empty event row to create its handler |
 | Editor | centre | One tab per open unit. A tab shows `*` after the name while the unit has unsaved changes. Every tab has a close button (the cross); a middle click on a tab closes it too. Both ask before they drop unsaved changes |
@@ -42,6 +42,22 @@ Panels dock like in Delphi 10 or Visual Studio: drag a tab to another side,
 drop it on a guide, or drag it out of the window to float it. The layout is
 saved when you quit and restored on the next start. **View** shows a panel you
 closed; **View > Reset Layout** brings back the default arrangement.
+
+### Searching the palette
+
+Type in the **Search components** edit above the palette (or press
+`Ctrl+Alt+C`, **View > Find Component**, to jump to it). The tabs give way to
+one flat **Search results** group with every class whose name contains the
+text, anywhere in the name and in any case (`grid` finds `StringGrid` and
+`DrawGrid`). Clicking a result works like clicking on a tab.
+
+| Key (in the edit) | Effect |
+|---|---|
+| `Down` / `Up` | Move the highlight through the results |
+| `Enter` | Drop the highlighted component onto the current form, at a default spot, without the mouse. If a container (Panel, GroupBox, ...) is selected it goes into it, else into the form. Non-visual components (Timer, ...) become tiles |
+| `Esc` | Clear the search and leave the edit |
+
+Clearing the text (or `Esc`) brings back the tabs exactly as they were.
 
 ## Your first program
 
@@ -88,6 +104,37 @@ closed; **View > Reset Layout** brings back the default arrangement.
 * **View > Units...** (`Ctrl+F12`) and **View > Forms...** (`Shift+F12`) list
   the units (the program file first) or the forms of the project; pick one
   and press Enter (or double click) to open it.
+
+### Inherited forms
+
+**File > New Inherited Form...** asks which form of the project to inherit from
+and adds a descendant (`unitN.nim` / `unitN.nfm`, form `FormN`), as Delphi's
+File > New > Other > Inheritable Items does. The descendant has every component
+of the ancestor and everything you add to it:
+
+* Inherited components carry a small flag in the corner, and the Object
+  Inspector title says `(inherited)`. They can be moved, resized and edited,
+  but not deleted or renamed; those belong to the ancestor. New components can
+  be dropped anywhere.
+* The descendant's `.nfm` holds only the differences, as `inherited Button1: Button`
+  blocks with the changed properties and `object` blocks for the new components.
+  The first lines name the ancestor: `inherited Form2: Form2`, then
+  `ancestor = 'unit1.nfm'`. A property set back to the ancestor's value
+  disappears from the file again.
+* The ancestor is read afresh every time the descendant is opened and built.
+  Change the ancestor's caption or move its button, save, and the descendant
+  follows; nothing is copied. A form open in the designer picks the change up
+  the next time it is opened (File > Close, then View > Forms...).
+* In code, `Form2` is a type that inherits from `Form1`: `self.button1` works in
+  the descendant's handlers. Double clicking an inherited button creates the
+  handler in the descendant's unit, `proc Button1Click(self: Form2, sender:
+  Control)`, even when the ancestor has a `Button1Click` of its own: the
+  descendant's version runs for that form, like a Delphi override. The stub
+  carries a comment on calling the ancestor's: `Button1Click(Form1(self),
+  sender)` (add `*` to the ancestor's `proc Button1Click` so the other unit can
+  see it).
+* The ancestor cannot be removed from the project while a form inherits from
+  it. Renaming the ancestor's unit (Save As) updates the descendants.
 
 ### Properties with a "..." button
 
@@ -273,6 +320,7 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 | `F12` | Toggle Form / Unit |
 | `F11` | Show or hide the Object Inspector |
 | `Ctrl+Alt+P` | Show or hide the Project Manager |
+| `Ctrl+Alt+C` | Search the component palette |
 | `Shift+Alt+F11` | Show or hide the Object TreeView |
 | `Alt+0` | Show or hide Messages |
 | `Ctrl+F12` | View Units... |
@@ -305,6 +353,9 @@ SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software build/nimvcl_ide --shots b
 same session as an automated test, followed by a smoke run of the built program.
 
 ## Known limits
+
+* "Revert to inherited" for a single property is not there yet: set the value
+  back by hand and it vanishes from the descendant's file.
 
 * Save As keeps the form type (`Form2`) of a renamed form unit; rename the type
   in the code by hand if you want.

@@ -387,6 +387,7 @@ proc refreshActions*(ide: IdeForm) =
   let designer = ide.routeToDesigner
   let hasSel = designer and ed.designer.selection.len > 0
   a[aNewForm].enabled = hasProject
+  a[aNewInheritedForm].enabled = hasProject and ide.project.formUnits.len > 0
   a[aSave].enabled = ed != nil
   a[aSaveAs].enabled = ed != nil
   a[aSaveProjectAs].enabled = hasProject
@@ -443,6 +444,36 @@ proc sync*(ide: IdeForm) =
   let ed = ide.activeEditor
   if ed != nil and ed.isForm and ide.palette.picked.len > 0 and ed.designer.creating.len == 0:
     ide.palette.reset()
+
+proc dropComponent*(ide: IdeForm, className: string): bool {.discardable.} =
+  ## Puts a `className` on the current form without the mouse: into the
+  ## selected container (else the form), at a default spot that steps down and
+  ## right with every control already there. Non-visual classes become tiles.
+  let ed = ide.activeEditor
+  if ed == nil or not ed.isForm:
+    ide.say "Open a form to place components"
+    return false
+  let ci = classByName(className)
+  if ci == nil: return false
+  ed.showDesigner()
+  let d = ed.designer
+  if d.createControl == nil: return false
+  let c = if ci.name == "MainMenu": nil else: d.createControl(className)
+  if c == nil:                           # not a control: a tile, added at once
+    ed.beginCreate(className)
+    return true
+  var target = Container(ed.designedForm)
+  var x = d.primary
+  while x != nil and x != Control(ed.designedForm):
+    if x of Container and (d.acceptsChildren == nil or d.acceptsChildren(Container(x))):
+      target = Container(x)
+      break
+    x = x.parent
+  let step = max(d.grid, 8'f32)
+  let off = 2 * step + step * float32(target.controlCount mod 10)
+  c.setBounds(off, off, c.width, c.height)
+  d.insertNew(target, c, className)
+  true
 
 # ------------------------------------------------------------------- units
 
@@ -654,12 +685,12 @@ proc newForm*(ide: IdeForm): UnitEditor =
     ide.fail "Cannot create the form: " & e.msg
 
 proc formTypeOfNfm(path: string): string =
-  ## `object Form1: Form` -> "Form1".
+  ## `object Form1: Form` -> "Form1" (`inherited Form2: Form2` -> "Form2").
   try:
     for l in lines(path):
       let t = l.strip
-      if t.startsWith("object "):
-        let r = t[7 .. ^1]
+      if t.startsWith("object ") or t.startsWith("inherited "):
+        let r = t[t.find(' ') + 1 .. ^1]
         let c = r.find(':')
         return (if c > 0: r[0 ..< c] else: r).strip
   except CatchableError: discard
@@ -676,7 +707,8 @@ proc addToProject*(ide: IdeForm, path: string): bool =
     if name == ide.project.name: raise newException(ProjectError, name & " is the program file")
     var u: ProjectUnit
     if fileExists(nfm):
-      u = ide.project.addUnit(name, path, nfm, true, formTypeOfNfm(nfm))
+      u = ide.project.addUnit(name, path, nfm, true, formTypeOfNfm(nfm),
+                              ide.project.ancestorUnitOf(nfm))
     else:
       u = ide.project.addUnit(name, path)
     ide.project.save()
@@ -840,6 +872,37 @@ proc viewUnits*(ide: IdeForm, formsOnly = false): UnitEditor =
   if ide.project == nil: return nil
   let n = ide.chooseUnit(if formsOnly: "View Form" else: "View Unit", formsOnly)
   if n.len > 0: result = ide.openUnit(n)
+
+proc newInheritedForm*(ide: IdeForm, ancestor = ""): UnitEditor =
+  ## File > New Inherited Form...: asks which form of the project to inherit
+  ## from (`ancestor`, a unit name, skips the question), adds the descendant
+  ## unit and opens it.
+  if ide.project == nil: return nil
+  var anc = ancestor
+  if anc.len == 0:
+    var names, labels: seq[string]
+    for u in ide.project.formUnits:
+      names.add u.name
+      labels.add u.name & " (" & u.formType & ")"
+    if names.len == 0:
+      ide.fail "The project has no form to inherit from."
+      return nil
+    let ed = ide.activeEditor
+    let cur = if ed != nil: max(names.find(ed.unitName), 0) else: 0
+    let i =
+      if ide.pickItem != nil: ide.pickItem("New Inherited Form", labels, cur)
+      else: pickItemDefault("New Inherited Form", labels, cur)
+    if i < 0 or i >= names.len: return nil
+    anc = names[i]
+  let mainEd = ide.beforeMainEdit()
+  try:
+    let u = ide.project.newInheritedFormUnit(anc)
+    ide.project.save()
+    ide.afterMainEdit(mainEd)
+    ide.refreshProject()
+    result = ide.openUnit(u.name)
+  except CatchableError as e:
+    ide.fail "Cannot create the form: " & e.msg
 
 # ------------------------------------------------------------------- jumping
 
@@ -1143,6 +1206,7 @@ proc connectActions(ide: IdeForm) =
       body
   on aNewApp: discard ide.newApplication()
   on aNewForm: discard ide.newForm()
+  on aNewInheritedForm: discard ide.newInheritedForm()
   on aOpenProject:
     let f =
       if ide.pickFile != nil: ide.pickFile("Open Project", @[("nimvcl projects", "nimproj")])
@@ -1215,6 +1279,7 @@ proc connectActions(ide: IdeForm) =
   on aReset: ide.programReset()
   on aPointer:
     ide.palette.pick("")
+  on aFindComponent: ide.palette.focusFilter()
   on aBringToFront:
     let ed = ide.activeEditor
     if ed != nil and ed.isForm: ed.designer.bringToFront()
@@ -1250,6 +1315,7 @@ proc buildMenu(ide: IdeForm) =
   let file = m.addItem("&File")
   file.addAct a[aNewApp]
   file.addAct a[aNewForm]
+  file.addAct a[aNewInheritedForm]
   file.addAct a[aOpenProject]
   ide.recentMenu = file.addItem("&Reopen")
   file.addSeparator()
@@ -1277,6 +1343,7 @@ proc buildMenu(ide: IdeForm) =
   view.addSeparator()
   view.addAct a[aViewUnits]
   view.addAct a[aViewForms]
+  view.addAct a[aFindComponent]
   view.addSeparator()
   view.addAct a[aTheme]
   view.addItem("Reset &Layout", proc(s: MenuItem) = ide.resetLayout())
@@ -1391,7 +1458,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   let top = newPanel(ide)
   top.align = alTop
   top.borderStyle = pbNone
-  top.height = 72
+  top.height = 72 + filterHeight       # the palette's filter edit sits above its tabs
   let bars = newPanel(top)
   bars.align = alLeft
   bars.borderStyle = pbNone
@@ -1405,6 +1472,10 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
     else:
       ide.palette.reset()
       ide.say "Open a form to place components"
+  ide.palette.onDrop = proc(cls: string) =
+    if ide.dropComponent(cls): ide.palette.clearFilter()
+    ide.activeControl = nil
+  ide.palette.onLeave = proc() = ide.activeControl = nil
   ide.palette.onCancel = proc() =
     let ed = ide.activeEditor
     if ed != nil and ed.isForm: ed.designer.cancelCreate()
