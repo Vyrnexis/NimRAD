@@ -155,16 +155,17 @@ suite "unit editor":
     r.host.click(pointF(r.ed.designedForm.formOrigin.x + 40, r.ed.designedForm.formOrigin.y + 120))
     let e1 = r.ed.find("Edit1")
     check e1 != nil
-    var msg = ""
-    r.ed.onMessage = proc(e: UnitEditor, m: string) = msg = m
-    discard r.insp.setValue("name", pvString("okButton"))
+    check not r.insp.setValue("name", pvString("okButton"))
     check e1.name == "Edit1"
-    check msg.contains("already used")
-    discard r.insp.setValue("name", pvString("2bad"))
+    check r.insp.lastError.contains("already used")
+    check not r.insp.setValue("name", pvString("2bad"))
     check e1.name == "Edit1"
-    check msg.contains("valid identifier")
-    discard r.insp.setValue("name", pvString("proc"))
+    check r.insp.lastError.contains("valid identifier")
+    check not r.insp.setValue("name", pvString("proc"))
     check e1.name == "Edit1"
+    check r.insp.setValue("name", pvString("Edit9"))
+    check e1.name == "Edit9"
+    check r.insp.lastError == ""
 
   test "copy and paste gives a unique name":
     let r = rig("app3")
@@ -303,3 +304,36 @@ suite "unit editor":
     check e.code.visible
     e.save()                          # does not touch the .nfm
     check readFile(p.dir / "unit1.nfm").contains("nonsense")
+
+  test "a handler stub is one undo step and the caret stays":
+    let r = rig("undo1")
+    let b = r.dropButton()
+    let before = r.ed.code.text
+    r.ed.showCode()
+    r.ed.code.gotoLine(0, 3)
+    r.ed.showDesigner()
+    r.host.click(b.center, 2)           # inserts proc Button1Click
+    check r.ed.code.text.contains("proc Button1Click")
+    r.ed.code.undo()
+    check r.ed.code.text == before
+    check r.ed.code.caretLine == 0
+    check r.ed.code.caretCol == 3
+
+  test "imports follow a .nfm edited outside the designer, on open and on reload":
+    let r = rig("imp1")
+    check not r.ed.code.text.contains("controls/button")
+    r.ed.save()
+    let nfm = r.proj.dir / "unit1.nfm"
+    var text = readFile(nfm)
+    text = text.replace("\nend", "\n  object Button1: Button\n  end\nend")
+    writeFile(nfm, text)
+    r.ed.reloadFromDisk()
+    check r.ed.code.text.contains("import nimvcl/controls/button")
+    check r.ed.modified
+    r.ed.save()
+    check readFile(r.proj.dir / "unit1.nim").contains("import nimvcl/controls/button")
+    # opening the unit picks it up as well (the .nim on disk lacks the import)
+    var nim = readFile(r.proj.dir / "unit1.nim").replace("import nimvcl/controls/button\n", "")
+    writeFile(r.proj.dir / "unit1.nim", nim)
+    let e2 = newUnitEditor(r.proj, "unit1", r.host)
+    check e2.code.text.contains("import nimvcl/controls/button")

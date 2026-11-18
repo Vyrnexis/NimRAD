@@ -74,14 +74,24 @@ suite "ensureHandler":
     let r = ensureHandlerFor(unit, "Form1", "Form", "onClose", "formClose")
     check "proc formClose(self: Form1, sender: Form, action: var CloseAction) =" in r.text
 
-  test "every event type of the registry is in the table":
-    var missing: HashSet[string]
+  test "every event of the registry has parameters":
+    var missing: seq[string]
     for ci in allClasses():
       for p in ci.propsOf:
-        if p.kind == pkEvent and not knownEventType(eventTypeOf(p)):
-          missing.incl eventTypeOf(p)
+        if p.kind == pkEvent and p.params.len == 0: missing.add ci.name & "." & p.name
     check missing.len == 0
     if missing.len > 0: echo "missing: ", missing
+
+  test "no loadForm line: the stub goes after the push/pop region of the imports":
+    let src = "{.push warning[UnusedImport]: off.}\nimport nimvcl/core/[control, form]\n" &
+              "# nimvcl-ide: imports begin\nimport nimvcl/controls/button\n" &
+              "# nimvcl-ide: imports end\n{.pop.}\n"
+    let r = ensureHandler(src, "Form1", "aClick", "sender: Control")
+    let lines = r.text.splitLines
+    check lines[5] == "{.pop.}"
+    check lines[7] == "proc aClick(self: Form1, sender: Control) ="
+    check r.text.find("imports end") < r.text.find("{.pop.}")
+    check r.text.find("{.pop.}") < r.text.find("proc aClick")
 
 suite "handlers":
   test "handlerNames":

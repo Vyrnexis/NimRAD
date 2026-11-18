@@ -12,7 +12,7 @@
 ## Everything here is single threaded UI code; build the editor after
 ## `Application.init()`.
 
-import std/[os, strutils, tables, sets, sequtils, hashes]
+import std/[os, strutils, tables, sets, sequtils]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
@@ -53,7 +53,6 @@ type
 const
   TitleH = 28'f32
   FramePad = 1'f32
-  TileSize = 32'f32
   ClipMark = "object nvclipboard: Panel"
   NimKeywords = ["addr", "and", "as", "asm", "bind", "block", "break", "case", "cast",
     "concept", "const", "continue", "converter", "defer", "discard", "distinct", "div",
@@ -62,9 +61,6 @@ const
     "let", "macro", "method", "mixin", "mod", "nil", "not", "notin", "object", "of",
     "or", "out", "proc", "ptr", "raise", "ref", "return", "shl", "shr", "static",
     "template", "try", "tuple", "type", "using", "var", "when", "while", "xor", "yield"]
-
-proc hash(c: Component): Hash = hash(cast[pointer](c))
-proc hash(o: RootRef): Hash = hash(cast[pointer](o))
 
 var gClipboard = ""   ## fallback when the system clipboard cannot hold the text
 
@@ -250,10 +246,9 @@ proc setCodeText(e: UnitEditor, newText: string) =
   var b = 0
   while b < m - a and old[old.len - 1 - b] == newText[newText.len - 1 - b]: inc b
   while b > 0 and newText.isCont(newText.len - b): dec b
-  let pa = posOf(old, a)
-  let pb = posOf(old, old.len - b)
-  discard e.fCode.model.replace(pa, pb, newText[a ..< newText.len - b])
-  e.fCode.select(e.fCode.caretPos, e.fCode.caretPos)   # lets the editor see the edit
+  # one undo step; the caret and selection stay where they were
+  e.fCode.replaceRange(posOf(old, a), posOf(old, old.len - b),
+                       newText[a ..< newText.len - b], keepSelection = true)
   e.checkModified()
 
 proc showCode*(e: UnitEditor) =
@@ -343,24 +338,9 @@ proc readNfm(e: UnitEditor): string =
   result = readFile(path)
   e.fNfmEol = if "\r\n" in result: "\r\n" else: "\n"
 
-proc tilePos(e: UnitEditor, index: int): PointF =
-  let per = max(int((e.fBody.width - 16) / (TileSize + 24)), 1)
-  let row = index div per
-  let col = index mod per
-  let rows = (e.tiles.len + per - 1) div per
-  pointF(12 + float32(col) * (TileSize + 24),
-         e.fBody.height - 12 - TileSize - 18 - float32(rows - 1 - row) * (TileSize + 24))
-
 proc addTile(e: UnitEditor, comp: Component, className: string) =
-  let n = e.tiles.len
-  # the tile row is laid out for the final count, so place it and re-flow
-  e.fDesigner.addNonVisual(comp, 0, 0, className)
-  discard n
-  let ts = e.tiles
-  for i, t in ts:
-    let p = e.tilePos(i)
-    t.setBounds(p.x, p.y, TileSize, TileSize)
-  e.fDesigner.refresh()
+  ## The tile goes where the component's `designLeft`/`designTop` say.
+  e.fDesigner.addNonVisual(comp, className)
 
 proc collectNonVisual(c: Component, seen: HashSet[Obj], res: var seq[Component]) =
   for x in c.components:
@@ -500,18 +480,17 @@ proc refreshInspector(e: UnitEditor) =
   if e.fInsp == nil or e.fBusy: return
   e.fInsp.inspect(e.objsOf)
 
+proc nameProblem(e: UnitEditor, c: Component, nw: string): string =
+  ## Why `c` cannot be called `nw` ("" when it can).
+  if c == Component(e.fForm): "rename the form from the project, not here"
+  elif not validIdent(nw): "`" & nw & "` is not a valid identifier"
+  elif e.nameTaken(nw, c): "the name `" & nw & "` is already used"
+  else: ""
+
 proc applyRename(e: UnitEditor, c: Component) =
   let old = e.fNames.getOrDefault(c, "")
   let nw = c.name
   if old == nw: return
-  var err = ""
-  if c == Component(e.fForm): err = "rename the form from the project, not here"
-  elif not validIdent(nw): err = "`" & nw & "` is not a valid identifier"
-  elif e.nameTaken(nw, c): err = "the name `" & nw & "` is already used"
-  if err.len > 0:
-    c.name = old
-    e.say err
-    return
   if old.len > 0:
     e.setCodeText(renameComponentRefs(e.codeOf, old, nw, e.fUnit.formType))
   e.fNames[c] = nw
@@ -571,6 +550,11 @@ proc bindInspector*(e: UnitEditor, insp: ObjectInspector) =
   ## apply to the designed form.
   if insp == nil: return
   e.fInsp = insp
+  insp.onPropertyChanging = proc(s: Control, t: Obj, prop: string, v: PropValue,
+                                 accept: var bool, message: var string) =
+    if prop == "name" and t of Component and v.kind == pkString:
+      message = e.nameProblem(Component(t), v.s)
+      accept = message.len == 0
   insp.onPropertyChanged = proc(s: Control, t: Obj, prop: string) =
     e.propertyChanged(t, prop)
   insp.onCreateHandler = proc(s: Control, t: Obj, event: string): string =
@@ -599,6 +583,7 @@ proc unbindInspector*(e: UnitEditor) =
   let insp = e.fInsp
   if insp == nil: return
   e.fInsp = nil
+  insp.onPropertyChanging = nil
   insp.onPropertyChanged = nil
   insp.onCreateHandler = nil
   insp.onGetHandlers = nil
@@ -785,6 +770,12 @@ proc loadCode(e: UnitEditor) =
   e.fCode.highlighter = newNimHighlighter()
   e.fCode.fileName = path
 
+proc syncLoadedImports(e: UnitEditor) =
+  ## The imports of the unit follow the classes of the `.nfm` as it is on disk
+  ## (it may have been edited outside the designer).
+  if e.fUnit.isForm and e.fDesigner != nil and fileExists(e.project.nfmPathOf(e.fUnit)):
+    e.setCodeText(syncFromNfm(e.codeOf, readFile(e.project.nfmPathOf(e.fUnit))))
+
 proc reloadFromDisk*(e: UnitEditor) =
   ## Re-reads the `.nim` and the `.nfm`, dropping every unsaved change.
   e.loadCode()
@@ -806,6 +797,7 @@ proc reloadFromDisk*(e: UnitEditor) =
       e.fCode.visible = not wasDesigner
     else:
       e.fCode.visible = true
+  e.syncLoadedImports()
   e.fDesignDirty = false
   e.fExtra = nil
   e.refreshInspector()
@@ -854,4 +846,5 @@ proc newUnitEditor*(project: Project, unitName: string, parent: Container): Unit
     if e.fDesigner != nil:
       ed.visible = false
       e.fDesigner.select(Control(e.fBody))
+    e.syncLoadedImports()
   e.fLastModified = false

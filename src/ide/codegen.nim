@@ -6,17 +6,12 @@
 ## Strings and comments are skipped with nimvcl's `NimHighlighter` lexer, so a
 ## `"self.button1"` in a string or a `# button1` comment is never renamed.
 ##
-## **Handler signatures** come from the property registry only in part: a
-## `PropInfo` knows the *name* of its event type (`eventTypeOf`, e.g.
-## `"KeyEvent"`) but not its parameters. `eventSignature` therefore resolves
-## the type name through a table that is built at compile time from the real
-## proc types (a macro reads each type's `FormalParams`), so it follows nimvcl
-## and cannot drift. The table covers the event types of the stock controls;
-## `handlerParams(className, eventName)` goes registry -> type name -> table.
+## **Handler signatures** come from the property registry: an event's
+## `PropInfo` carries its `params` and `returnType`.
 ##
 ## Line and column numbers are 0-based (as in `CodeEdit`).
 
-import std/[strutils, macros, tables, algorithm]
+import std/[strutils, algorithm]
 import nimvcl/controls/nimlexer
 import nimvcl/dsl/[props, props_std]
 import nimvcl
@@ -29,56 +24,24 @@ type
 
   EventSig* = tuple[params, ret: string]   ## "sender: Control, key: var Key", ""
 
-# --------------------------------------------------------------- event table
+# --------------------------------------------------------------- signatures
 
-macro sigOf(T: typedesc): untyped =
-  let impl = getTypeInst(T)[1].getTypeImpl
-  var params: seq[string]
-  var ret = ""
-  if impl.kind == nnkProcTy:
-    let fp = impl[0]
-    if fp[0].kind != nnkEmpty: ret = fp[0].repr
-    for i in 1 ..< fp.len:
-      let d = fp[i]
-      params.add d[0].repr & ": " & d[1].repr
-  result = newLit((params.join(", "), ret))
+proc eventSig*(p: PropInfo): EventSig =
+  ## Parameters (after the form) and result type of an event property.
+  var ps: seq[string]
+  for x in p.params: ps.add x.name & ": " & x.typeName
+  (ps.join(", "), p.returnType)
 
-const eventTable = {
-  "NotifyEvent": sigOf(NotifyEvent), "MouseEvent": sigOf(MouseEvent),
-  "MouseMoveEvent": sigOf(MouseMoveEvent), "MouseWheelEvent": sigOf(MouseWheelEvent),
-  "KeyEvent": sigOf(KeyEvent), "KeyPressEvent": sigOf(KeyPressEvent),
-  "PaintEvent": sigOf(PaintEvent), "TimerEvent": sigOf(TimerEvent),
-  "FormCloseEvent": sigOf(FormCloseEvent), "FormCloseQueryEvent": sigOf(FormCloseQueryEvent),
-  "MenuItemEvent": sigOf(MenuItemEvent), "ScrollEvent": sigOf(ScrollEvent),
-  "TabChangingEvent": sigOf(TabChangingEvent), "SelectCellEvent": sigOf(SelectCellEvent),
-  "DrawCellEvent": sigOf(DrawCellEvent), "GridCellEvent": sigOf(GridCellEvent),
-  "GridIndexEvent": sigOf(GridIndexEvent), "ListItemEvent": sigOf(ListItemEvent),
-  "ListSelectEvent": sigOf(ListSelectEvent), "ListColumnEvent": sigOf(ListColumnEvent),
-  "ListItemDblClickEvent": sigOf(ListItemDblClickEvent), "TreeNodeEvent": sigOf(TreeNodeEvent),
-  "TreeAllowEvent": sigOf(TreeAllowEvent), "ActionEvent": sigOf(ActionEvent),
-  "ActionListEvent": sigOf(ActionListEvent), "CaretMoveEvent": sigOf(CaretMoveEvent),
-  "GutterClickEvent": sigOf(GutterClickEvent),
-  "PopupEvent": ("sender: PopupMenu", ""),   # private type in props_std
-}.toTable
-## Event types of the stock controls (the test suite checks that every event
-## type of the registry is listed).
-
-proc eventSignature*(eventType: string): EventSig =
-  ## Parameters (after the form) and result type of an event type. An unknown
-  ## type gives `("sender: Control", "")`; see `knownEventType`.
-  if eventType in eventTable: eventTable[eventType]
+proc registrySig(className, eventName: string): EventSig =
+  let ci = classByName(className)
+  let p = if ci != nil: ci.findProp(eventName) else: nil
+  if p != nil and p.kind == pkEvent: eventSig(p)
   else: ("sender: Control", "")
-
-proc knownEventType*(eventType: string): bool = eventType in eventTable
 
 proc handlerParams*(className, eventName: string): string =
   ## The event's parameter list for a handler of `className.eventName`
   ## (`"sender: Control"` for `Button.onClick`), through the registry.
-  let ci = classByName(className)
-  if ci == nil: return "sender: Control"
-  let p = ci.findProp(eventName)
-  if p == nil or p.kind != pkEvent: return "sender: Control"
-  eventSignature(eventTypeOf(p)).params
+  registrySig(className, eventName).params
 
 # ------------------------------------------------------------------- lines
 
@@ -226,6 +189,17 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
       let l = s.lines[i]
       if l.startsWith("import ") or l.startsWith("from ") or l.startsWith("export "):
         at = i
+    # inside a `{.push ...}` region (the managed import block): go past its `{.pop.}`
+    var pushed = false
+    for i in 0 .. min(at, s.codeLines - 1):
+      let l = s.lines[i].strip
+      if l.startsWith("{.push"): pushed = true
+      elif l.startsWith("{.pop"): pushed = false
+    if at >= 0 and pushed:
+      for i in at + 1 ..< s.codeLines:
+        if s.lines[i].strip.startsWith("{.pop"):
+          at = i
+          break
   if at < 0: at = s.codeLines - 1
   let params = if eventParams.strip().len > 0: ", " & eventParams.strip() else: ""
   let header = "proc " & handlerName & "(self: " & formType & params & ")" &
@@ -239,12 +213,6 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
   if s.lines[^1].len > 0: s.lines.add ""    # keep a final newline
   result = StubResult(text: s.join, line: at + 1 + (if add[0].len == 0: 1 else: 0) + 1,
                       col: 2, inserted: true)
-
-proc registrySig(className, eventName: string): EventSig =
-  let ci = classByName(className)
-  let p = if ci != nil: ci.findProp(eventName) else: nil
-  if p != nil and p.kind == pkEvent: eventSignature(eventTypeOf(p))
-  else: ("sender: Control", "")
 
 proc ensureHandlerFor*(src, formType, className, eventName, handlerName: string): StubResult =
   ## `ensureHandler` with the parameters taken from the registry.
