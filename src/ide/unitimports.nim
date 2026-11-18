@@ -3,7 +3,7 @@
 ##
 ## ```nim
 ## {.push warning[UnusedImport]: off.}
-## import nimvcl/core/[control, form, application]
+## import nimvcl/prelude
 ## import nimvcl/dsl/formload
 ## # nimvcl-ide: imports begin
 ## import nimvcl/controls/button

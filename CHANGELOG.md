@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 - 2026-11-19
+
+- New units and the program file import `nimvcl/prelude`, so handler code can
+  call `showMessage`, `messageDlg`, `inputBox`, timers, colours and fonts
+  without extra imports. Requires nimvcl 0.1.2.
+- Projects created with 0.1.0 keep working; to get the same in them, add
+  `import nimvcl/prelude` to each unit, above the `nimvcl-ide: imports` block.
+
 ## 0.1.0 - 2026-11-18
 
 First public release.

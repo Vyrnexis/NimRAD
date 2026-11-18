@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         # the released version the IDE depends on, and nimvcl's main branch
-        nimvcl: [v0.1.1, main]
+        nimvcl: [v0.1.2, main]
     continue-on-error: ${{ matrix.nimvcl == 'main' }}
     env:
       SDL_VIDEO_DRIVER: offscreen

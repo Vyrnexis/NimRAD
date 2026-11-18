@@ -72,6 +72,8 @@ suite "new application":
     check readFile(root / "app" / "unit1.nfm").contains("caption = 'Form1'")
     check readFile(root / "app" / "unit1.nfm").contains("width = 640")
     check readFile(root / "app" / "hello.nim").contains("import unit1")
+    check readFile(root / "app" / "hello.nim").contains("import nimvcl/prelude")
+    check readFile(root / "app" / "unit1.nim").contains("import nimvcl/prelude")
     check readFile(root / "app" / "nim.cfg").contains("--path:")
     check "${" notin readFile(root / "app" / "hello.nim")
     check p.units.len == 1 and p.units[0].formType == "Form1"

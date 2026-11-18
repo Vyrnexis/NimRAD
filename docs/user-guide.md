@@ -294,8 +294,7 @@ does not analyse the whole library on every build:
 
 ```nim
 {.push warning[UnusedImport]: off.}
-import nimvcl/core/[control, form, application]
-import nimvcl/controls/common
+import nimvcl/prelude
 import nimvcl/dsl/formload
 # nimvcl-ide: imports begin
 import nimvcl/controls/button
@@ -314,12 +313,17 @@ of that kind is deleted. Only lines of the form `import nimvcl/<folder>/<module>
 inside the markers are managed; any other line there, and everything outside the
 markers, stays as you wrote it. Add your own imports (`import std/strutils`,
 `import nimvcl/graphics/image`, a control of your own) above the markers.
-The fixed lines import the base classes, the shared types (`Orientation`,
-colours, `Canvas`, ...) and `loadForm`; `import nimvcl` would also work but
-makes every build slower (about 3 times for a small form).
+The fixed lines import `nimvcl/prelude` and `loadForm`. The prelude is the
+small set that handler code needs without any component: the base classes,
+the shared types (`Orientation`, colours, `Canvas`, ...), `Application` and
+`Application.clipboard`, the dialogs (`showMessage`, `messageDlg`,
+`inputQuery`, file dialogs) and `Timer`; it adds about 0.1 s to a build.
+`import nimvcl` would also work but makes every build slower (about twice
+as slow for a small form). The main program imports the prelude too.
 
-A unit without the markers (a project made by an older version that says
-`import nimvcl`) is never changed and keeps building as before. A control class
+A unit made by an older version (it imports `nimvcl/core/[control, form,
+application]` and `nimvcl/controls/common` instead of the prelude) keeps
+working unchanged. A unit without the markers (`import nimvcl`) is never changed and keeps building as before. A control class
 that the IDE does not know (your own) needs its import added by hand.
 
 ## Search and editing

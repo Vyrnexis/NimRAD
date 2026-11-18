@@ -8,7 +8,7 @@ import ide/[unitimports, codegen, project]
 
 const unitText = """## unit1
 {.push warning[UnusedImport]: off.}
-import nimvcl/core/[control, form, application]
+import nimvcl/prelude
 import nimvcl/dsl/formload
 # nimvcl-ide: imports begin
 # nimvcl-ide: imports end
@@ -174,5 +174,24 @@ suite "generated unit compiles":
     if code != 0:
       echo output
       echo unit
+    check code == 0
+    if code == 0: removeDir dir
+
+suite "prelude and older units":
+  test "a unit that still has the old core imports compiles and runs":
+    let dir = getTempDir() / ("nimvclide-oldimports-" & $getCurrentProcessId())
+    removeDir dir
+    discard newApplicationProject(dir, "app")
+    var unit = readFile(dir / "unit1.nim")
+    check "import nimvcl/prelude\n" in unit
+    unit = unit.replace("import nimvcl/prelude\n",
+      "import nimvcl/core/[control, form, application]\nimport nimvcl/controls/common\n")
+    writeFile(dir / "unit1.nim", unit)
+    putEnv("SDL_VIDEO_DRIVER", "offscreen")
+    putEnv("SDL_RENDER_DRIVER", "software")
+    let (output, code) = execCmdEx("nim c --hints:off --warnings:off --path:" &
+      quoteShell(detectNimvclPath()) & " --nimcache:" & quoteShell(dir / "cache") &
+      " --outdir:" & quoteShell(dir) & " -r " & quoteShell(dir / "app.nim") & " --smoke")
+    if code != 0: echo output
     check code == 0
     if code == 0: removeDir dir
