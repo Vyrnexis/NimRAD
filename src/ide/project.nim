@@ -14,6 +14,7 @@
 ##     {"name": "unit1", "nim": "unit1.nim", "nfm": "unit1.nfm",
 ##      "isForm": true, "formType": "Form1"}
 ##   ],
+##   "fonts": [{"file": "fonts/Foo-Regular.ttf", "family": "Foo", "style": "regular"}],
 ##   "outputDir": "build",
 ##   "nimFlags": ["-d:release"],
 ##   "defines": ["useFoo", "level=2"],
@@ -24,6 +25,9 @@
 ## }
 ## ```
 ##
+## * `fonts` lists the font files copied into `<project>/fonts/` (`Project >
+##   Add Font File...`); `style` is `regular`, `bold`, `italic` or `bolditalic`.
+##   The main file registers them at startup, embedded at compile time.
 ## * Every path is stored relative to the folder of the `.nimproj`
 ##   (forward slashes); `resolve` gives the absolute path. Absolute paths that
 ##   are given to the API are converted on the way in.
@@ -37,6 +41,7 @@
 ## `${placeholder}` substitution.
 
 import std/[json, os, strutils, sequtils]
+import nimvcl/graphics/[font, context]
 import ./[codegen, mainfile]
 
 const
@@ -57,11 +62,17 @@ type
     isForm*: bool
     formType*: string    ## `Form1` for a form unit
 
+  ProjectFont* = object
+    file*: string        ## relative to the project folder, `fonts/Foo-Regular.ttf`
+    family*: string      ## name used in `FontSpec.family`
+    style*: string       ## "regular", "bold", "italic" or "bolditalic"
+
   Project* = ref object
     filePath*: string    ## absolute path of the .nimproj
     name*: string
     mainFile*: string
     units*: seq[ProjectUnit]
+    fonts*: seq[ProjectFont]
     outputDir*: string
     nimFlags*: seq[string]
     defines*: seq[string]  ## conditional defines, passed as `-d:<entry>`
@@ -150,7 +161,9 @@ proc toJson*(p: Project): JsonNode =
   for u in p.units:
     us.add %*{"name": u.name, "nim": u.nimPath, "nfm": u.nfmPath,
               "isForm": u.isForm, "formType": u.formType}
-  %*{"version": 1, "name": p.name, "mainFile": p.mainFile, "units": us,
+  var fs = newJArray()
+  for f in p.fonts: fs.add %*{"file": f.file, "family": f.family, "style": f.style}
+  %*{"version": 1, "name": p.name, "mainFile": p.mainFile, "units": us, "fonts": fs,
      "outputDir": p.outputDir, "nimFlags": p.nimFlags, "defines": p.defines, "title": p.title,
      "version": p.version, "runArgs": p.runArgs, "nimvclPath": p.nimvclPath}
 
@@ -182,6 +195,12 @@ proc loadProject*(path: string): Project =
                           nfmPath: e.str("nfm", ""), formType: e.str("formType", ""))
       u.isForm = e.hasKey("isForm") and e["isForm"].kind == JBool and e["isForm"].getBool
       if u.name.len > 0 and u.nimPath.len > 0: result.units.add u
+  if j.hasKey("fonts") and j["fonts"].kind == JArray:
+    for e in j["fonts"]:
+      if e.kind != JObject: continue
+      let f = ProjectFont(file: e.str("file", ""), family: e.str("family", ""),
+                          style: e.str("style", "regular"))
+      if f.file.len > 0 and f.family.len > 0: result.fonts.add f
 
 # ------------------------------------------------------------------- editing
 
@@ -194,6 +213,106 @@ proc addUnit*(p: Project, name, nimPath: string, nfmPath = "", isForm = false,
                        nfmPath: (if nfmPath.len > 0: p.relativeTo(nfmPath) else: ""),
                        isForm: isForm or nfmPath.len > 0, formType: formType)
   p.units.add result
+
+# --------------------------------------------------------------------- fonts
+
+const FontExts = [".ttf", ".otf"]
+
+func styleName(st: set[FontStyle]): string =
+  if fsBold in st and fsItalic in st: "bolditalic"
+  elif fsBold in st: "bold"
+  elif fsItalic in st: "italic"
+  else: "regular"
+
+proc fontFamilies*(p: Project): seq[string] =
+  ## The distinct families of the project's fonts, in the order they were added.
+  for f in p.fonts:
+    if f.family notin result: result.add f.family
+
+proc registerFonts*(p: Project) =
+  ## Registers the project's fonts in this process (the designer and the
+  ## Object Inspector use them); missing files are skipped.
+  var seen: seq[string]
+  for f in p.fonts:
+    if f.family in seen: continue
+    seen.add f.family
+    var data: array[4, string]
+    for g in p.fonts:
+      if g.family != f.family or not fileExists(p.resolve(g.file)): continue
+      let i = case g.style
+        of "bold": 1
+        of "italic": 2
+        of "bolditalic": 3
+        else: 0
+      data[i] = readFile(p.resolve(g.file))
+    if data[0].len == 0:
+      for d in data:
+        if d.len > 0:
+          data[0] = d
+          break
+    if data[0].len > 0:
+      registerFontFamilyData(f.family, data[0], data[1], data[2], data[3])
+
+proc fontsBlockLines*(p: Project): seq[string] =
+  ## The lines of the main file's `fonts` block: one `registerFontFamilyData`
+  ## per family, the files read at compile time into constants (`staticRead`, so
+  ## they travel inside the executable).
+  if p.fonts.len == 0: return
+  result.add "import nimvcl/graphics/font"
+  let mainDir = p.mainPath.parentDir
+  var seen: seq[string]
+  var calls: seq[string]
+  for f in p.fonts:
+    if f.family in seen: continue
+    seen.add f.family
+    let n = seen.len
+    var args: array[4, string]
+    for g in p.fonts:
+      if g.family != f.family: continue
+      let i = case g.style
+        of "bold": 1
+        of "italic": 2
+        of "bolditalic": 3
+        else: 0
+      let cn = "projectFont" & $n & ["Regular", "Bold", "Italic", "BoldItalic"][i]
+      result.add "const " & cn & " = staticRead(" &
+                 escape(unixPath(relativePath(p.resolve(g.file), mainDir))) & ")"
+      args[i] = cn
+    if args[0].len == 0:
+      for a in args:
+        if a.len > 0:
+          args[0] = a
+          break
+    var call = "registerFontFamilyData(" & escape(f.family) & ", " & args[0]
+    for (nm, a) in [("bold", args[1]), ("italic", args[2]), ("boldItalic", args[3])]:
+      if a.len > 0 and a != args[0]: call.add ", " & nm & " = " & a
+    calls.add call & ")"
+  result.add calls
+
+proc addFontFile*(p: Project, path: string): ProjectFont =
+  ## Copies a `.ttf` / `.otf` into `<project>/fonts/` and records it. The family
+  ## name and the bold/italic flags come from the font file (the file name when it
+  ## names no family). Adding the same file again returns the existing entry.
+  ## Saving the project and updating the main file (`syncFontsBlock`) is up to the caller.
+  let ext = path.splitFile.ext.toLowerAscii
+  if ext notin FontExts: raise newException(ProjectError, "not a .ttf or .otf file: " & path)
+  if not fileExists(path): raise newException(ProjectError, "no such file: " & path)
+  let info = fontFileInfo(path)
+  if info.family.len == 0:
+    raise newException(ProjectError, path & " is not a usable font file")
+  let dest = p.dir / "fonts" / path.extractFilename
+  let rel = p.relativeTo(dest)
+  for f in p.fonts:
+    if f.file == rel and fileExists(dest) and
+       (normalizedPath(path) == normalizedPath(dest) or readFile(path) == readFile(dest)):
+      return f
+  if fileExists(dest) and normalizedPath(path) != normalizedPath(dest):
+    raise newException(ProjectError, rel & " already exists in the project")
+  createDir p.dir / "fonts"
+  if normalizedPath(path) != normalizedPath(dest): copyFile(path, dest)
+  result = ProjectFont(file: rel, family: info.family, style: styleName(info.style))
+  p.fonts = p.fonts.filterIt(it.file != rel)
+  p.fonts.add result
 
 # ------------------------------------------------------------------ main file
 
@@ -218,6 +337,12 @@ proc removeFromMain*(p: Project, u: ProjectUnit): bool {.discardable.} =
   ## The reverse of `addToMain`.
   let ft = if u.isForm: u.formType else: ""
   p.editMain(proc(src: string): string = mainfile.removeUnit(src, u.name, ft))
+
+proc syncFontsBlock*(p: Project): bool {.discardable.} =
+  ## Rewrites the main file's `fonts` block from `p.fonts` (see `fontsBlockLines`).
+  ## True when the file changed; false when it is missing or has no markers.
+  let lines = p.fontsBlockLines
+  p.editMain(proc(src: string): string = mainfile.setFonts(src, lines))
 
 proc isMainForm*(p: Project, u: ProjectUnit): bool =
   ## Whether the unit's form is the one the main program shows.

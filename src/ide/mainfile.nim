@@ -14,6 +14,16 @@
 ##   # nimvcl-ide: forms end
 ## ```
 ##
+## A top-level `fonts` block (after the imports) registers the project's fonts:
+##
+## ```nim
+## # nimvcl-ide: fonts begin
+## import nimvcl/graphics/font
+## const projectFont1Regular = staticRead("fonts/Foo-Regular.ttf")
+## registerFontFamilyData("Foo", projectFont1Regular)
+## # nimvcl-ide: fonts end
+## ```
+##
 ## `imports` holds one `import unitN` per unit (inside a `push`/`pop` pair that
 ## silences "imported and not used", which a unit without a form would cause;
 ## new imports go before the `{.pop.}`); `forms` is the IDE's
@@ -32,6 +42,7 @@ import std/strutils
 const
   ImportsBlock* = "imports"
   FormsBlock* = "forms"
+  FontsBlock* = "fonts"
   MainFormVar* = "mainForm"
 
 type BlockRange* = tuple[b, e: int]   ## line index of the begin and end marker; -1 = none
@@ -148,3 +159,21 @@ proc addUnit*(src, unit, formType: string): string =
 proc removeUnit*(src, unit, formType: string): string =
   result = src.removeImport(unit)
   if formType.len > 0: result = result.removeForm(formType)
+
+proc setFonts*(src: string, content: seq[string]): string =
+  ## Replaces the lines of the `fonts` block with `content` (no indent, no line
+  ## ends). A file without the block gets one right after the imports block
+  ## (only when `content` is not empty); without an imports block it is left alone.
+  var lines = src.split('\n')
+  let tail = if lines.crlf: "\r" else: ""
+  var r = findBlock(lines, FontsBlock)
+  if r.b < 0:
+    if content.len == 0: return src
+    let imp = findBlock(lines, ImportsBlock)
+    if imp.b < 0: return src
+    lines.insert(beginMarker(FontsBlock) & tail, imp.e + 1)
+    lines.insert(endMarker(FontsBlock) & tail, imp.e + 2)
+    r = (imp.e + 1, imp.e + 2)
+  for _ in r.b + 1 ..< r.e: lines.delete(r.b + 1)
+  for i, l in content: lines.insert(l & tail, r.b + 1 + i)
+  lines.join("\n")

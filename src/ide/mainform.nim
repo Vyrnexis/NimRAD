@@ -402,6 +402,7 @@ proc refreshActions*(ide: IdeForm) =
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
   a[aToggleView].enabled = ed != nil and ed.isForm
   a[aAddToProject].enabled = hasProject
+  a[aAddFont].enabled = hasProject
   a[aRemoveFromProject].enabled = ed != nil and not ide.isMainEditor(ed)
   a[aViewSource].enabled = hasProject
   a[aViewUnits].enabled = hasProject
@@ -601,6 +602,7 @@ proc openProject*(ide: IdeForm, path: string): bool =
     return false
   if not ide.closeProject(): return false
   ide.project = p
+  p.registerFonts()
   ide.messages.clear()
   ide.refreshProject()
   ide.rememberProject()
@@ -684,6 +686,24 @@ proc addToProject*(ide: IdeForm, path: string): bool =
     ide.afterMainEdit(mainEd)
     ide.refreshProject()
     discard ide.openUnit(name)
+    result = true
+  except CatchableError as e:
+    ide.fail "Cannot add " & path & ": " & e.msg
+
+proc addFontFile*(ide: IdeForm, path: string): bool =
+  ## Project > Add Font File: copies the font into `<project>/fonts/`, records it
+  ## in the project and makes the main file register it at startup.
+  if ide.project == nil: return false
+  let mainEd = ide.beforeMainEdit()
+  try:
+    let f = ide.project.addFontFile(path)
+    ide.project.save()
+    ide.project.registerFonts()
+    if not ide.project.syncFontsBlock() and fileExists(ide.project.mainPath) and
+       not readFile(ide.project.mainPath).hasBlock(ImportsBlock):
+      ide.say "The main file has no nimvcl-ide markers: register " & f.file & " there yourself"
+    ide.afterMainEdit(mainEd)
+    ide.say "Added font " & f.family & " (" & f.style & ")"
     result = true
   except CatchableError as e:
     ide.fail "Cannot add " & path & ": " & e.msg
@@ -1170,6 +1190,15 @@ proc connectActions(ide: IdeForm) =
         dlg.filters = @[("Nim units", "nim"), ("All files", "*")]
         if dlg.executeModal(): dlg.fileName else: ""
     if f.len > 0: discard ide.addToProject(f)
+  on aAddFont:
+    let f =
+      if ide.pickFile != nil: ide.pickFile("Add Font File", @[("Fonts", "ttf;otf")])
+      else:
+        let dlg = newOpenDialog(ide)
+        dlg.title = "Add Font File"
+        dlg.filters = @[("Fonts", "ttf;otf"), ("All files", "*")]
+        if dlg.executeModal(): dlg.fileName else: ""
+    if f.len > 0: discard ide.addFontFile(f)
   on aRemoveFromProject:
     let ed = ide.activeEditor
     if ed != nil: discard ide.removeFromProject(ed.unitName)
@@ -1252,7 +1281,7 @@ proc buildMenu(ide: IdeForm) =
   view.addAct a[aTheme]
   view.addItem("Reset &Layout", proc(s: MenuItem) = ide.resetLayout())
   let proj = m.addItem("&Project")
-  for id in [aAddToProject, aRemoveFromProject, aViewSource]: proj.addAct a[id]
+  for id in [aAddToProject, aAddFont, aRemoveFromProject, aViewSource]: proj.addAct a[id]
   proj.addSeparator()
   proj.addAct a[aProjectOptions]
   let run = m.addItem("&Run")
@@ -1309,6 +1338,8 @@ proc buildDocking(ide: IdeForm) =
     if ed != nil and node.tag >= 0 and node.tag < ide.treeComps.len:
       ed.selectComponent(ide.treeComps[node.tag])
   ide.inspector = newObjectInspector(nil)
+  ide.inspector.onGetFontFamilies = proc(s: Control, t: Obj): seq[string] =
+    if ide.project != nil: ide.project.fontFamilies else: @[]
   ide.pages = newEditorPages()
   ide.pages.onCloseTab = proc(i: int) =
     if i >= 0 and i < ide.editors.len: discard ide.closeEditor(ide.editors[i])

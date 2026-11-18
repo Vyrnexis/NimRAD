@@ -1,7 +1,7 @@
 ## ${name}: main program.
 ##
 ## The IDE keeps the lines between the `nimvcl-ide:` markers up to date
-## (File > New Form, Project > Add to / Remove from Project); the rest of this
+## (File > New Form, Project > Add to / Remove from Project / Add Font File); the rest of this
 ## file is yours. The first form is the main form; the other forms are created
 ## here but stay hidden until your code shows them.
 import std/os
@@ -11,6 +11,8 @@ import nimvcl/core/[form, application]
 import ${unit}
 {.pop.}
 # nimvcl-ide: imports end
+# nimvcl-ide: fonts begin
+# nimvcl-ide: fonts end
 
 const
   appTitle {.strdefine.} = ""            # Project > Options: Application title
