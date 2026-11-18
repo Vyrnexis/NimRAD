@@ -23,7 +23,9 @@
 ##   "title": "My App",
 ##   "version": "1.0.0",
 ##   "runArgs": [],
-##   "nimvclPath": ""
+##   "nimvclPath": "",
+##   "autoImports": true,
+##   "importAll": true
 ## }
 ## ```
 ##
@@ -40,6 +42,8 @@
 ## * `nimvclPath` is the nimvcl `src` folder; empty means "detect"
 ##   (`detectNimvclPath`: `$NIMVCL_SRC`, then the folder the IDE was compiled
 ##   against, then `nimble path nimvcl`).
+## * `autoImports` (Project > Options > "Add missing nimvcl imports automatically")
+##   and `importAll` ("Import all of nimvcl") are written only when on.
 ## * Missing fields take their defaults when loading; unknown fields are dropped.
 ##
 ## Files of a new project come from `templates/` (read at compile time) with
@@ -48,7 +52,7 @@
 import std/[json, os, strutils, sequtils]
 import nimvcl/graphics/[font, context]
 import nimvcl/dsl/nfmsyntax
-import ./[codegen, mainfile, nimvclpath]
+import ./[codegen, mainfile, nimvclpath, unitimports]
 
 const
   ProjectExt* = ".nimproj"
@@ -88,6 +92,8 @@ type
     version*: string       ## version info, passed as `-d:appVersion=<version>`
     runArgs*: seq[string]
     nimvclPath*: string  ## "" = detect
+    autoImports*: bool   ## add a missing `import nimvcl/...` by itself when a build fails for it
+    importAll*: bool     ## units and the program import `nimvcl` (slower builds), not the prelude and the control imports
 
 # ------------------------------------------------------------------- helpers
 
@@ -164,9 +170,11 @@ proc toJson*(p: Project): JsonNode =
     if u.ancestor.len > 0: us[us.len - 1]["ancestor"] = %u.ancestor
   var fs = newJArray()
   for f in p.fonts: fs.add %*{"file": f.file, "family": f.family, "style": f.style}
-  %*{"version": 1, "name": p.name, "mainFile": p.mainFile, "units": us, "fonts": fs,
+  result = %*{"version": 1, "name": p.name, "mainFile": p.mainFile, "units": us, "fonts": fs,
      "outputDir": p.outputDir, "nimFlags": p.nimFlags, "defines": p.defines, "title": p.title,
      "version": p.version, "runArgs": p.runArgs, "nimvclPath": p.nimvclPath}
+  if p.autoImports: result["autoImports"] = %true
+  if p.importAll: result["importAll"] = %true
 
 proc save*(p: Project) =
   writeFile(p.filePath, p.toJson.pretty & "\n")
@@ -187,6 +195,8 @@ proc loadProject*(path: string): Project =
                    title: j.str("title", ""), version: j.str("version", ""),
                    runArgs: j.strs("runArgs"),
                    nimvclPath: j.str("nimvclPath", ""))
+  for (key, field) in [("autoImports", addr result.autoImports), ("importAll", addr result.importAll)]:
+    if j.hasKey(key) and j[key].kind == JBool: field[] = j[key].getBool
   if result.mainFile.len == 0: result.mainFile = result.name & ".nim"
   if result.outputDir.len == 0: result.outputDir = "build"
   if j.hasKey("units") and j["units"].kind == JArray:
@@ -472,9 +482,13 @@ proc nextFormNumber(p: Project): int =
     if not used and not fileExists(p.dir / ("unit" & $result & ".nim")): return
     inc result
 
+proc importModeOf(p: Project, src: string): string =
+  ## A freshly generated file in the project's import mode (see `importAll`).
+  if p.importAll: setImportAll(src, true) else: src
+
 proc writeUnitFiles(p: Project, unit, form: string) =
   let vars = {"unit": unit, "form": form}
-  writeFile(p.dir / unit & ".nim", expand(tmplUnit, vars))
+  writeFile(p.dir / unit & ".nim", p.importModeOf expand(tmplUnit, vars))
   writeFile(p.dir / unit & ".nfm", expand(tmplNfm, vars))
 
 proc newFormUnit*(p: Project, name = ""): ProjectUnit =
@@ -530,8 +544,8 @@ proc newInheritedFormUnit*(p: Project, ancestorUnit: string, name = ""): Project
     raise newException(ProjectError, "unit " & unit & " already exists")
   let rel = unixPath(relativePath(p.nfmPathOf(anc), p.dir))
   writeFile(p.dir / unit & ".nim",
-            expand(tmplInhNim, {"unit": unit, "form": form, "ancestor": anc.name,
-                                "ancestorForm": anc.formType}))
+            p.importModeOf expand(tmplInhNim, {"unit": unit, "form": form, "ancestor": anc.name,
+                                               "ancestorForm": anc.formType}))
   writeFile(p.dir / unit & ".nfm",
             expand(tmplInhNfm, {"form": form, "ancestorNfm": rel}))
   result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form, anc.name)
@@ -553,3 +567,19 @@ proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =
             expand(tmplMain, {"name": name, "unit": u.name, "form": u.formType}))
   writeFile(d / "nim.cfg", expand(tmplCfg, {"nimvclPath": cfgPath}))
   result.save()
+
+proc rewriteImports*(p: Project): seq[string] =
+  ## Puts the program and every unit in the import mode of the project
+  ## (`importAll`): `import nimvcl` or the prelude with the control imports of
+  ## the form. Units and programs that never had the IDE's lines are left alone.
+  ## Returns the files that changed; save open editors first and reload them after.
+  for f in p.sourceFiles:
+    if not fileExists(f): continue
+    let src = readFile(f)
+    var res = setImportAll(src, p.importAll)
+    for u in p.units:
+      if p.nimPathOf(u) == f and u.isForm and u.nfmPath.len > 0 and fileExists(p.nfmPathOf(u)):
+        res = syncFromNfm(res, readFile(p.nfmPathOf(u)), p.nfmPathOf(u).parentDir, p.importAll)
+    if res != src:
+      writeFile(f, res)
+      result.add f

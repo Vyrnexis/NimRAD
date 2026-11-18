@@ -251,6 +251,15 @@ proc setCodeText(e: UnitEditor, newText: string) =
                        newText[a ..< newText.len - b], keepSelection = true)
   e.checkModified()
 
+proc editCode*(e: UnitEditor, change: proc(src: string): string): bool {.discardable.} =
+  ## Applies `change` to the text of the code view (one undo step); true when
+  ## the text changed. The editor is modified afterwards; save it to keep it.
+  let old = e.fCode.text
+  let res = change(old)
+  if res == old: return false
+  e.setCodeText res
+  true
+
 proc showCode*(e: UnitEditor) =
   if e.fScroll != nil: e.fScroll.visible = false
   e.fCode.visible = true
@@ -779,7 +788,7 @@ proc save*(e: UnitEditor) =
     writeFile(e.project.nfmPathOf(e.fUnit), nfm)
     e.fDesignDirty = false
     if e.fUnit.isForm:
-      e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir))
+      e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir, e.project.importAll))
   if e.fCode.modified or not fileExists(e.project.nimPathOf(e.fUnit)):
     e.fCode.saveToFile(e.project.nimPathOf(e.fUnit))
   e.checkModified()
@@ -795,7 +804,8 @@ proc syncLoadedImports(e: UnitEditor) =
   ## The imports of the unit follow the classes of the `.nfm` as it is on disk
   ## (it may have been edited outside the designer).
   if e.fUnit.isForm and e.fDesigner != nil and fileExists(e.project.nfmPathOf(e.fUnit)):
-    e.setCodeText(syncFromNfm(e.codeOf, readFile(e.project.nfmPathOf(e.fUnit)), e.nfmDir))
+    e.setCodeText(syncFromNfm(e.codeOf, readFile(e.project.nfmPathOf(e.fUnit)), e.nfmDir,
+                              e.project.importAll))
 
 proc reloadFromDisk*(e: UnitEditor) =
   ## Re-reads the `.nim` and the `.nfm`, dropping every unsaved change.

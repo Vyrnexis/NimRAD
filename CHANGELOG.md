@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.2 - 2026-11-19
+
+- Quick fix for missing imports: when a build fails on an undeclared nimvcl
+  name, Messages offers "Add import ..." (Ctrl+.), adds it above the
+  IDE-managed block and rebuilds. Several candidate modules give a chooser.
+- "Did you mean Edit1?" for a component name written with the wrong case of
+  its first letter (Nim is case-sensitive there).
+- Search > Find Unit (Shift+Ctrl+A) adds the import for the name at the caret.
+- Project options: "Add missing nimvcl imports automatically" (off by
+  default) and "Import all of nimvcl" (simpler, slower builds).
+
 ## 0.1.1 - 2026-11-19
 
 - New units and the program file import `nimvcl/prelude`, so handler code can

@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.1"
+version       = "0.1.2"
 author        = "Vyrnexis"
 description   = "A Delphi 7-style IDE for building nimvcl applications"
 license       = "MIT"
@@ -17,3 +17,7 @@ requires "https://github.com/Vyrnexis/nimvcl#v0.1.2"
 
 task test, "Run the test suite headless":
   exec "bash scripts/test.sh"
+
+task genindex, "Regenerate src/ide/symbolindex.nim from the nimvcl sources":
+  exec "nim r --hints:off scripts/gen_symbolindex.nim > src/ide/symbolindex.nim.tmp"
+  exec "mv src/ide/symbolindex.nim.tmp src/ide/symbolindex.nim"

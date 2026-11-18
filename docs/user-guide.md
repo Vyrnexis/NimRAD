@@ -326,6 +326,37 @@ application]` and `nimvcl/controls/common` instead of the prelude) keeps
 working unchanged. A unit without the markers (`import nimvcl`) is never changed and keeps building as before. A control class
 that the IDE does not know (your own) needs its import added by hand.
 
+### Missing imports: quick fixes
+
+When the build says `undeclared identifier: 'newProgressBar'` and nimvcl
+declares that name, the message row ends with `[Ctrl+.  Add import
+nimvcl/controls/progressbar]`. **Search > Quick Fix** (`Ctrl+.`, also the
+context menu of the Messages window) adds `import nimvcl/controls/progressbar`
+to the unit, above the IDE's markers and after your own imports (never inside
+the managed block), and builds again (or runs again, if you pressed Run). It
+works on the selected message, else on the error at the caret, else on the
+first message that has a fix. When several modules declare the name, a small
+list asks which one.
+
+The same key corrects a component name written in the wrong case: for
+`self.edit1` on a form that has `Edit1` the message offers `Did you mean
+Edit1?` and replaces that occurrence (it does not build again).
+
+**Search > Find Unit** (`Ctrl+Shift+A`) looks up the identifier at the caret
+(or the selection) in the same table of nimvcl symbols and offers to add its
+import, without waiting for a build.
+
+Two project options (**Project > Options**) change how imports are handled:
+
+| Option | Effect |
+|---|---|
+| Add missing nimvcl imports automatically | Off by default. When a build fails only because of an `undeclared identifier` that exactly one nimvcl module declares, the IDE adds that import and builds once more. What it added is listed in Messages. Names with several candidates are left to Quick Fix |
+| Import all of nimvcl | Off by default. Units and the program say `import nimvcl   # nimvcl-ide: all` instead of the prelude, and the managed block stays empty. Every name is then known, but builds are slower (about twice as slow for a small form). Switching it rewrites every unit; switching it off restores the prelude and the controls of each form |
+
+The table of symbols (`src/ide/symbolindex.nim`) is generated from the nimvcl
+sources by `scripts/gen_symbolindex.nim` (`nimble genindex`); a test fails when
+it no longer matches the nimvcl the IDE is built against.
+
 ## Search and editing
 
 `Ctrl+F` find, `Ctrl+H` replace, `F3` next match, `Alt+G` go to line. The code
@@ -351,6 +382,8 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 | `Ctrl+A` | Select All |
 | `Ctrl+F` / `Ctrl+H` / `F3` | Find / Replace / Find Next |
 | `Alt+G` | Go to Line |
+| `Ctrl+.` | Quick Fix of a compiler message (add a missing import, correct a name) |
+| `Shift+Ctrl+A` | Find Unit: add the import of the identifier at the caret |
 | `F12` | Toggle Form / Unit |
 | `F11` | Show or hide the Object Inspector |
 | `Ctrl+Alt+P` | Show or hide the Project Manager |

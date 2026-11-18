@@ -27,6 +27,8 @@ import ./mainfile
 
 const
   UnitImportsBlock* = "imports"
+  ImportAllTag* = "# nimvcl-ide: all"
+  PreludeLine* = "import nimvcl/prelude"
 
   classModules* = [
     # (class, module path); the base classes (Form, Control, ...) are imported
@@ -145,6 +147,121 @@ proc syncImports*(src: string, wanted: seq[string]): string =
       inc at
   lines.join("\n")
 
-proc syncFromNfm*(src, nfmText: string, baseDir = ""): string =
-  ## `syncImports` for the classes of a form file.
-  syncImports(src, importsFor(nfmText, baseDir))
+proc syncFromNfm*(src, nfmText: string, baseDir = "", importAll = false): string =
+  ## `syncImports` for the classes of a form file; with `importAll` the block
+  ## is kept empty (the unit imports all of nimvcl).
+  syncImports(src, if importAll: @[] else: importsFor(nfmText, baseDir))
+
+proc collectNames(root: NfmNode, dir: string, seen: var HashSet[string],
+                  names: var seq[string], depth = 0) =
+  for n in walk(root):
+    if n.name.len > 0 and n.name notin seen:
+      seen.incl n.name
+      names.add n.name
+  if root.inherited and dir.len > 0 and depth < 16:
+    let apath = if root.ancestor.isAbsolute: root.ancestor else: dir / root.ancestor
+    try: collectNames(parseNfm(readFile(apath)), apath.parentDir, seen, names, depth + 1)
+    except CatchableError: discard
+
+proc componentNames*(nfmText: string, baseDir = ""): seq[string] =
+  ## The names of the objects in a form file, those of an inherited form's
+  ## ancestors included.
+  var root: NfmNode
+  try: root = parseNfm(nfmText)
+  except NfmError: return
+  var seen = initHashSet[string]()
+  collectNames(root, baseDir, seen, result)
+
+# ------------------------------------------------------------ user imports
+
+func importedPaths(line: string): seq[string] =
+  ## The module paths an `import` line names: `import a/b, c/[d, e]  # x`
+  ## gives `a/b`, `c/d`, `c/e`.
+  var t = line.strip
+  let c = t.find('#')
+  if c >= 0: t = t[0 ..< c].strip
+  if not t.startsWith("import "): return
+  t = t["import ".len .. ^1]
+  var depth = 0
+  var cur = ""
+  var parts: seq[string]
+  for ch in t:
+    if ch == '[': inc depth
+    elif ch == ']': dec depth
+    if ch == ',' and depth == 0:
+      parts.add cur
+      cur = ""
+    else: cur.add ch
+  parts.add cur
+  for p in parts:
+    let q = p.strip.replace(" ", "")
+    let b = q.find("/[")
+    if b >= 0 and q.endsWith("]"):
+      for m in q[b + 2 ..< q.high].split(','):
+        if m.len > 0: result.add q[0 ..< b] & "/" & m
+    elif q.len > 0: result.add q
+
+proc importsModule*(src, module: string): bool =
+  ## Whether the source imports `module` (`nimvcl/controls/edit`), by its own
+  ## line, in a `[a, b]` group, or through `import nimvcl` (everything).
+  for l in src.split('\n'):
+    for p in importedPaths(l):
+      if p == module or p == "nimvcl": return true
+
+proc addUserImport*(src, module: string): string =
+  ## `import <module>` in the unit's own import area: right above the IDE's
+  ## `imports begin` marker (never inside the block), or after the last import
+  ## of the file when it has no block. Unchanged when the module is imported
+  ## already.
+  if src.importsModule(module): return src
+  var lines = src.split('\n')
+  let r = findBlock(lines, UnitImportsBlock)
+  var at = -1
+  var indent = ""
+  if r.b >= 0:
+    at = r.b
+    indent = lines.blockIndent r
+  else:
+    var k = 0
+    var cont = false
+    while k < lines.len:
+      let t = lines[k].strip
+      let code = if t.find('#') >= 0: t[0 ..< t.find('#')].strip else: t
+      if cont:
+        at = k + 1
+        cont = code.endsWith(",")
+      elif t.len == 0 or t.startsWith("#") or code.startsWith("{.p") or
+           code.startsWith("export "):
+        discard
+      elif code.startsWith("import ") or code.startsWith("from "):
+        at = k + 1
+        indent = lines[k][0 ..< lines[k].len - lines[k].strip(trailing = false).len]
+        cont = code.endsWith(",")
+      else: break
+      inc k
+    if at < 0:
+      # no import yet: below the leading comment (the unit's doc comment)
+      at = 0
+      while at < lines.len and (lines[at].strip.startsWith("##") or lines[at].strip.len == 0):
+        inc at
+  lines.insertBefore(at, "import " & module, indent)
+  lines.join("\n")
+
+# --------------------------------------------------------------- import all
+
+proc setImportAll*(src: string, on: bool): string =
+  ## Turns the prelude line into `import nimvcl   # nimvcl-ide: all` (`on`),
+  ## empties the managed block, or the reverse. Only the prelude line and the
+  ## tagged line are touched; the block is refilled by `syncFromNfm`.
+  var lines = src.split('\n')
+  let tail = if lines.crlf: "\r" else: ""
+  for i, l in lines:
+    let t = l.strip
+    let indent = l[0 ..< l.len - l.strip(trailing = false).len]
+    if on and t == PreludeLine:
+      lines[i] = indent & "import nimvcl   " & ImportAllTag & tail
+    elif not on and t.startsWith("import nimvcl ") and t.endsWith(ImportAllTag) and
+         t["import nimvcl".len .. ^1].strip.startsWith("#"):
+      lines[i] = indent & PreludeLine & tail
+  result = lines.join("\n")
+  if on: result = syncImports(result, @[])

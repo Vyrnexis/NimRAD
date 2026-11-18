@@ -12,7 +12,7 @@ type
   ActId* = enum
     aNewApp, aNewForm, aNewInheritedForm, aOpenProject, aSave, aSaveAs, aSaveProjectAs, aSaveAll, aClose, aExit,
     aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll,
-    aFind, aReplace, aFindNext, aGotoLine,
+    aFind, aReplace, aFindNext, aGotoLine, aFindUnit, aQuickFix,
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
     aAddToProject, aAddFont, aRemoveFromProject, aViewSource, aProjectOptions,
@@ -49,6 +49,8 @@ const defs: array[ActId, ActDef] = [
   (aReplace, "&Replace...", "Find and replace text", "Ctrl+H", -1),
   (aFindNext, "Find &Next", "Find the next match", "F3", -1),
   (aGotoLine, "&Go to Line Number...", "Jump to a line", "Alt+G", -1),
+  (aFindUnit, "Find &Unit...", "Add the import of the nimvcl module that declares the identifier at the caret", "Shift+Ctrl+A", -1),
+  (aQuickFix, "&Quick Fix", "Apply the fix of the selected compiler message (add a missing import, correct a name)", "Ctrl+.", -1),
   (aViewProjectMgr, "&Project Manager", "Show or hide the Project Manager", "Ctrl+Alt+P", icProjectMgr),
   (aViewInspector, "&Object Inspector", "Show or hide the Object Inspector", "F11", icInspectorIc),
   (aViewTree, "Object Tree&View", "Show or hide the Object TreeView", "Shift+Alt+F11", icTreeIc),

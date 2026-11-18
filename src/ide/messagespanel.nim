@@ -10,10 +10,14 @@
 ## hint rows (the messages are kept, so showing them again needs no rebuild).
 ## `jumpNext` goes to the next message that has a location, after the one
 ## last jumped to, wrapping at the end.
+##
+## Quick fixes: `fixProvider` (set by the IDE) gives the fixes of an error when
+## it is added; the row says so (`[Ctrl+.  Add import ...]`), `fixesOf` returns
+## them and the context menu item "Quick Fix" calls `onQuickFix(msgIndex)`.
 
 import std/[os, strutils]
 import nimvcl
-import ./[messages, icons]
+import ./[messages, icons, quickfix]
 
 type
   Row = object
@@ -26,7 +30,10 @@ type
     list*: ListView
     output*: Memo
     onJump*: proc(file: string, line, col: int)
+    fixProvider*: proc(m: Message): seq[QuickFix]
+    onQuickFix*: proc(msgIndex: int)
     msgs*: seq[Message]        ## every message that has a row, hidden hints too (item.tag = index)
+    fixes*: seq[seq[QuickFix]]  ## parallel to `msgs`
     errorCount*, warningCount*: int
     cursor*: int               ## index into `msgs` of the message last jumped to, -1 none
     fShowHints: bool
@@ -62,17 +69,33 @@ proc addItem(p: MessagesPanel, r: Row) =
     of MessageKind.mkInfo: ""
   let where = if m.hasLocation: m.file.extractFilename else: ""
   let pos = if m.hasLocation: $m.line & ":" & $m.col else: ""
-  let it = p.list.items.add((if m.isTrace: "  at " else: label) & firstLine(m.text), where, pos)
+  var text = (if m.isTrace: "  at " else: label) & firstLine(m.text)
+  if p.fixes[r.msg].len > 0: text.add "   [Ctrl+.  " & p.fixes[r.msg][0].title & "]"
+  let it = p.list.items.add(text, where, pos)
   it.imageIndex = iconOfKind(m)
   it.tag = r.msg
 
 proc addRow(p: MessagesPanel, m: Message) =
   let r = Row(msg: p.msgs.len)
   p.msgs.add m
+  p.fixes.add(if p.fixProvider != nil: p.fixProvider(m) else: @[])
   p.rows.add r
   p.addItem r
   if m.kind == MessageKind.mkError: inc p.errorCount
   elif m.kind == MessageKind.mkWarning: inc p.warningCount
+
+func fixesOf*(p: MessagesPanel, msgIndex: int): seq[QuickFix] =
+  if msgIndex >= 0 and msgIndex < p.fixes.len: p.fixes[msgIndex] else: @[]
+
+proc selectedMessage*(p: MessagesPanel): int =
+  ## Index into `msgs` of the selected row, -1 when none.
+  let i = p.list.itemIndex
+  if i >= 0 and i < p.list.items.count: p.list.items[i].tag else: -1
+
+proc firstWithFix*(p: MessagesPanel): int =
+  for i in 0 ..< p.fixes.len:
+    if p.fixes[i].len > 0: return i
+  -1
 
 func showHints*(p: MessagesPanel): bool = p.fShowHints
 proc `showHints=`*(p: MessagesPanel, v: bool) =
@@ -110,6 +133,17 @@ proc newMessagesPanel*(parent: Container, images: ImageList): MessagesPanel =
       p.cursor = k
       p.onJump(p.msgs[k].file, p.msgs[k].line, p.msgs[k].col)
 
+  let pm = newPopupMenu(p.root)
+  let fixItem = pm.addItem("&Quick Fix", proc(s: MenuItem) =
+    let k = p.selectedMessage
+    if p.onQuickFix != nil: p.onQuickFix(k))
+  pm.onPopup = proc(m: PopupMenu) =
+    let k = p.selectedMessage
+    let fx = p.fixesOf(k)
+    fixItem.enabled = fx.len > 0
+    fixItem.caption = if fx.len > 0: "&Quick Fix: " & fx[0].title else: "&Quick Fix"
+  p.list.popupMenu = pm
+
   p.output = newMemo(t2)
   p.output.align = alClient
   p.output.readOnly = true
@@ -119,6 +153,7 @@ proc clear*(p: MessagesPanel) =
   p.list.items.clear()
   p.output.clear()
   p.msgs.setLen 0
+  p.fixes.setLen 0
   p.rows.setLen 0
   p.cursor = -1
   p.errorCount = 0

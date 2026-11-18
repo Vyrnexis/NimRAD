@@ -20,7 +20,8 @@ import nimvcl
 import nimvcl/controls/inspector
 import nimvcl/dsl/[props, props_std]
 import ./[nimvclpath, project, builder, messages, ideconfig, icons, actions, palette,
-          projecttree, messagespanel, uniteditor, editortabs, mainfile]
+          projecttree, messagespanel, uniteditor, editortabs, mainfile, unitimports,
+          symbols, quickfix]
 
 const
   AppName* = "nimvcl IDE"
@@ -57,6 +58,8 @@ type
     treeNodes: seq[TreeNode]
     syncingTree: bool
     pendingRun: bool
+    failedWasRun: bool         ## the build that failed was started by Run
+    autoRetried: bool          ## the automatic import fix has rebuilt once already
     optionsChanged: bool       ## compiler options changed since the last build
     running: bool
     stopRequested: bool
@@ -77,6 +80,7 @@ type
   ProjectOptions* = object
     ## The fields of the Project Options dialog (text as typed).
     outputDir*, flags*, defines*, title*, version*: string
+    autoImports*, importAll*: bool
 
   StatusPart = enum spState, spBuild, spCaret, spModified, spMessage
 
@@ -401,6 +405,8 @@ proc refreshActions*(ide: IdeForm) =
   a[aDelete].enabled = ed != nil and (not designer or hasSel)
   a[aSelectAll].enabled = ed != nil
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
+  a[aFindUnit].enabled = ed != nil
+  a[aQuickFix].enabled = hasProject and ide.messages.firstWithFix() >= 0
   a[aToggleView].enabled = ed != nil and ed.isForm
   a[aAddToProject].enabled = hasProject
   a[aAddFont].enabled = hasProject
@@ -776,7 +782,8 @@ proc splitDefines*(text: string): seq[string] =
 proc currentOptions*(ide: IdeForm): ProjectOptions =
   let p = ide.project
   ProjectOptions(outputDir: p.outputDir, flags: p.nimFlags.join(" "),
-                 defines: p.defines.join(" "), title: p.title, version: p.version)
+                 defines: p.defines.join(" "), title: p.title, version: p.version,
+                 autoImports: p.autoImports, importAll: p.importAll)
 
 proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
   ## Project > Options, after OK: stores the options and saves the project.
@@ -787,16 +794,25 @@ proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
   p.defines = splitDefines(o.defines)
   p.title = o.title.strip
   p.version = o.version.strip
+  p.autoImports = o.autoImports
+  let modeChanged = p.importAll != o.importAll
+  if modeChanged:
+    ide.saveAll()                      # unsaved edits go to disk before the files are rewritten
+    p.importAll = o.importAll
+    let changed = p.rewriteImports()
+    for e in ide.editors: e.reloadFromDisk()
+    ide.say(if p.importAll: "All units import nimvcl (" & $changed.len & " files changed)"
+            else: "Units import the prelude and their controls (" & $changed.len & " files changed)")
   p.save()
   ide.optionsChanged = true
-  ide.say "Project options saved"
+  if not modeChanged: ide.say "Project options saved"
 
 proc showProjectOptions*(ide: IdeForm) =
   ## Project > Options: output folder, compiler flags, conditional defines,
   ## application title and version.
   if ide.project == nil: return
   let o = ide.currentOptions
-  let d = newForm(nil, 520, 330)
+  let d = newForm(nil, 520, 420)
   d.caption = "Project Options"
   d.borderStyle = bsSingle
   d.position = poScreenCenter
@@ -812,15 +828,18 @@ proc showProjectOptions*(ide: IdeForm) =
   let title = newEdit(d, o.title, 160, 182, 340)
   newLabel(d, "Version:", 20, 228, 130)
   let version = newEdit(d, o.version, 160, 224, 340)
-  let ok = newButton(d, "OK", 324, 276, 84, 32)
+  let autoImp = newCheckBox(d, "Add missing nimvcl imports automatically", o.autoImports, 20, 270, 480)
+  let impAll = newCheckBox(d, "Import all of nimvcl (units import `nimvcl`; builds are slower)", o.importAll, 20, 302, 480)
+  let ok = newButton(d, "OK", 324, 366, 84, 32)
   ok.modalResult = mrOk
   ok.isDefault = true
-  let cancel = newButton(d, "Cancel", 416, 276, 84, 32)
+  let cancel = newButton(d, "Cancel", 416, 366, 84, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
   if d.showModal() == mrOk:
     ide.applyOptions ProjectOptions(outputDir: outDir.text, flags: flags.text,
-                                    defines: defs.text, title: title.text, version: version.text)
+                                    defines: defs.text, title: title.text, version: version.text,
+                                    autoImports: autoImp.checked, importAll: impAll.checked)
   d.freeWindow()
 
 proc quoteArg(a: string): string =
@@ -982,6 +1001,158 @@ proc startProgram(ide: IdeForm) =
     ide.fail "Cannot start " & p.exePath
   ide.refreshActions()
 
+proc compileWith(ide: IdeForm, notes: seq[string]): bool
+proc compile*(ide: IdeForm): bool
+proc run*(ide: IdeForm): bool
+
+# -------------------------------------------------------------- quick fixes
+
+proc editUnitFile(ide: IdeForm, file: string, change: proc(src: string): string): bool =
+  ## Applies `change` to the unit's text: in its editor when it is open (the
+  ## edit is then unsaved, one undo step), else in the file. True when it changed.
+  let name = ide.unitOfFile(file)
+  if name.len == 0: return false
+  let ed = ide.editorOf(name)
+  if ed != nil: return ed.editCode(change)
+  try:
+    let src = readFile(file)
+    let res = change(src)
+    if res == src: return false
+    writeFile(file, res)
+    result = true
+  except CatchableError: discard
+
+proc addImportTo(ide: IdeForm, file, module: string): bool =
+  ide.editUnitFile(file, proc(src: string): string = addUserImport(src, module))
+
+proc componentsOf(ide: IdeForm, file: string): seq[string] =
+  ## The names of the components of the form of the unit `file` (empty for the
+  ## program file and for plain units).
+  if ide.project == nil: return
+  let f = normalizedPath(file)
+  for u in ide.project.units:
+    if u.nfmPath.len > 0 and normalizedPath(ide.project.nimPathOf(u)) == f:
+      let nfm = ide.project.nfmPathOf(u)
+      if fileExists(nfm):
+        try: return componentNames(readFile(nfm), nfm.parentDir)
+        except CatchableError: discard
+
+proc fixesOfMessage(ide: IdeForm, m: Message): seq[QuickFix] =
+  if ide.project == nil: return
+  result = fixesFor(m, ide.componentsOf(m.file))
+  if ide.project.importAll:             # everything is imported already
+    result = result.filterIt(it.kind != fkAddImport)
+
+proc rebuild(ide: IdeForm) =
+  if ide.failedWasRun: discard ide.run()
+  else: discard ide.compile()
+
+proc applyQuickFix*(ide: IdeForm, msgIndex: int, fixIndex = 0): bool =
+  ## Applies a fix of message `msgIndex`: an import (the module is chosen from a
+  ## list when several declare the name) is added above the IDE's block, and the
+  ## build that failed runs again; a rename replaces the name in place.
+  let fixes = ide.messages.fixesOf(msgIndex)
+  if fixIndex >= fixes.len or ide.busy: return false
+  let fix = fixes[fixIndex]
+  let m = ide.messages.msgs[msgIndex]
+  case fix.kind
+  of fkAddImport:
+    var module = fix.modules[0]
+    if fix.modules.len > 1:
+      let i =
+        if ide.pickItem != nil: ide.pickItem("Add import for " & fix.ident, fix.modules, 0)
+        else: pickItemDefault("Add import for " & fix.ident, fix.modules, 0)
+      if i < 0 or i >= fix.modules.len: return false
+      module = fix.modules[i]
+    if not ide.addImportTo(m.file, module):
+      ide.say module & " is already imported"
+      return false
+    ide.say "Added import " & module & " to " & ide.unitOfFile(m.file)
+    ide.rebuild()
+    result = true
+  of fkRename:
+    result = ide.editUnitFile(m.file, proc(src: string): string =
+      renameAt(src, m.line, m.col, fix.ident, fix.replacement))
+    if result: ide.say "Replaced " & fix.ident & " with " & fix.replacement
+    else: ide.say "Could not find " & fix.ident & " at that place"
+    if result:
+      ide.messages.fixes[msgIndex] = @[]    # the position is stale; the next build lists it again
+
+proc quickFix*(ide: IdeForm): bool {.discardable.} =
+  ## Ctrl+.: the fix of the selected message, else of the error at the caret,
+  ## else of the first message that has one.
+  if ide.project == nil: return false
+  var k = ide.messages.selectedMessage
+  if ide.messages.fixesOf(k).len == 0:
+    k = -1
+    let ed = ide.activeEditor
+    if ed != nil and not (ed.isForm and ed.designerVisible):
+      let line = ed.code.caretPos.line + 1
+      for i, m in ide.messages.msgs:
+        if m.hasLocation and m.line == line and ide.unitOfFile(m.file) == ed.unitName and
+           ide.messages.fixesOf(i).len > 0:
+          k = i
+          break
+    if k < 0: k = ide.messages.firstWithFix()
+  if k < 0:
+    ide.say "No quick fix available"
+    return false
+  ide.applyQuickFix(k)
+
+proc wordAtCaret(ed: UnitEditor): string =
+  let c = ed.code
+  let sel = c.selectedText
+  if sel.len > 0:
+    return if sel.allIt(it in IdentChars) and sel[0] in IdentStartChars: sel else: ""
+  let line = c.lineAt(c.caretPos.line)
+  var a = min(c.caretPos.col, line.len)
+  var b = a
+  while a > 0 and line[a - 1] in IdentChars: dec a
+  while b < line.len and line[b] in IdentChars: inc b
+  if b > a and line[a] in IdentStartChars: line[a ..< b] else: ""
+
+proc findUnitImport*(ide: IdeForm): bool {.discardable.} =
+  ## Search > Find Unit (Ctrl+Shift+A): offers the import of the nimvcl module
+  ## that declares the identifier at the caret (the selection, if any).
+  let ed = ide.activeEditor
+  if ide.project == nil or ed == nil: return false
+  if ed.isForm and ed.designerVisible: ed.showCode()
+  let word = ed.wordAtCaret
+  if word.len == 0:
+    ide.say "Put the caret on an identifier first"
+    return false
+  let mods = modulesFor(word)
+  if mods.len == 0:
+    ide.say "No nimvcl module declares " & word
+    return false
+  let i =
+    if ide.pickItem != nil: ide.pickItem("Add import for " & word, mods, 0)
+    else: pickItemDefault("Add import for " & word, mods, 0)
+  if i < 0 or i >= mods.len: return false
+  let file = ide.project.nimPathOf(ide.project.units[max(ide.project.findUnit(ed.unitName), 0)])
+  let target = if ed.unitName == ide.project.name: ide.project.mainPath else: file
+  result = ide.addImportTo(target, mods[i])
+  ide.say(if result: "Added import " & mods[i] else: mods[i] & " is already imported")
+
+proc autoAddImports(ide: IdeForm): bool =
+  ## Project option "Add missing nimvcl imports automatically": after a failed
+  ## build, adds every import that has exactly one candidate, says so in
+  ## Messages and builds once more. True when it started that build.
+  if not ide.project.autoImports or ide.autoRetried: return false
+  var added: seq[string]
+  for k in 0 ..< ide.messages.msgs.len:
+    let fx = ide.messages.fixesOf(k)
+    if fx.len == 0 or fx[0].kind != fkAddImport or fx[0].modules.len != 1: continue
+    let m = ide.messages.msgs[k]
+    let module = fx[0].modules[0]
+    let unit = ide.unitOfFile(m.file)
+    if ide.addImportTo(m.file, module):
+      added.add "Added import " & module & " to " & unit & " (for " & fx[0].ident & ")"
+  if added.len == 0: return false
+  ide.saveAll()
+  ide.autoRetried = true
+  ide.compileWith(added)
+
 proc compileDone(ide: IdeForm, ok: bool) =
   let dt = epochTime() - ide.buildStart
   ide.messages.finish()
@@ -999,6 +1170,8 @@ proc compileDone(ide: IdeForm, ok: bool) =
       ide.pendingRun = false
       ide.startProgram()
   else:
+    if ide.autoAddImports(): return        # building again, with the imports it added
+    ide.failedWasRun = ide.pendingRun
     ide.pendingRun = false
     ide.messages.addNote("Build failed: " & $ide.messages.errorCount & " errors, " &
                          $ide.messages.warningCount & " warnings (" & secs(dt) & ")", icError)
@@ -1008,15 +1181,14 @@ proc compileDone(ide: IdeForm, ok: bool) =
     if first >= 0: ide.messages.jump first
   ide.refreshActions()
 
-proc compile*(ide: IdeForm): bool =
-  ## Project > Compile: saves everything, then runs the compiler in the
-  ## background. Returns false when busy or without a project.
+proc compileWith(ide: IdeForm, notes: seq[string]): bool =
   if ide.project == nil or ide.busy: return false
   ide.saveAll()
   ide.optionsChanged = false
   ide.messages.clear()
   ide.clearErrorMarkers()
   ide.messages.showMessages()
+  for n in notes: ide.messages.addNote(n)
   if ide.project.nimvclSrc.len == 0:
     ide.messages.addNote(NimvclNotFound, icError)
     ide.say "nimvcl was not found"
@@ -1032,6 +1204,12 @@ proc compile*(ide: IdeForm): bool =
     return false
   ide.refreshActions()
   true
+
+proc compile*(ide: IdeForm): bool =
+  ## Project > Compile: saves everything, then runs the compiler in the
+  ## background. Returns false when busy or without a project.
+  ide.autoRetried = false
+  ide.compileWith(@[])
 
 proc needsBuild(ide: IdeForm): bool =
   let p = ide.project
@@ -1238,6 +1416,8 @@ proc connectActions(ide: IdeForm) =
   on aSelectAll: ide.editSelectAll()
   on aFind: ide.findText(false)
   on aReplace: ide.findText(true)
+  on aFindUnit: ide.findUnitImport()
+  on aQuickFix: ide.quickFix()
   on aFindNext: ide.findNext()
   on aGotoLine: ide.gotoLineDialog()
   on aViewProjectMgr: ide.toggleDockPanel(ide.pnlProject)
@@ -1340,6 +1520,8 @@ proc buildMenu(ide: IdeForm) =
   for id in [aFind, aReplace, aFindNext]: search.addAct a[id]
   search.addSeparator()
   search.addAct a[aGotoLine]
+  search.addAct a[aFindUnit]
+  search.addAct a[aQuickFix]
   let view = m.addItem("&View")
   for id in [aViewProjectMgr, aViewInspector, aViewTree, aViewMessages]: view.addAct a[id]
   view.addSeparator()
@@ -1423,6 +1605,8 @@ proc buildDocking(ide: IdeForm) =
   ide.messages = newMessagesPanel(nil, ide.ideIcons)
   ide.messages.onJump = proc(file: string, line, col: int) = discard ide.jumpTo(file, line, col)
   ide.messages.showHints = ide.settings.showHints
+  ide.messages.fixProvider = proc(m: Message): seq[QuickFix] = ide.fixesOfMessage(m)
+  ide.messages.onQuickFix = proc(k: int) = discard ide.applyQuickFix(k)
 
   ide.pnlTree = mk("tree", "Object TreeView", ide.objTree, icTreeIc)
   ide.pnlInspector = mk("inspector", "Object Inspector", ide.inspector, icInspectorIc)
