@@ -89,6 +89,31 @@ closed; **View > Reset Layout** brings back the default arrangement.
   the units (the program file first) or the forms of the project; pick one
   and press Enter (or double click) to open it.
 
+### Properties with a "..." button
+
+Some properties are edited in a dialog: click the "..." at the right of the
+value (or select the row and press Enter).
+
+| Property | Dialog |
+|---|---|
+| `picture` of an Image, `image` of a ToolButton | Picture: preview, **Load...** (a PNG, JPG or BMP; Clear removes it). Delete on the row clears it too |
+| `images` of an ImageList | Image list: thumbnails, **Add...** (several files at once), Delete, Up, Down |
+| `items` of a ListBox or ComboBox, `lines` of a Memo, `tabs` of a TabControl, `items` of a ListView (one row per line, cells separated by a tab) or TreeView (an outline, two spaces per level) | One entry per line |
+| `columns` (ListView), `panels` (StatusBar), `pages` (PageControl), `buttons` (ToolBar), `actions` (ActionList), `items` (MainMenu, PopupMenu, MenuItem) | Collection editor: Add, Delete, Up, Down and an inspector for the selected item. A menu item's `items` opens another editor for its sub-items |
+
+Pictures are stored in the `.nfm` as a path relative to it
+(`picture = 'images/logo.png'`). A file you pick from outside the project
+folder is copied into the project's `images/` folder first; a file that is
+already inside the project is used where it is. When the program is built the
+picture files are embedded in the executable, so a shipped program does not
+need the `images/` folder. If a picture file is missing when a form is opened,
+the status line says so and the path is kept.
+
+To link components, pick them from the drop-down of the property: `images` of a
+ToolBar, TreeView, ListView, menus or ActionList takes an ImageList of the form,
+`popupMenu` a PopupMenu, `action` an Action. `imageIndex` is a number that
+counts the images of the linked list from 0.
+
 ## Building and running
 
 | Command | Shortcut | Notes |
@@ -252,5 +277,8 @@ same session as an automated test, followed by a smoke run of the built program.
   program has no markers (an older one) needs its imports added by hand.
 * The Output tab shows a line of the program when it is complete; text
   without a newline at the end appears when the program ends.
+* ListView and TreeView items have no per-item image index, check state or
+  expansion in the designer; set them in code.
+* Grid cells (StringGrid) are not stored in the form; fill them in code.
 * Cut, copy and paste in the form designer use the clipboard as text, so they
   also work between two IDE windows.

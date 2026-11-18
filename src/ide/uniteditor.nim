@@ -15,7 +15,7 @@
 import std/[os, strutils, tables, sets, sequtils, hashes]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
-import nimvcl/controls/inspector
+import nimvcl/controls/[inspector, propeditors]
 import ./[project, codegen]
 
 type
@@ -38,6 +38,7 @@ type
     fDesigner: FormDesigner
     fCode: CodeEdit
     fInsp: ObjectInspector
+    fHost: PropEditorHost          ## where the "..." editors find pictures (see `propHost`)
     fNfmEol: string
     fDesignDirty: bool
     fLastModified: bool
@@ -333,6 +334,10 @@ proc syncGeometry(e: UnitEditor) =
 
 # ------------------------------------------------------------------- loading
 
+proc nfmDir(e: UnitEditor): string =
+  ## Image paths of the form are relative to the folder of its `.nfm`.
+  e.project.nfmPathOf(e.fUnit).parentDir
+
 proc readNfm(e: UnitEditor): string =
   let path = e.project.nfmPathOf(e.fUnit)
   result = readFile(path)
@@ -423,8 +428,9 @@ proc installDesigner(e: UnitEditor) =
 proc buildDesign(e: UnitEditor, text: string) =
   ## Builds the model form from `text` and the design surface for it. Raises
   ## `NfmError` (nothing is changed then).
-  let form = loadNfm(text, nil, newNfmOptions(strict = true),
-                     e.project.nfmPathOf(e.fUnit))
+  let opt = newNfmOptions(strict = true)
+  let form = loadNfm(text, nil, opt, e.project.nfmPathOf(e.fUnit))
+  for w in opt.warnings: e.say w          # e.g. a picture that is not there
   e.fBusy = true
   defer: e.fBusy = false
   let frame = newPanel(e.fScroll, "", 16, 16, 100, 100)
@@ -529,6 +535,37 @@ proc propertyChanged(e: UnitEditor, target: Obj, prop: string) =
   if e.fInsp != nil: e.fInsp.refresh()
   if c of Control and not (c of Form): Control(c).invalidate()
 
+proc itemAdded(e: UnitEditor, parent, item: Obj) =
+  ## A collection editor made `item` (a menu item, a page, a column...): it
+  ## gets a name (when it is a component) and a caption.
+  let ci = classOf(item)
+  if item of Component:
+    let c = Component(item)
+    c.name = e.freshName(if ci != nil: ci.name else: "Item")
+    if ci != nil and ci.name in ["MenuItem", "TabSheet", "Action"]:
+      let p = ci.findProp("caption")
+      if p != nil: p.set(item, pvString(c.name))
+  elif ci != nil and ci.name == "ListColumn":
+    let p = ci.findProp("caption")
+    if p != nil: p.set(item, pvString("Column" & $(kidsOf(parent).len)))
+  e.syncNames()
+
+proc propHost*(e: UnitEditor): PropEditorHost =
+  ## What the Object Inspector's "..." editors work with: pictures are stored
+  ## relative to the `.nfm` and copied into the project's `images/` folder when
+  ## they come from elsewhere. (Tests replace `runModal` to drive the dialogs.)
+  if e.fHost == nil:
+    let h = newPropEditorHost()
+    h.onChanged = proc(t: Obj, prop: string) = e.propertyChanged(t, prop)
+    h.onItemAdded = proc(parent, item: Obj) = e.itemAdded(parent, item)
+    h.onItemRemoved = proc(parent, item: Obj) =
+      if item of Component and e.fDesigner != nil:
+        e.fDesigner.refresh()
+    e.fHost = h
+  e.fHost.baseDir = e.nfmDir
+  e.fHost.imagesDir = e.project.filePath.parentDir / "images"
+  e.fHost
+
 proc bindInspector*(e: UnitEditor, insp: ObjectInspector) =
   ## While bound, `insp` shows the selection of this editor and its edits
   ## apply to the designed form.
@@ -548,6 +585,14 @@ proc bindInspector*(e: UnitEditor, insp: ObjectInspector) =
   insp.onGetHandlers = proc(s: Control, t: Obj, event: string): seq[string] =
     handlerNames(e.codeOf, e.fUnit.formType)
   insp.knownHandlers = @[]
+  attachEditors(insp, e.propHost)
+  insp.onGetChoices = proc(s: Control, t: Obj, prop: string): seq[Obj] =
+    ## the components of the designed form (the design surface sits inside the
+    ## IDE window, so walking up from the target would find the IDE's own)
+    var all: seq[Obj]
+    for (c, _) in e.componentTree:
+      if c != Component(e.fForm): all.add Obj(c)
+    all
   e.refreshInspector()
 
 proc unbindInspector*(e: UnitEditor) =
@@ -557,6 +602,8 @@ proc unbindInspector*(e: UnitEditor) =
   insp.onPropertyChanged = nil
   insp.onCreateHandler = nil
   insp.onGetHandlers = nil
+  insp.onEditExtra = nil
+  insp.onGetChoices = nil
   insp.inspect(newSeq[Obj]())
 
 proc inBody(e: UnitEditor, c: Control): bool =
@@ -588,10 +635,10 @@ proc beginCreate*(e: UnitEditor, className: string) =
   if e.fDesigner == nil: return
   let ci = classByName(className)
   if ci == nil: return
-  if ci.isControlClass:
+  if ci.isControlClass and ci.name != "MainMenu":
     e.showDesigner()
     e.fDesigner.beginCreate(className)
-  elif ci.isNonVisualClass:
+  elif ci.isNonVisualClass or ci.name == "MainMenu":     # a main menu is a tile too
     e.showDesigner()
     var o: Obj
     try: o = ci.createObject(Component(e.fForm), nil)
@@ -600,6 +647,7 @@ proc beginCreate*(e: UnitEditor, className: string) =
       return
     if o == nil or not (o of Component): return
     let c = Component(o)
+    if c.owner == nil: Component(e.fForm).insertComponent(c)
     c.name = e.freshName(className)
     e.addTile(c, className)
     e.fDesigner.select(Control(e.tileOf(c)))
@@ -672,7 +720,9 @@ proc paste*(e: UnitEditor): bool {.discardable.} =
            p.value.text in renamed:
           p.value.text = renamed[p.value.text]
   var tmp: Obj
-  try: tmp = buildNfm(root, Component(e.fForm), newNfmOptions(strict = true))
+  let popt = newNfmOptions(strict = true)
+  popt.baseDir = e.nfmDir
+  try: tmp = buildNfm(root, Component(e.fForm), popt)
   except CatchableError as ex:
     e.say "cannot paste: " & ex.msg
     return false
