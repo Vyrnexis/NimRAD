@@ -38,8 +38,8 @@
 ##   are given to the API are converted on the way in.
 ## * `outputDir` defaults to `build`.
 ## * `nimvclPath` is the nimvcl `src` folder; empty means "detect"
-##   (`detectNimvclPath`: `$NIMVCL_SRC`, then `../nimvcl/src` next to the IDE
-##   checkout, next to the IDE binary, and next to the current directory).
+##   (`detectNimvclPath`: `$NIMVCL_SRC`, then the folder the IDE was compiled
+##   against, then `nimble path nimvcl`).
 ## * Missing fields take their defaults when loading; unknown fields are dropped.
 ##
 ## Files of a new project come from `templates/` (read at compile time) with
@@ -48,7 +48,7 @@
 import std/[json, os, strutils, sequtils]
 import nimvcl/graphics/[font, context]
 import nimvcl/dsl/nfmsyntax
-import ./[codegen, mainfile]
+import ./[codegen, mainfile, nimvclpath]
 
 const
   ProjectExt* = ".nimproj"
@@ -58,7 +58,6 @@ const
   tmplCfg = staticRead("../../templates/nim.cfg.tmpl")
   tmplInhNim = staticRead("../../templates/inherited.nim.tmpl")
   tmplInhNfm = staticRead("../../templates/inherited.nfm.tmpl")
-  ideRoot = currentSourcePath().parentDir.parentDir.parentDir
 
 type
   ProjectError* = object of CatchableError
@@ -129,16 +128,8 @@ proc relativeTo(p: Project, path: string): string =
   unixPath(relativePath(abs, p.dir))
 
 proc detectNimvclPath*(): string =
-  ## The nimvcl `src` folder, or "" when none is found.
-  var cands: seq[string]
-  let env = getEnv("NIMVCL_SRC")
-  if env.len > 0: cands.add env
-  cands.add ideRoot.parentDir / "nimvcl" / "src"
-  cands.add getAppDir().parentDir / "nimvcl" / "src"
-  cands.add getAppDir().parentDir.parentDir / "nimvcl" / "src"
-  cands.add getCurrentDir().parentDir / "nimvcl" / "src"
-  for c in cands:
-    if fileExists(c / "nimvcl.nim"): return normalizedPath(c)
+  ## The nimvcl `src` folder, or "" when none is found (see `nimvclpath`).
+  detectNimvclSrc()
 
 proc nimvclSrc*(p: Project): string =
   ## The folder passed to `--path` (resolved from the project, else detected).

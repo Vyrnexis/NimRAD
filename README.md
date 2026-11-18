@@ -8,41 +8,94 @@ designer, an object inspector, code editor tabs, and one-key build and run.
 
 <p>
 <img src="docs/images/ide-code-build.png" width="32%" alt="The handler code and a successful build">
+<img src="docs/images/ide-palette-search.png" width="32%" alt="Searching the component palette">
+<img src="docs/images/ide-inherited.png" width="32%" alt="An inherited form">
+</p>
+<p>
 <img src="docs/images/ide-compile-error.png" width="32%" alt="A compile error and the jump to it">
 <img src="docs/images/ide-dark.png" width="32%" alt="The dark theme">
 </p>
 
-**Status:** in development.
+**Status:** version 0.1.0. New to it? Start with the
+[tutorial](docs/tutorial.md); the [user guide](docs/user-guide.md) covers the
+rest.
 
 ## Features
 
-- Form designer on top of the nimvcl property registry: drop components from
-  the palette, move and size them, edit them in the Object Inspector and the
-  Object TreeView. Forms are saved as `.nfm` files.
-- Double click a component to create its event handler in the unit's code.
-- Code editor with Nim highlighting; F12 switches between form and code.
-- Compile (Ctrl+F9) and Run (F9) in the background; errors, warnings and
-  hints are listed in Messages, the first error is opened for you and F8 goes
-  to the next message. The running program's output is shown live, with its
-  exit code when it ends.
-- The program file is part of the project: it is editable (Project > View
-  Source), and New Form / Add to Project / Remove from Project keep its
-  imports and form list up to date between marker comments.
-- Docking panels (saved layout), project manager, recent projects, light and
-  dark theme. One action list drives the menu, the toolbars and the shortcuts.
+- **Form designer** on top of the nimvcl property registry: drop components
+  from the palette, move and size them (grid and guide lines), edit them in
+  the Object Inspector and the Object TreeView. Forms are saved as `.nfm`
+  files.
+- **Palette search** (`Ctrl+Alt+C`): type part of a class name, pick with the
+  arrow keys, `Enter` drops it on the form.
+- **Inherited forms** (File > New Inherited Form): a descendant stores only
+  its differences and follows the ancestor, like Delphi's visual form
+  inheritance.
+- **Property editors** for pictures, image lists, string lists (items, lines,
+  tabs) and collections (columns, panels, pages, buttons, actions, menu
+  items), plus a drop-down for components (`images`, `popupMenu`, `action`).
+- **Colour and `font.color`** (a swatch, a drop-down of colours or a typed
+  `#rrggbb`), a **font drop-down**
+  (bundled, project and system families) and **project fonts**: Project > Add
+  Font File embeds a `.ttf` or `.otf` in the program.
+- **Events**: double click a component to create its handler in the unit's
+  code; `F12` switches between form and code.
+- **Code editor** with Nim highlighting, folding, bracket matching, find and
+  replace.
+- **Fast builds**: a form unit imports only the modules of the controls it
+  uses (an import block that the IDE keeps up to date) instead of all of
+  nimvcl.
+- **Compile** (`Ctrl+F9`) and **Run** (`F9`) in the background; errors,
+  warnings and hints are listed in Messages, the first error is opened for you
+  and `F8` goes to the next. The program's output is shown live, with its exit
+  code when it ends.
+- **The program file** is part of the project and editable (Project > View
+  Source); New Form, Add to Project and Remove from Project keep its imports
+  and form list up to date between marker comments.
+- **Docking panels** with a saved layout, project manager, recent projects,
+  **light and dark themes**. One action list drives the menu, the toolbars and
+  the shortcuts.
 
-## Building
+## Install
 
-nimvcl-ide expects a nimvcl checkout next to it (`../nimvcl`).
+Requirements: Linux, Nim 2.2 or newer, and the SDL3 libraries that
+[nimvcl](https://github.com/Vyrnexis/nimvcl) draws with (SDL3, SDL3_ttf,
+SDL3_image; Arch: `pacman -S sdl3 sdl3_ttf sdl3_image`). `nim` must be on the
+`PATH` when you build projects from the IDE.
+
+With nimble (this also installs nimvcl):
 
 ```sh
-nim c -d:release -o:build/nimvcl_ide src/nimvcl_ide.nim
-build/nimvcl_ide                          # opens the last project
-build/nimvcl_ide --project app.nimproj    # or a given one
+nimble install https://github.com/Vyrnexis/nimvcl-ide
+nimvcl_ide
 ```
 
-The first start creates `~/nimvcl-projects/Project1`. See the
-[user guide](docs/user-guide.md) for a walk-through.
+From source:
+
+```sh
+git clone https://github.com/Vyrnexis/nimvcl-ide
+cd nimvcl-ide
+nimble build -d:release        # the program is ./nimvcl_ide
+./nimvcl_ide                   # opens the last project
+./nimvcl_ide --project app.nimproj
+```
+
+The first start creates `~/nimvcl-projects/Project1`.
+
+### Where the IDE finds nimvcl
+
+Projects you build in the IDE need nimvcl's source folder on the compiler's
+path. The IDE looks for it, in this order:
+
+1. `$NIMVCL_SRC`, if set (an override: the `src` folder of a nimvcl checkout);
+2. the folder nimvcl was compiled from when the IDE itself was built;
+3. `nimble path nimvcl`.
+
+If none works, Compile says so in Messages. Setting `nimvclPath` in the
+`.nimproj` overrides all of this for one project.
+
+When developing, a nimvcl checkout next to this one (`../nimvcl`) is used
+instead of the nimble package (see `config.nims`).
 
 ## Keyboard shortcuts
 
@@ -55,6 +108,7 @@ The first start creates `~/nimvcl-projects/Project1`. See the
 | `Ctrl+Z` / `Shift+Ctrl+Z` | Undo / Redo | `F11` | Object Inspector |
 | `Ctrl+X` `Ctrl+C` `Ctrl+V` | Cut, Copy, Paste | `Ctrl+Alt+P` | Project Manager |
 | `Ctrl+A` | Select All | `Shift+Alt+F11` | Object TreeView |
+| `Ctrl+Alt+C` | Search the palette | | |
 | `Ctrl+F` / `Ctrl+H` | Find / Replace | `Alt+0` | Messages |
 | `F3` | Find Next | `Shift+F11` | Add to Project |
 | `Alt+G` | Go to Line | `Shift+Ctrl+F11` | Project Options |
@@ -65,6 +119,17 @@ The first start creates `~/nimvcl-projects/Project1`. See the
 
 ```sh
 export SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software
-build/nimvcl_ide --shots build/shots     # a scripted session, one PNG per step
+./nimvcl_ide --shots build/shots         # a scripted session, one PNG per step
+nim c -r scripts/docshots.nim docs/images   # remake the pictures of the documentation
 scripts/test.sh                          # the test suite (add -d:release for a release run)
 ```
+
+## Documentation
+
+- [Tutorial: your first application](docs/tutorial.md)
+- [User guide](docs/user-guide.md)
+- [Component audit](docs/dev/component-audit.md) (developer notes)
+
+## License
+
+MIT, see [LICENSE](LICENSE).

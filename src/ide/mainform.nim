@@ -19,7 +19,7 @@ import std/[os, strutils, tables, times, sequtils]
 import nimvcl
 import nimvcl/controls/inspector
 import nimvcl/dsl/[props, props_std]
-import ./[project, builder, messages, ideconfig, icons, actions, palette,
+import ./[nimvclpath, project, builder, messages, ideconfig, icons, actions, palette,
           projecttree, messagespanel, uniteditor, editortabs, mainfile]
 
 const
@@ -1017,6 +1017,10 @@ proc compile*(ide: IdeForm): bool =
   ide.messages.clear()
   ide.clearErrorMarkers()
   ide.messages.showMessages()
+  if ide.project.nimvclSrc.len == 0:
+    ide.messages.addNote(NimvclNotFound, icError)
+    ide.say "nimvcl was not found"
+    return false
   ide.setPart(spState, "Compiling...")
   ide.say "Compiling " & ide.project.name
   ide.buildStart = epochTime()

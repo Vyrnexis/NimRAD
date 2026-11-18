@@ -3,3 +3,6 @@ nimcache/
 *.exe
 /nimvcl_ide
 /PLAN.md
+# projects created by tests and scripts
+/Project*/
+/nimvcl-projects/

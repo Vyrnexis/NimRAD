@@ -296,8 +296,8 @@ proc createHandler(e: UnitEditor, target: Component, event, handler: string,
   let ci = classOf(Obj(target))
   var ancType = ""
   if inheritedBinding and target.inherited and e.fUnit.ancestor.len > 0:
-    let ai = e.project.findUnit(e.fUnit.ancestor)
-    if ai >= 0: ancType = e.project.units[ai].formType
+    let ancIdx = e.project.findUnit(e.fUnit.ancestor)
+    if ancIdx >= 0: ancType = e.project.units[ancIdx].formType
   result = ensureHandlerFor(e.codeOf, e.fUnit.formType,
                             if ci != nil: ci.name else: "", event, handler, ancType)
   if result.inserted: e.setCodeText(result.text)

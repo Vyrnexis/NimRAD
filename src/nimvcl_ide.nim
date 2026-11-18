@@ -4,6 +4,7 @@
 ##
 ##     nimvcl_ide                 start the IDE (opens the last project)
 ##     nimvcl_ide --project FILE  start the IDE with the project FILE (.nimproj)
+##     nimvcl_ide --nimvcl-path   print the nimvcl source folder projects are built with
 ##     nimvcl_ide --shots DIR     run the scripted session headless and save
 ##                                a PNG of every step into DIR
 ##
@@ -12,11 +13,12 @@
 
 import std/[os, strutils]
 import nimvcl
-import ide/[mainform, session, uniteditor, project]
+import ide/[mainform, session, uniteditor, project, nimvclpath]
 
 const usage = """nimvcl IDE
   nimvcl_ide              start the IDE
   nimvcl_ide --project F  start the IDE and open the project F (.nimproj)
+  nimvcl_ide --nimvcl-path  print where nimvcl's source is found
   nimvcl_ide --shots DIR  run the scripted session and save screenshots into DIR"""
 
 proc shots(dir: string): int =
@@ -50,6 +52,12 @@ proc main() =
   let args = commandLineParams()
   if args.len >= 1 and args[0] in ["-h", "--help"]:
     echo usage
+  elif args.len >= 1 and args[0] == "--nimvcl-path":
+    let p = detectNimvclSrc()
+    if p.len == 0:
+      stderr.writeLine NimvclNotFound
+      quit 1
+    echo p
   elif args.len >= 1 and args[0] == "--shots":
     quit shots(if args.len >= 2: args[1] else: "build/shots")
   else:

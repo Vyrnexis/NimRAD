@@ -15,7 +15,7 @@ removeDir root
 createDir root
 
 # an existing font file of nimvcl serves as the "project font"
-let srcFont = currentSourcePath().parentDir.parentDir.parentDir / "nimvcl" / "assets" /
+let srcFont = currentSourcePath().parentDir.parentDir.parentDir / "nimvcl" / "src" / "nimvcl" / "assets" /
               "fonts" / "NotoSansMono-Regular.ttf"
 doAssert fileExists(srcFont)
 

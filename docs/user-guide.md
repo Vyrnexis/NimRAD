@@ -4,17 +4,23 @@ nimvcl IDE is a Delphi 7-style environment for writing windowed applications
 with [nimvcl](https://github.com/Vyrnexis/nimvcl): you draw a form, double
 click a button to write its handler, press F9, and the program runs.
 
-![The form designer with a Button and a Label](images/ide-designer.png)
+![The form designer](images/ide-designer.png)
 
 ## Starting
 
 ```sh
-nim c -d:release -o:build/nimvcl_ide src/nimvcl_ide.nim
-build/nimvcl_ide
+nimble install https://github.com/Vyrnexis/nimvcl-ide    # or: nimble build -d:release in a clone
+nimvcl_ide
 ```
 
-The IDE needs a nimvcl checkout next to it (`../nimvcl`) and `nim` on your
-`PATH` (Settings: `nimPath` in `settings.json` to use another compiler).
+See the [README](../README.md) for the requirements (Nim 2.2+, SDL3, SDL3_ttf,
+SDL3_image). `nim` must be on your `PATH` for building projects (`nimPath` in
+`settings.json` selects another compiler). The IDE finds nimvcl's source
+folder by itself, in this order: `$NIMVCL_SRC`, the folder nimvcl was compiled
+from when the IDE was built, then `nimble path nimvcl`. When none of them
+works, Compile says so in Messages.
+
+A short walk-through is in the [tutorial](tutorial.md).
 
 `build/nimvcl_ide --project path/to/app.nimproj` opens that project instead of
 the last one (when it cannot be opened, the IDE says so and carries on as
@@ -59,7 +65,11 @@ text, anywhere in the name and in any case (`grid` finds `StringGrid` and
 
 Clearing the text (or `Esc`) brings back the tabs exactly as they were.
 
+![Searching the palette for "grid"](images/ide-palette-search.png)
+
 ## Your first program
+
+(The [tutorial](tutorial.md) goes through this step by step, with pictures.)
 
 1. **File > New Application.** A new project appears with an empty `Form1`
    (the project folder is `~/nimvcl-projects/ProjectN`).
@@ -112,6 +122,8 @@ and adds a descendant (`unitN.nim` / `unitN.nfm`, form `FormN`), as Delphi's
 File > New > Other > Inheritable Items does. The descendant has every component
 of the ancestor and everything you add to it:
 
+![A descendant form: the flags mark the inherited components](images/ide-inherited.png)
+
 * Inherited components carry a small flag in the corner, and the Object
   Inspector title says `(inherited)`. They can be moved, resized and edited,
   but not deleted or renamed; those belong to the ancestor. New components can
@@ -161,6 +173,23 @@ ToolBar, TreeView, ListView, menus or ActionList takes an ImageList of the form,
 `popupMenu` a PopupMenu, `action` an Action. `imageIndex` is a number that
 counts the images of the linked list from 0.
 
+### Colours and fonts
+
+`color` and the `font` group (expand it with the arrow; `font.color` is the
+text colour) show a swatch of the value. Click the row for a drop-down of
+colours, or type a name or `#rrggbb`. A colour that you set is shown in bold,
+like any property that differs from its default; a control keeps following its
+parent's colour until you set one.
+
+The `font.family` drop-down lists three groups: **Bundled** (the fonts that
+come with nimvcl: `sans`, `mono`, ...), **Project** (the fonts of the project)
+and **System** (the fonts installed on the machine). A system font is only
+there at run time on machines that have it; to ship a font with the program,
+use **Project > Add Font File...**: it copies the `.ttf` or `.otf` into the
+project's `fonts/` folder, lists it in the `.nimproj` and makes the program file
+register it at start-up (between marker comments), embedded in the executable at
+compile time. The family then appears under **Project** in the drop-down.
+
 ## Building and running
 
 | Command | Shortcut | Notes |
@@ -208,12 +237,13 @@ by line as it happens. When the program ends (or you stop it with
 | Project > Remove from Project | Drops a unit from the project; the files stay on disk. The main form cannot be removed |
 | Project > View Source | Opens the program file (`<name>.nim`) in the editor; so does a double click on the project node |
 | Project > Options... | Output folder, compiler flags, conditional defines, application title, version |
+| Project > Add Font File... | Copies a font into the project and embeds it in the program (see Colours and fonts) |
 
 Closing a unit, closing the project or quitting with unsaved changes asks
 **Save**, **Don't Save** or **Cancel**.
 
 A project is a folder with `<name>.nimproj` (JSON), `<name>.nim` (the program),
-`nim.cfg` (the nimvcl path), and for each form `unitN.nim` and `unitN.nfm`.
+`nim.cfg` (the path to nimvcl's source), and for each form `unitN.nim` and `unitN.nfm`.
 Everything is plain text and builds with a plain `nim c <name>.nim` too (the
 options of the project then have to be given on the command line).
 
@@ -343,10 +373,12 @@ hints are shown and the docking layout.
 
 `nimvcl_ide --shots DIR` runs a scripted session (new application, a Button and
 a Label, the handler, compile, dark theme) through simulated mouse and keyboard
-events and saves a PNG after every step. Run it headless:
+events and saves a PNG after every step. `scripts/docshots.nim` makes the
+pictures of these documents the same way. Run them headless:
 
 ```sh
-SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software build/nimvcl_ide --shots build/shots
+SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software nimvcl_ide --shots build/shots
+SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software nim c -r scripts/docshots.nim docs/images
 ```
 
 `scripts/test.sh` runs the whole suite (also headless); `tests/tide.nim` is the
@@ -356,7 +388,6 @@ same session as an automated test, followed by a smoke run of the built program.
 
 * "Revert to inherited" for a single property is not there yet: set the value
   back by hand and it vanishes from the descendant's file.
-
 * Save As keeps the form type (`Form2`) of a renamed form unit; rename the type
   in the code by hand if you want.
 * The IDE only edits the program file between its markers; a project whose
