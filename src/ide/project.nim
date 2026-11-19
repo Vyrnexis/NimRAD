@@ -56,7 +56,7 @@
 import std/[json, os, strutils, sequtils]
 import nimvcl/graphics/[font, context]
 import nimvcl/dsl/nfmsyntax
-import ./[codegen, fileio, mainfile, nimvclpath, sdllink, unitimports]
+import ./[codegen, fileio, mainfile, nimsource, nimvclpath, sdllink, unitimports]
 
 const
   ProjectExt* = ".nimproj"
@@ -126,8 +126,8 @@ proc expand*(tmpl: string, vars: openArray[(string, string)]): string =
       inc i
 
 proc validName*(s: string): bool =
-  ## Project and unit names: a letter, then letters, digits or `_`.
-  s.len > 0 and s[0] in Letters and s.allIt(it in IdentChars)
+  ## Project and unit names: valid Nim identifiers (see `isValidIdent`).
+  isValidIdent(s)
 
 proc dir*(p: Project): string = parentDir(p.filePath)
 
@@ -284,6 +284,12 @@ proc ancestorUnitOf*(p: Project, nfmPath: string): string =
     for u in p.units:
       if u.nfmPath.len > 0 and normalizedPath(p.nfmPathOf(u)) == target: return u.name
   except CatchableError: discard
+
+proc formTypeOfNfm*(nfmPath: string): string =
+  ## `object Form1: Form` -> "Form1" (`inherited Form2: Form2` -> "Form2"); ""
+  ## when the file cannot be read.
+  try: parseNfm(readFile(nfmPath)).name
+  except CatchableError: ""
 
 proc descendantsOf*(p: Project, unitName: string): seq[string] =
   ## Units whose form inherits (directly or through others) from `unitName`'s.

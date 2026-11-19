@@ -16,7 +16,7 @@ import std/[os, strutils, tables, sets, sequtils]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
-import ./[project, codegen, fileio, unitimports]
+import ./[project, codegen, fileio, nimsource, unitimports]
 
 type
   UnitEditor* = ref object of RootObj
@@ -58,13 +58,6 @@ const
   TitleH = 28'f32
   FramePad = 1'f32
   ClipMark = "object nvclipboard: Panel"
-  NimKeywords = ["addr", "and", "as", "asm", "bind", "block", "break", "case", "cast",
-    "concept", "const", "continue", "converter", "defer", "discard", "distinct", "div",
-    "do", "elif", "else", "end", "enum", "except", "export", "finally", "for", "from",
-    "func", "if", "import", "in", "include", "interface", "is", "isnot", "iterator",
-    "let", "macro", "method", "mixin", "mod", "nil", "not", "notin", "object", "of",
-    "or", "out", "proc", "ptr", "raise", "ref", "return", "shl", "shr", "static",
-    "template", "try", "tuple", "type", "using", "var", "when", "while", "xor", "yield"]
 
 var gClipboard = ""   ## fallback when the system clipboard cannot hold the text
 
@@ -102,11 +95,6 @@ proc styleKey(s: string): string =
   result = $s[0]
   for ch in s[1 .. ^1]:
     if ch != '_': result.add ch.toLowerAscii
-
-proc validIdent(s: string): bool =
-  s.len > 0 and s[0] in {'a'..'z', 'A'..'Z'} and
-    s.allIt(it in {'a'..'z', 'A'..'Z', '0'..'9', '_'}) and
-    not s.contains("__") and not s.endsWith("_") and s notin NimKeywords
 
 proc isControlClass(ci: ClassInfo): bool =
   var c = ci
@@ -518,7 +506,7 @@ proc nameProblem(e: UnitEditor, c: Component, nw: string): string =
   ## Why `c` cannot be called `nw` ("" when it can).
   if c == Component(e.fForm): "rename the form from the project, not here"
   elif c.inherited: "`" & c.name & "` comes from the ancestor form and cannot be renamed here"
-  elif not validIdent(nw): "`" & nw & "` is not a valid identifier"
+  elif not isValidIdent(nw): "`" & nw & "` is not a valid identifier"
   elif e.nameTaken(nw, c): "the name `" & nw & "` is already used"
   else: e.descendantProblem(c.name)
 

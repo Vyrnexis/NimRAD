@@ -23,7 +23,7 @@
 
 import std/[strutils, algorithm, sets, sequtils, os]
 import nimvcl/dsl/nfmsyntax
-import ./mainfile
+import ./[mainfile, nimsource]
 
 const
   UnitImportsBlock* = "imports"
@@ -134,11 +134,9 @@ proc syncImports*(src: string, wanted: seq[string]): string =
       else: lines.delete i             # stale (or a duplicate)
     dec i
   let r2 = findBlock(lines, UnitImportsBlock)
+  let outside = lines[0 ..< r2.b] & lines[r2.e + 1 .. ^1]
   var elsewhere = initHashSet[string]()
-  for k, l in lines:
-    let t = l.strip
-    if (k < r2.b or k > r2.e) and t.startsWith("import "):
-      elsewhere.incl t["import ".len .. ^1].strip
+  for m in importedModules(outside.join("\n")): elsewhere.incl m
   let indent = lines.blockIndent r2
   var at = r2.e
   for m in wanted:
@@ -174,39 +172,11 @@ proc componentNames*(nfmText: string, baseDir = ""): seq[string] =
 
 # ------------------------------------------------------------ user imports
 
-func importedPaths(line: string): seq[string] =
-  ## The module paths an `import` line names: `import a/b, c/[d, e]  # x`
-  ## gives `a/b`, `c/d`, `c/e`.
-  var t = line.strip
-  let c = t.find('#')
-  if c >= 0: t = t[0 ..< c].strip
-  if not t.startsWith("import "): return
-  t = t["import ".len .. ^1]
-  var depth = 0
-  var cur = ""
-  var parts: seq[string]
-  for ch in t:
-    if ch == '[': inc depth
-    elif ch == ']': dec depth
-    if ch == ',' and depth == 0:
-      parts.add cur
-      cur = ""
-    else: cur.add ch
-  parts.add cur
-  for p in parts:
-    let q = p.strip.replace(" ", "")
-    let b = q.find("/[")
-    if b >= 0 and q.endsWith("]"):
-      for m in q[b + 2 ..< q.high].split(','):
-        if m.len > 0: result.add q[0 ..< b] & "/" & m
-    elif q.len > 0: result.add q
-
 proc importsModule*(src, module: string): bool =
   ## Whether the source imports `module` (`nimvcl/controls/edit`), by its own
   ## line, in a `[a, b]` group, or through `import nimvcl` (everything).
-  for l in src.split('\n'):
-    for p in importedPaths(l):
-      if p == module or p == "nimvcl": return true
+  for p in importedModules(src):
+    if p == module or p == "nimvcl": return true
 
 proc addUserImport*(src, module: string): string =
   ## `import <module>` in the unit's own import area: right above the IDE's

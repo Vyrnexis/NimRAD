@@ -725,17 +725,6 @@ proc newForm*(ide: IdeForm): UnitEditor =
   except CatchableError as e:
     ide.fail "Cannot create the form: " & e.msg
 
-proc formTypeOfNfm(path: string): string =
-  ## `object Form1: Form` -> "Form1" (`inherited Form2: Form2` -> "Form2").
-  try:
-    for l in lines(path):
-      let t = l.strip
-      if t.startsWith("object ") or t.startsWith("inherited "):
-        let r = t[t.find(' ') + 1 .. ^1]
-        let c = r.find(':')
-        return (if c > 0: r[0 ..< c] else: r).strip
-  except CatchableError: discard
-
 proc addToProject*(ide: IdeForm, path: string): bool =
   ## Adds an existing `.nim` unit (a form unit when a `.nfm` of the same name
   ## sits next to it).

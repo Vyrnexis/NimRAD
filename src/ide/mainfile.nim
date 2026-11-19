@@ -38,6 +38,7 @@
 ## `forms` block are kept. Pure string functions, no UI.
 
 import std/strutils
+import ./nimsource
 
 const
   ImportsBlock* = "imports"
@@ -101,8 +102,7 @@ proc addImport*(src, unit: string): string =
   let r = findBlock(lines, ImportsBlock)
   if r.b < 0: return src
   let want = "import " & unit
-  for l in lines:               # also when the user imported it elsewhere
-    if l.strip == want: return src
+  if unit in importedModules(src): return src       # also when the user imported it elsewhere
   var at = r.e
   while at - 1 > r.b and lines[at - 1].strip == "{.pop.}": dec at   # stay inside push/pop
   lines.insertBefore(at, want, lines.blockIndent r)

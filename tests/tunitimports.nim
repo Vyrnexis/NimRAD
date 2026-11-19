@@ -4,7 +4,7 @@
 
 import std/[unittest, strutils, os, osproc, sequtils]
 import nimvcl/dsl/[props, props_std, nfmsyntax]
-import ide/[unitimports, codegen, project]
+import ide/[unitimports, codegen, project, nimsource]
 
 const unitText = """## unit1
 {.push warning[UnusedImport]: off.}
@@ -195,3 +195,23 @@ suite "prelude and older units":
     if code != 0: echo output
     check code == 0
     if code == 0: removeDir dir
+
+suite "reading imports":
+  test "groups, aliases, comments and lists that go on in the next line":
+    let src = "import std/os  # import nimvcl/x\n" &
+              "import nimvcl/controls/[button, edit as e], strutils\n" &
+              "import a,\n  b/[c,\n    d]\n" &
+              "const s = \"\"\"\nimport hidden\n\"\"\"\n"
+    check importedModules(src) == @["std/os", "nimvcl/controls/button", "nimvcl/controls/edit",
+                                    "strutils", "a", "b/c", "b/d"]
+    check importsModule(src, "nimvcl/controls/edit")
+    check not importsModule(src, "nimvcl/controls/label")
+
+  test "a module imported in a group is not added a second time to the block":
+    let src = "import nimvcl/controls/[button, edit]  # mine\n" &
+              "# nimvcl-ide: imports begin\n# nimvcl-ide: imports end\n"
+    check syncImports(src, @["nimvcl/controls/button"]) == src
+
+  test "names that are keywords or have double underscores are refused":
+    for bad in ["block", "type", "a__b", "a_", "1a", ""]: check not validName(bad)
+    check validName("my_unit") and validName("Unit1")
