@@ -16,7 +16,7 @@ designer, an object inspector, code editor tabs, and one-key build and run.
 <img src="docs/images/ide-dark.png" width="32%" alt="The dark theme">
 </p>
 
-**Status:** version 0.1.6. New to it? Start with the
+**Status:** version 0.2.0. New to it? Start with the
 [tutorial](docs/tutorial.md); the [user guide](docs/user-guide.md) covers the
 rest.
 

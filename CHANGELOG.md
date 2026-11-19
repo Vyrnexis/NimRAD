@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-11-20
 
 - The Object Inspector's popup (Revert to Inherited) acts on the row that was
   right-clicked, and properties that differ from the ancestor form show their
