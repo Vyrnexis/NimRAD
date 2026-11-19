@@ -385,6 +385,10 @@ proc registerFonts*(p: Project) =
     if data[0].len > 0:
       registerFontFamilyData(f.family, data[0], data[1], data[2], data[3])
 
+proc unregisterFonts*(p: Project) =
+  ## Takes the project's font families out of this process again (project closed).
+  for fam in p.fontFamilies: unregisterFontFamily(fam)
+
 proc fontsBlockLines*(p: Project): seq[string] =
   ## The lines of the main file's `fonts` block: one `registerFontFamilyData`
   ## per family, the files read at compile time into constants (`staticRead`, so

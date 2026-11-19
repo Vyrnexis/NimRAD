@@ -12,7 +12,7 @@
 ## Everything here is single threaded UI code; build the editor after
 ## `Application.init()`.
 
-import std/[os, strutils, tables, sets, sequtils]
+import std/[os, strutils, tables, sets, sequtils, times]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
@@ -51,6 +51,8 @@ type
     fOldHandler: tuple[target: Obj, event, name: string]
       ## the handler an event had before the Object Inspector changes it
     fPasteCount: int
+    fAnc: Obj                      ## cached read-only copy of the ancestor form (see `ancestorCopy`)
+    fAncStamp: string              ## path, size and time of the file `fAnc` was read from
     fBusy: bool                    ## ignore designer callbacks while rebuilding
 
   DesignTitle = ref object of Panel
@@ -495,10 +497,13 @@ proc teardownDesign(e: UnitEditor) =
   e.fForm = nil
   e.fExtra = nil
 
+proc dropAncestor(e: UnitEditor)
+
 proc dispose*(e: UnitEditor) =
   ## Call when the editor is closed: the form's timers stop (they would keep
   ## firing, and keep the form alive, in the program-wide timer list).
   e.teardownDesign()
+  e.dropAncestor()
 
 # ---------------------------------------------------------------- inspector
 
@@ -599,13 +604,30 @@ proc releaseCopy(o: Obj) =
     try: Control(o).free()
     except CatchableError: discard
 
+proc dropAncestor(e: UnitEditor) =
+  if e.fAnc != nil: releaseCopy e.fAnc
+  e.fAnc = nil
+  e.fAncStamp = ""
+
 proc ancestorCopy(e: UnitEditor): Obj =
-  ## A fresh copy of the ancestor's form, as its file says now (nil when the
-  ## form does not inherit or the file cannot be read). Call `releaseCopy` on it.
+  ## A read-only copy of the ancestor's form, as its file says now (nil when the
+  ## form does not inherit or the file cannot be read). It is kept for as long
+  ## as the ancestor file is unchanged (path, size, time), so repeated checks do
+  ## not load the form again; never change or free it.
   if e.fForm == nil or e.fForm.ancestorPath.len == 0 or not fileExists(e.fForm.ancestorPath):
+    e.dropAncestor()
     return nil
-  try: loadNfmFile(e.fForm.ancestorPath, nil, newNfmOptions(strict = false))
-  except CatchableError: nil
+  let path = e.fForm.ancestorPath
+  var stamp: string
+  try: stamp = path & "|" & $getFileSize(path) & "|" & $getLastModificationTime(path).toUnixFloat
+  except OSError: return nil
+  if e.fAnc != nil and stamp == e.fAncStamp: return e.fAnc
+  e.dropAncestor()
+  try:
+    e.fAnc = loadNfmFile(path, nil, newNfmOptions(strict = false))
+    e.fAncStamp = stamp
+  except CatchableError: discard
+  e.fAnc
 
 proc counterpart(e: UnitEditor, anc: Obj, c: Component): Obj =
   ## The object of the ancestor copy that `c` comes from (nil for a component of
@@ -639,9 +661,14 @@ proc canRevert*(e: UnitEditor, c: Component, prop: string): bool =
   if not info.revertible: return false
   let anc = e.ancestorCopy
   if anc == nil: return false
-  defer: releaseCopy anc
   let o = e.counterpart(anc, c)
   o != nil and not sameValue(info, Obj(c), o)
+
+proc overridden*(e: UnitEditor, prop: string): bool =
+  ## The single selected inherited component's property differs from the
+  ## ancestor form's (what the Object Inspector draws bold).
+  let sel = e.selection
+  sel.len == 1 and e.isInherited and e.canRevert(sel[0], prop)
 
 proc refreshAfterRevert(e: UnitEditor, c: Component) =
   if c == Component(e.fForm): e.syncGeometry()
@@ -688,7 +715,6 @@ proc revertProperty*(e: UnitEditor, c: Component, prop: string): bool {.discarda
   if not e.canRevert(c, prop): return false
   let anc = e.ancestorCopy
   if anc == nil: return false
-  defer: releaseCopy anc
   let o = e.counterpart(anc, c)
   if o == nil: return false
   let info = classOf(Obj(c)).findProp(prop)
@@ -703,7 +729,6 @@ proc revertComponent*(e: UnitEditor, c: Component): int =
   if c == nil or c != Component(e.fForm) and not c.inherited: return 0
   let anc = e.ancestorCopy
   if anc == nil: return 0
-  defer: releaseCopy anc
   let o = e.counterpart(anc, c)
   if o == nil: return 0
   let ci = classOf(Obj(c))
@@ -724,7 +749,6 @@ proc canRevertComponent*(e: UnitEditor, c: Component): bool =
   if c == nil or c != Component(e.fForm) and not c.inherited: return false
   let anc = e.ancestorCopy
   if anc == nil: return false
-  defer: releaseCopy anc
   let o = e.counterpart(anc, c)
   let ci = classOf(Obj(c))
   if o == nil or ci == nil: return false
@@ -768,6 +792,7 @@ proc bindInspector*(e: UnitEditor, insp: ObjectInspector) =
   ## apply to the designed form.
   if insp == nil: return
   e.fInsp = insp
+  insp.isOverridden = proc(prop: string): bool = e.overridden(prop)
   insp.onPropertyChanging = proc(s: Control, t: Obj, prop: string, v: PropValue,
                                  accept: var bool, message: var string) =
     if prop == "name" and t of Component and v.kind == pkString:
@@ -809,6 +834,7 @@ proc unbindInspector*(e: UnitEditor) =
   insp.onGetHandlers = nil
   insp.onEditExtra = nil
   insp.onGetChoices = nil
+  insp.isOverridden = nil
   insp.inspect(newSeq[Obj]())
 
 proc inBody(e: UnitEditor, c: Control): bool =

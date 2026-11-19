@@ -10,7 +10,9 @@ import ./[cmdargs, project, ideconfig, messagespanel, uniteditor, mainfile,
 proc closeProject*(ide: IdeForm): bool =
   ## Closes the project and its editors (false: cancelled at the save prompt).
   if not ide.closeAllEditors(): return false
-  if ide.project != nil: ide.project.save()
+  if ide.project != nil:
+    ide.project.save()
+    ide.project.unregisterFonts()
   ide.project = nil
   ide.messages.clear()
   ide.refreshProject()
@@ -151,9 +153,9 @@ proc removeFont*(ide: IdeForm, file = ""): bool =
   ## Project > Remove Font: takes a font out of the project, out of the main
   ## file's `fonts` block and out of the project's `fonts` folder (the file is
   ## deleted). Without `file` (as in `Project.fonts`) the font is chosen from a
-  ## list, which is also the confirmation. The family stays registered in this
-  ## IDE session; it is gone from the Object Inspector's list and from the
-  ## next build.
+  ## list, which is also the confirmation. The family is unregistered from
+  ## this IDE session (faces still in the project are registered again), so it
+  ## leaves the Object Inspector's list; it is gone from the next build too.
   if ide.project == nil: return false
   if ide.project.fonts.len == 0:
     ide.say "The project has no fonts"
@@ -170,6 +172,8 @@ proc removeFont*(ide: IdeForm, file = ""): bool =
     let f = ide.project.removeFont(target)
     ide.project.save()
     ide.project.syncFontsBlock()
+    unregisterFontFamily(f.family)
+    ide.project.registerFonts()      # other faces of the family stay
     ide.afterMainEdit(mainEd)
     ide.refreshProject()
     ide.say "Removed font " & f.family & " (" & f.style & ")"

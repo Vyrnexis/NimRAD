@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The Object Inspector's popup (Revert to Inherited) acts on the row that was
+  right-clicked, and properties that differ from the ancestor form show their
+  name in bold. The ancestor form is read once per version of its file.
+- Remove Font unregisters the family in the IDE; closing or switching projects
+  unregisters the project's fonts.
 - Inherited forms stay current while open: saving an ancestor rebuilds the open
   descendants on top of its new file, keeping their selection, their unsaved
   code and their unsaved form changes (laid over the new ancestor as

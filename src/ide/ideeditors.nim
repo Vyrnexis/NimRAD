@@ -122,22 +122,23 @@ proc singleSelected(ide: IdeForm): Component =
   let sel = ed.selection
   if sel.len == 1: sel[0] else: nil
 
-proc canRevertProperty*(ide: IdeForm): bool =
-  ## The Object Inspector's selected property differs from the ancestor form's.
+proc canRevertProperty*(ide: IdeForm, prop = ""): bool =
+  ## The property (default: the Object Inspector's selected one) differs from
+  ## the ancestor form's.
   let c = ide.singleSelected
-  let prop = ide.inspector.selectedProp
+  let prop = if prop.len > 0: prop else: ide.inspector.selectedProp
   c != nil and prop.len > 0 and ide.activeEditor.canRevert(c, prop)
 
 proc canRevertComponent*(ide: IdeForm): bool =
   let c = ide.singleSelected
   c != nil and ide.activeEditor.canRevertComponent(c)
 
-proc revertProperty*(ide: IdeForm): bool {.discardable.} =
-  ## Edit > Revert to Inherited (also in the Object Inspector's menu): the
-  ## selected property goes back to the ancestor's value and leaves the `.nfm`
-  ## of this form when it is saved.
+proc revertProperty*(ide: IdeForm, prop = ""): bool {.discardable.} =
+  ## Edit > Revert to Inherited (the Object Inspector's menu passes the row that
+  ## was clicked): the property (default: the selected one) goes back to the
+  ## ancestor's value and leaves the `.nfm` of this form when it is saved.
   let c = ide.singleSelected
-  let prop = ide.inspector.selectedProp
+  let prop = if prop.len > 0: prop else: ide.inspector.selectedProp
   if c == nil or prop.len == 0:
     ide.say "Select a property of an inherited component first"
     return false

@@ -303,6 +303,20 @@ suite "Revert to Inherited":
     check not des.revertProperty(c, "caption")         # nothing left to do
     check des.modified
 
+  test "the inspector marks overridden properties of the selection":
+    des.selectComponent(des.find("Label1"))
+    check insp.overridden("caption")
+    check not insp.overridden("top")
+    des.selectComponent(Component(button))
+    check insp.overridden("left") and insp.overridden("width")
+    check not insp.overridden("caption")             # reverted above
+    check not anc.overridden("left")                 # the ancestor has nothing to override
+    anc.bindInspector(insp)
+    anc.selectComponent(anc.find("Button1"))
+    check not insp.overridden("caption")
+    des.bindInspector(insp)
+    des.selectComponent(Component(button))
+
   test "the reverted property leaves the .nfm of the descendant, the others stay":
     des.save()
     let nfm = nfmOf("unit2")

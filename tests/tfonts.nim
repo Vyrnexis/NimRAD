@@ -146,6 +146,7 @@ suite "removing a font":
     check not ide.acts[aRemoveFont].enabled
     check "Removed font Noto Sans Mono" in ide.status.panels[4].text
     check errors.len == 2                                    # only the two refusals from before
+    check "noto sans mono" notin registeredFontFamilies()    # unregistered in this session too
 
   test "without fonts there is nothing to remove":
     check not ide.removeFont()
@@ -179,5 +180,11 @@ suite "removing a font":
     let r = ide.project.compileProjectSync()
     if not r.ok: echo r.lines.join("\n")
     check r.ok
+
+  test "closing the project unregisters its fonts":
+    check ide.addFontFile(srcFont)
+    check "noto sans mono" in registeredFontFamilies()
+    check ide.closeProject()
+    check "noto sans mono" notin registeredFontFamilies()
 
 removeDir root

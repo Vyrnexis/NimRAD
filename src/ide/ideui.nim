@@ -263,10 +263,15 @@ proc buildDocking*(ide: IdeForm) =
     if ide.project != nil: ide.project.fontFamilies else: @[]
   # the inspector's context menu: put an inherited property or component back
   let pm = newPopupMenu(ide)
-  let revProp = pm.addItem(ide.acts[aRevertProp].caption, proc(s: MenuItem) = ide.revertProperty())
+  # the popup acts on the row that was right-clicked, not just the selected one
+  var clickedProp = ""
+  ide.inspector.onContextMenu = proc(s: Control, prop: string, p: PointF) =
+    clickedProp = prop
+  let revProp = pm.addItem(ide.acts[aRevertProp].caption,
+                           proc(s: MenuItem) = ide.revertProperty(clickedProp))
   let revComp = pm.addItem(ide.acts[aRevertComponent].caption, proc(s: MenuItem) = ide.revertComponent())
   pm.onPopup = proc(m: PopupMenu) =
-    revProp.enabled = ide.canRevertProperty
+    revProp.enabled = ide.canRevertProperty(clickedProp)
     revComp.enabled = ide.canRevertComponent
   ide.inspector.popupMenu = pm
   ide.pages = newEditorPages()
