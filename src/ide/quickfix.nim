@@ -48,13 +48,14 @@ func caseSibling*(name: string, components: openArray[string]): string =
        c[0].toLowerAscii == name[0].toLowerAscii:
       return c
 
-proc fixesFor*(m: Message, components: openArray[string]): seq[QuickFix] =
-  ## The fixes of an error message (none for other kinds). `components` are
-  ## the names of the objects of the form of the unit the error is in.
+proc fixesFor*(m: Message, components: proc(): seq[string]): seq[QuickFix] =
+  ## The fixes of an error message (none for other kinds). `components` gives
+  ## the names of the objects of the form of the unit the error is in; it is
+  ## only called for a message that names an unknown identifier.
   if m.kind != MessageKind.mkError or not m.hasLocation: return
   let name = unknownName(m.text)
   if name.len == 0: return
-  let sib = caseSibling(name, components)
+  let sib = caseSibling(name, components())
   if sib.len > 0:
     return @[QuickFix(kind: fkRename, ident: name, replacement: sib,
                       title: "Did you mean " & sib & "?")]
@@ -66,6 +67,11 @@ proc fixesFor*(m: Message, components: openArray[string]): seq[QuickFix] =
     elif mods.len > 1:
       result.add QuickFix(kind: fkAddImport, ident: name, modules: mods,
                           title: "Add import of " & name & " (" & $mods.len & " modules)")
+
+proc fixesFor*(m: Message, components: openArray[string]): seq[QuickFix] =
+  ## Same, with the component names at hand.
+  let names = @components
+  fixesFor(m, proc(): seq[string] = names)
 
 func isWord(s: string, i, n: int): bool =
   (i == 0 or s[i - 1] notin IdentChars) and (i + n >= s.len or s[i + n] notin IdentChars)

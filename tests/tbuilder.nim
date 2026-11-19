@@ -59,6 +59,16 @@ while true:
   stdout.flushFile
   sleep(50)
 """
+const treeSrc = """
+import std/[os, osproc]
+# a helper that shares our stdout: it keeps the pipe open after we are gone
+discard startProcess("/bin/sleep", args = ["60"], options = {poParentStreams})
+echo "ready"
+stdout.flushFile
+sleep(60000)
+"""
+const floodSrc = "var i = 0\nwhile true:\n  inc i\n  echo \"flood line \", i\n"
+const stdinSrc = "echo \"stdin: \", readAll(stdin).len\n"
 const argsSrc = "import std/os\nfor a in commandLineParams(): echo \"arg:\" & a\nquit 3\n"
 
 Application.init()
@@ -182,6 +192,42 @@ suite "async":
     check pumpUntil(proc(): bool = lines.len >= 2, 20)
     stopProject()
     check pumpUntil(proc(): bool = exitCalls > 0, 20)
+
+  test "stopping a program also stops the helpers it started":
+    when defined(posix):
+      reset()
+      let p = mkProject("tree", treeSrc)
+      check p.compileProjectSync().ok
+      check runProject(p, addLine, onExit)
+      check pumpUntil(proc(): bool = lines.len >= 1, 20)
+      let t0 = epochTime()
+      stopProject()
+      check pumpUntil(proc(): bool = exitCalls > 0, 20)
+      check epochTime() - t0 < 10          # not when the helper ends after 60 s
+      check wasCancelled()
+
+  test "a program that floods the output can be stopped":
+    reset()
+    let p = mkProject("flood", floodSrc)
+    check p.compileProjectSync().ok
+    var batches, total: int
+    check runProject(p, proc(ls: seq[string]) =
+      inc batches
+      total += ls.len, onExit)
+    check pumpUntil(proc(): bool = total >= 20000, 30)
+    check batches < total                  # lines arrive in chunks
+    stopProject()
+    check pumpUntil(proc(): bool = exitCalls > 0, 30)
+    check buildState() == bsIdle
+
+  test "a program reading its input sees the end of the file":
+    reset()
+    let p = mkProject("readinput", stdinSrc)
+    check p.compileProjectSync().ok
+    check runProject(p, addLine, onExit)
+    check pumpUntil(proc(): bool = exitCalls > 0, 20)
+    check lines == @["stdin: 0"]
+    check not wasCancelled()
 
   test "cancel a compile":
     reset()

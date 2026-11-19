@@ -16,7 +16,7 @@ import std/[os, strutils, tables, sets, sequtils]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
-import ./[project, codegen, unitimports]
+import ./[project, codegen, fileio, unitimports]
 
 type
   UnitEditor* = ref object of RootObj
@@ -486,6 +486,11 @@ proc teardownDesign(e: UnitEditor) =
   e.fForm = nil
   e.fExtra = nil
 
+proc dispose*(e: UnitEditor) =
+  ## Call when the editor is closed: the form's timers stop (they would keep
+  ## firing, and keep the form alive, in the program-wide timer list).
+  e.teardownDesign()
+
 # ---------------------------------------------------------------- inspector
 
 proc objsOf(e: UnitEditor): seq[Obj] =
@@ -495,12 +500,21 @@ proc refreshInspector(e: UnitEditor) =
   if e.fInsp == nil or e.fBusy: return
   e.fInsp.inspect(e.objsOf)
 
+proc descendantProblem(e: UnitEditor, name: string): string =
+  ## Why the component `name` cannot change or go: forms that inherit from this
+  ## one use it ("" when none does).
+  let users = e.project.descendantsUsing(e.unitName, name)
+  if users.len > 0:
+    "`" & name & "` is used by " & users.join(", ") & ", which inherit from this form"
+  else: ""
+
 proc nameProblem(e: UnitEditor, c: Component, nw: string): string =
   ## Why `c` cannot be called `nw` ("" when it can).
   if c == Component(e.fForm): "rename the form from the project, not here"
+  elif c.inherited: "`" & c.name & "` comes from the ancestor form and cannot be renamed here"
   elif not validIdent(nw): "`" & nw & "` is not a valid identifier"
   elif e.nameTaken(nw, c): "the name `" & nw & "` is already used"
-  else: ""
+  else: e.descendantProblem(c.name)
 
 proc applyRename(e: UnitEditor, c: Component) =
   let old = e.fNames.getOrDefault(c, "")
@@ -685,6 +699,11 @@ proc deleteSelection*(e: UnitEditor): bool {.discardable.} =
                        NonVisualTile(c).component.inherited):
       e.say "`" & c.name & "` comes from the ancestor form and cannot be deleted"
       return false
+  for c in e.fDesigner.selection:
+    let problem = e.descendantProblem(c.name)
+    if problem.len > 0:
+      e.say problem
+      return false
   e.fDesigner.deleteSelection()
 
 proc cutSelection*(e: UnitEditor): bool {.discardable.} =
@@ -785,7 +804,7 @@ proc save*(e: UnitEditor) =
   ## (see `unitimports`).
   if e.fDesigner != nil and e.fDesignDirty:
     let nfm = e.designNfm
-    writeFile(e.project.nfmPathOf(e.fUnit), nfm)
+    writeFileAtomic(e.project.nfmPathOf(e.fUnit), nfm)
     e.fDesignDirty = false
     if e.fUnit.isForm:
       e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir, e.project.importAll))

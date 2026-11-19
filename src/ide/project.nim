@@ -7,7 +7,7 @@
 ##
 ## ```json
 ## {
-##   "version": 1,
+##   "formatVersion": 1,
 ##   "name": "hello",
 ##   "mainFile": "hello.nim",
 ##   "units": [
@@ -29,6 +29,9 @@
 ## }
 ## ```
 ##
+## * `formatVersion` is the version of this file format (missing: 1); a file with
+##   a larger one was made by a newer IDE and is refused. `version` is the version
+##   of the application.
 ## * `ancestor` (form units only) is the unit whose form this one inherits
 ##   from (File > New Inherited Form); the `.nfm` names the ancestor file too
 ##   (`ancestor = 'unit1.nfm'`), the project keeps the unit name for the IDE.
@@ -44,7 +47,8 @@
 ##   against, then `nimble path nimvcl`).
 ## * `autoImports` (Project > Options > "Add missing nimvcl imports automatically")
 ##   and `importAll` ("Import all of nimvcl") are written only when on.
-## * Missing fields take their defaults when loading; unknown fields are dropped.
+## * Missing fields take their defaults when loading; unknown fields are kept
+##   and written back unchanged.
 ##
 ## Files of a new project come from `templates/` (read at compile time) with
 ## `${placeholder}` substitution.
@@ -52,10 +56,13 @@
 import std/[json, os, strutils, sequtils]
 import nimvcl/graphics/[font, context]
 import nimvcl/dsl/nfmsyntax
-import ./[codegen, mainfile, nimvclpath, sdllink, unitimports]
+import ./[codegen, fileio, mainfile, nimvclpath, sdllink, unitimports]
 
 const
   ProjectExt* = ".nimproj"
+  FormatVersion* = 1          ## of the `.nimproj` file
+  KnownKeys = ["formatVersion", "name", "mainFile", "units", "fonts", "outputDir", "nimFlags",
+               "defines", "title", "version", "runArgs", "nimvclPath", "autoImports", "importAll"]
   tmplMain = staticRead("../../templates/main.nim.tmpl")
   tmplUnit = staticRead("../../templates/unit.nim.tmpl")
   tmplNfm = staticRead("../../templates/unit.nfm.tmpl")
@@ -94,6 +101,7 @@ type
     nimvclPath*: string  ## "" = detect
     autoImports*: bool   ## add a missing `import nimvcl/...` by itself when a build fails for it
     importAll*: bool     ## units and the program import `nimvcl` (slower builds), not the prelude and the control imports
+    extra: JsonNode      ## the fields of the file this version does not know, kept for `save`
 
 # ------------------------------------------------------------------- helpers
 
@@ -170,14 +178,22 @@ proc toJson*(p: Project): JsonNode =
     if u.ancestor.len > 0: us[us.len - 1]["ancestor"] = %u.ancestor
   var fs = newJArray()
   for f in p.fonts: fs.add %*{"file": f.file, "family": f.family, "style": f.style}
-  result = %*{"version": 1, "name": p.name, "mainFile": p.mainFile, "units": us, "fonts": fs,
-     "outputDir": p.outputDir, "nimFlags": p.nimFlags, "defines": p.defines, "title": p.title,
-     "version": p.version, "runArgs": p.runArgs, "nimvclPath": p.nimvclPath}
+  result = %*{"formatVersion": FormatVersion, "name": p.name, "mainFile": p.mainFile,
+     "units": us, "fonts": fs, "outputDir": p.outputDir, "nimFlags": p.nimFlags,
+     "defines": p.defines, "title": p.title, "version": p.version, "runArgs": p.runArgs,
+     "nimvclPath": p.nimvclPath}
   if p.autoImports: result["autoImports"] = %true
   if p.importAll: result["importAll"] = %true
+  if p.extra != nil:
+    for k, v in p.extra: result[k] = v
 
 proc save*(p: Project) =
-  writeFile(p.filePath, p.toJson.pretty & "\n")
+  ## Writes the `.nimproj`; a file that already has this content is left alone.
+  let text = p.toJson.pretty & "\n"
+  try:
+    if readFile(p.filePath) == text: return
+  except IOError: discard
+  writeFileAtomic(p.filePath, text)
 
 proc loadProject*(path: string): Project =
   ## Raises `ProjectError` when the file is missing or not a project.
@@ -189,12 +205,19 @@ proc loadProject*(path: string): Project =
     raise newException(ProjectError, "cannot read project " & abs & ": " & e.msg)
   if j.kind != JObject:
     raise newException(ProjectError, abs & " is not a project file")
+  if j.hasKey("formatVersion") and j["formatVersion"].kind == JInt and
+     j["formatVersion"].getInt > FormatVersion:
+    raise newException(ProjectError, abs & " was made by a newer version of the IDE " &
+                       "(file format " & $j["formatVersion"].getInt & ")")
   result = Project(filePath: abs, name: j.str("name", abs.splitFile.name),
                    mainFile: unixPath(j.str("mainFile", "")), outputDir: unixPath(j.str("outputDir", "build")),
                    nimFlags: j.strs("nimFlags"), defines: j.strs("defines"),
                    title: j.str("title", ""), version: j.str("version", ""),
                    runArgs: j.strs("runArgs"),
                    nimvclPath: j.str("nimvclPath", ""))
+  result.extra = newJObject()
+  for k, v in j:
+    if k notin KnownKeys: result.extra[k] = v
   for (key, field) in [("autoImports", addr result.autoImports), ("importAll", addr result.importAll)]:
     if j.hasKey(key) and j[key].kind == JBool: field[] = j[key].getBool
   if result.mainFile.len == 0: result.mainFile = result.name & ".nim"
@@ -249,6 +272,26 @@ proc descendantsOf*(p: Project, unitName: string): seq[string] =
       if u.ancestor == a and u.name notin result:
         result.add u.name
         todo.add u.name
+
+proc hasInheritedObject(n: NfmNode, name: string): bool =
+  for c in n.children:
+    if (c.inherited and c.name == name) or c.hasInheritedObject(name): return true
+
+proc descendantsUsing*(p: Project, unitName, component: string): seq[string] =
+  ## The forms inheriting from `unitName`'s form that depend on its component
+  ## `component`: they list it as an `inherited` object or use it in their code.
+  ## Renaming or deleting the component would break them.
+  for d in p.descendantsOf(unitName):
+    let u = p.units[p.findUnit(d)]
+    var uses = false
+    try:
+      if u.nfmPath.len > 0 and fileExists(p.nfmPathOf(u)):
+        uses = parseNfm(readFile(p.nfmPathOf(u))).hasInheritedObject(component)
+      if not uses and fileExists(p.nimPathOf(u)):
+        let src = readFile(p.nimPathOf(u))
+        uses = renameComponentRefs(src, component, component & "_", u.formType) != src
+    except CatchableError: discard
+    if uses: result.add d
 
 # --------------------------------------------------------------------- fonts
 
@@ -359,20 +402,27 @@ proc editMain(p: Project, change: proc(src: string): string): bool =
   let src = readFile(f)
   let res = change(src)
   if res == src: return false
-  writeFile(f, res)
+  writeFileAtomic(f, res)
   true
+
+proc importPath*(p: Project, u: ProjectUnit, fromDir: string): string =
+  ## What `import` says to reach the unit from a file in `fromDir`: its name when
+  ## it is in that folder, else the path relative to it (`sub/foo`, `../x/foo`).
+  unixPath(relativePath(p.nimPathOf(u).changeFileExt(""), fromDir))
 
 proc addToMain*(p: Project, u: ProjectUnit): bool {.discardable.} =
   ## Adds `import <unit>` to the main file and, for a form, its create line
   ## (only between the `nimvcl-ide:` markers, see `mainfile`). True when the
   ## file changed; false when it is missing or has no markers.
   let ft = if u.isForm: u.formType else: ""
-  p.editMain(proc(src: string): string = mainfile.addUnit(src, u.name, ft))
+  let imp = p.importPath(u, p.mainPath.parentDir)
+  p.editMain(proc(src: string): string = mainfile.addUnit(src, imp, ft))
 
 proc removeFromMain*(p: Project, u: ProjectUnit): bool {.discardable.} =
   ## The reverse of `addToMain`.
   let ft = if u.isForm: u.formType else: ""
-  p.editMain(proc(src: string): string = mainfile.removeUnit(src, u.name, ft))
+  let imp = p.importPath(u, p.mainPath.parentDir)
+  p.editMain(proc(src: string): string = mainfile.removeUnit(src, imp, ft))
 
 proc syncFontsBlock*(p: Project): bool {.discardable.} =
   ## Rewrites the main file's `fonts` block from `p.fonts` (see `fontsBlockLines`).
@@ -405,10 +455,30 @@ proc sourceFiles(p: Project): seq[string] =
   result.add p.mainPath
   for u in p.units: result.add p.nimPathOf(u)
 
+type Undo = seq[proc() {.closure.}]
+
+proc rollback(undo: Undo) =
+  for i in countdown(undo.high, 0):
+    try: undo[i]()
+    except CatchableError: discard
+
+proc writeTracked(undo: var Undo, path, content: string) =
+  ## Writes the file; `undo` can put the old content back.
+  let existed = fileExists(path)
+  let old = if existed: readFile(path) else: ""
+  writeFileAtomic(path, content)
+  undo.add proc() =
+    if existed: writeFileAtomic(path, old) else: removeFile path
+
+proc moveTracked(undo: var Undo, src, dst: string) =
+  moveFile(src, dst)
+  undo.add proc() = moveFile(dst, src)
+
 proc renameUnit*(p: Project, oldName, newName: string) =
   ## Renames the unit and its files (same folder), then updates the `import` in
   ## the main file and the other units, and the .nfm path of its `loadForm`.
-  ## The form type is not renamed.
+  ## The form type is not renamed. All or nothing: when a file cannot be
+  ## written, the ones already changed are put back.
   if not validName(newName): raise newException(ProjectError, "bad unit name " & newName)
   let i = p.findUnit(oldName)
   if i < 0: raise newException(ProjectError, "no unit " & oldName)
@@ -420,41 +490,49 @@ proc renameUnit*(p: Project, oldName, newName: string) =
   let newNfm = if oldNfm.len > 0: oldNfm.parentDir / newName & ".nfm" else: ""
   for f in [newNim, newNfm]:
     if f.len > 0 and fileExists(f): raise newException(ProjectError, f & " already exists")
-  if fileExists(oldNim): moveFile(oldNim, newNim)
-  if oldNfm.len > 0 and fileExists(oldNfm): moveFile(oldNfm, newNfm)
-  u.name = newName
-  u.nimPath = p.relativeTo(newNim)
-  if newNfm.len > 0: u.nfmPath = p.relativeTo(newNfm)
-  p.units[i] = u
+  # the new contents first, in memory: a file that cannot be read stops us before any change
+  var rewrites: seq[(string, string)]            # (file to write, content)
+  for f in p.sourceFiles:
+    if not fileExists(f): continue
+    let src = readFile(f)
+    # imported as `sub/old` from a file in another folder
+    let via = unixPath(relativePath(oldNim.parentDir, f.parentDir))
+    var res = renameImport(src, oldName, newName, if via == ".": "" else: via)
+    if f == oldNim and oldNfm.len > 0:
+      res = renameLoadFormPath(res, oldNfm.extractFilename, newNfm.extractFilename)
+    let target = if f == oldNim: newNim else: f
+    if res != src or f == oldNim: rewrites.add((target, res))
+  var kids: seq[int]
   if newNfm.len > 0:
     # forms that inherit from this one name its file: `ancestor = 'unit1.nfm'`
     for k in 0 ..< p.units.len:
       if p.units[k].ancestor != oldName: continue
-      p.units[k].ancestor = newName
+      kids.add k
       let kidNfm = p.nfmPathOf(p.units[k])
       if kidNfm.len > 0 and fileExists(kidNfm):
-        let src = readFile(kidNfm)
-        let rel = unixPath(relativePath(newNfm, kidNfm.parentDir))
-        let lines = src.split('\n')
-        var outp: seq[string]
-        for l in lines:
-          if l.strip.startsWith("ancestor = "):
-            outp.add l[0 ..< l.len - l.strip(trailing = false).len] & "ancestor = " & quoteNfm(rel)
-          else: outp.add l
-        let res = outp.join("\n")
-        if res != src: writeFile(kidNfm, res)
-  for f in p.sourceFiles:
-    if not fileExists(f): continue
-    var src = readFile(f)
-    var out0 = renameImport(src, oldName, newName)
-    if f == newNim and oldNfm.len > 0:
-      out0 = renameLoadFormPath(out0, oldNfm.extractFilename, newNfm.extractFilename)
-    if out0 != src: writeFile(f, out0)
+        let root = parseNfm(readFile(kidNfm), kidNfm)
+        if root.inherited:
+          root.ancestor = unixPath(relativePath(newNfm, kidNfm.parentDir))
+          rewrites.add((kidNfm, writeNfm(root)))
+  var undo: Undo
+  try:
+    if fileExists(oldNim): undo.moveTracked(oldNim, newNim)
+    if oldNfm.len > 0 and fileExists(oldNfm): undo.moveTracked(oldNfm, newNfm)
+    for (f, content) in rewrites:
+      undo.writeTracked(f, content)
+  except CatchableError:
+    rollback undo
+    raise
+  u.name = newName
+  u.nimPath = p.relativeTo(newNim)
+  if newNfm.len > 0: u.nfmPath = p.relativeTo(newNfm)
+  p.units[i] = u
+  for k in kids: p.units[k].ancestor = newName
 
 proc renameProject*(p: Project, newName: string) =
   ## Renames the project: the `.nimproj` and, when it is named after the
   ## project, the main file move to the new name (same folder). Units are not
-  ## touched; the program is built under the new name.
+  ## touched; the program is built under the new name. All or nothing.
   if not validName(newName): raise newException(ProjectError, "bad project name " & newName)
   if newName == p.name: return
   if p.findUnit(newName) >= 0:
@@ -465,13 +543,23 @@ proc renameProject*(p: Project, newName: string) =
   if fileExists(newProj): raise newException(ProjectError, newProj & " already exists")
   if renameMain and fileExists(newMain):
     raise newException(ProjectError, newMain & " already exists")
-  let oldProj = p.filePath
-  if renameMain:
-    if fileExists(p.mainPath): moveFile(p.mainPath, newMain)
-    p.mainFile = newName & ".nim"
-  p.name = newName
-  p.filePath = newProj
-  p.save()
+  let (oldProj, oldName, oldMainFile) = (p.filePath, p.name, p.mainFile)
+  var undo: Undo
+  try:
+    if renameMain:
+      if fileExists(p.mainPath): undo.moveTracked(p.mainPath, newMain)
+      p.mainFile = newName & ".nim"
+    p.name = newName
+    p.filePath = newProj
+    p.save()                                  # the new file exists before the old one goes
+  except CatchableError:
+    p.name = oldName
+    p.filePath = oldProj
+    p.mainFile = oldMainFile
+    rollback undo
+    try: removeFile newProj
+    except OSError: discard
+    raise
   if fileExists(oldProj): removeFile oldProj
 
 proc nextFormNumber(p: Project): int =
@@ -546,6 +634,7 @@ proc newInheritedFormUnit*(p: Project, ancestorUnit: string, name = ""): Project
   let rel = unixPath(relativePath(p.nfmPathOf(anc), p.dir))
   writeFile(p.dir / unit & ".nim",
             p.importModeOf expand(tmplInhNim, {"unit": unit, "form": form, "ancestor": anc.name,
+                                               "ancestorImport": p.importPath(anc, p.dir),
                                                "ancestorForm": anc.formType}))
   writeFile(p.dir / unit & ".nfm",
             expand(tmplInhNfm, {"form": form, "ancestorNfm": rel}))
@@ -582,5 +671,5 @@ proc rewriteImports*(p: Project): seq[string] =
       if p.nimPathOf(u) == f and u.isForm and u.nfmPath.len > 0 and fileExists(p.nfmPathOf(u)):
         res = syncFromNfm(res, readFile(p.nfmPathOf(u)), p.nfmPathOf(u).parentDir, p.importAll)
     if res != src:
-      writeFile(f, res)
+      writeFileAtomic(f, res)
       result.add f

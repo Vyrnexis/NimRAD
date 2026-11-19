@@ -11,6 +11,7 @@
 ## a temporary file so a crash cannot leave half a file.
 
 import std/[json, os, strutils]
+import ./fileio
 
 const
   MaxRecent* = 10
@@ -76,9 +77,7 @@ proc saveSettings*(s: Settings, path = settingsPath()): bool =
     let j = %*{"recentProjects": s.recentProjects, "theme": s.theme,
                "editorFontSize": s.editorFontSize, "nimPath": s.nimPath,
                "layout": s.layout, "showHints": s.showHints}
-    let tmp = path & ".tmp"
-    writeFile(tmp, j.pretty & "\n")
-    moveFile(tmp, path)
+    writeFileAtomic(path, j.pretty & "\n")
     true
   except CatchableError:
     false

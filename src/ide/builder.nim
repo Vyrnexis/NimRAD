@@ -13,13 +13,15 @@
 ## All the non-`Sync` procs must be called from the UI thread.
 ##
 ## `runOnUi` handlers cannot capture, so the callbacks live in module globals
-## that are only touched on the UI thread; every message carries the serial
-## number of its job, and messages of a job that was cancelled are dropped.
+## that are only touched on the UI thread. The output of a job is delivered in
+## batches (what one read of the pipe returned), and the worker waits while the
+## UI still has a backlog, so a program that prints in a loop can neither
+## flood the event queue nor use up memory. Stopping kills the whole process
+## tree (see `proctree`).
 
-import std/[os, osproc, strutils, atomics, streams]
-when defined(posix): import std/posix
+import std/[os, strutils, atomics]
 import nimvcl
-import ./project
+import ./[project, proctree]
 when defined(macosx): import ./sdllink
 
 type
@@ -37,6 +39,8 @@ type
     lines*: seq[string]    ## compile only: the whole output (sync variant)
 
   LineProc* = proc(line: string)
+  LinesProc* = proc(lines: seq[string])
+    ## The output as it arrives: all the lines of one chunk at once.
   DoneProc* = proc(ok: bool, exe: string)
   ExitProc* = proc(exitCode: int)
 
@@ -75,58 +79,49 @@ proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
 
 type JobCtl = object
   pid: Atomic[int]
+  job: Atomic[int]       # Windows job object of the process
   stop: Atomic[bool]
 
-proc killPid(pid: int) =
-  if pid <= 0: return
-  when defined(posix):
-    discard kill(Pid(pid), SIGKILL)
-  else:
-    discard execShellCmd("taskkill /pid " & $pid & " /f /t")
+proc killTree(ctl: ptr JobCtl) =
+  killTree(ctl.pid.load, ctl.job.load)
 
 proc streamProcess(exe: string, args: seq[string], workDir: string,
-                   emit: proc(line: string) {.gcsafe.}, ctl: ptr JobCtl): int =
-  ## Runs the process with stdout and stderr merged, calling `emit` for every
-  ## line, and returns its exit code (-1 when it cannot be started).
-  var p: Process
-  # A bare name ("nim") is looked up in PATH here; findExe also tries the
-  # executable suffixes of the platform (nim.exe, ...).
-  var cmd = exe
-  if not (exe.isAbsolute or '/' in exe or '\\' in exe):
-    let found = findExe(exe)
-    if found.len > 0: cmd = found
+                   emit: proc(lines: seq[string]) {.gcsafe.}, ctl: ptr JobCtl): int =
+  ## Runs the process with stdout and stderr merged, calling `emit` with the
+  ## lines of every chunk read, and returns its exit code (-1 when it cannot
+  ## be started).
+  var child: Child
   try:
-    p = startProcess(cmd, workDir, args, nil, {poUsePath, poStdErrToStdOut})
+    child = startChild(exe, args, workDir)
   except OSError as e:
-    emit "cannot start " & exe & ": " & e.msg
+    emit @["cannot start " & exe & ": " & e.msg]
     return -1
   if ctl != nil:
-    ctl.pid.store p.processID
-    if ctl.stop.load: killPid p.processID     # stop requested before the pid was known
-  # Read the pipe directly: the buffered `outputStream` waits for a full buffer.
-  let h = p.outputHandle
-  var buf = newString(4096)
+    ctl.job.store child.job
+    ctl.pid.store child.pid
+    if ctl.stop.load: killTree ctl           # stop requested before the pid was known
+  var buf = newString(16384)
   var acc = ""
   while true:
-    let n = when defined(posix): posix.read(cint(h), addr buf[0], buf.len)
-            else: p.outputStream.readData(addr buf[0], buf.len)
-    when defined(posix):
-      if n < 0 and errno == EINTR: continue
+    let n = child.readSome(buf)
     if n <= 0: break
     acc.add buf[0 ..< n]
+    var batch: seq[string]
     var start = 0
     while true:
       let nl = acc.find('\n', start)
       if nl < 0: break
       var line = acc[start ..< nl]
       if line.endsWith('\r'): line.setLen line.len - 1
-      emit line
+      batch.add line
       start = nl + 1
     if start > 0: acc = acc[start .. ^1]
-  if acc.len > 0: emit acc
-  result = p.waitForExit()
-  if ctl != nil: ctl.pid.store 0
-  p.close()
+    if batch.len > 0: emit batch
+  if acc.len > 0: emit @[acc]
+  result = child.waitChild()
+  if ctl != nil:
+    ctl.pid.store 0
+    ctl.job.store 0
 
 # --------------------------------------------------------------- sync variants
 
@@ -137,10 +132,11 @@ proc compileProjectSync*(p: Project, onLine: LineProc = nil,
   createDir p.outputPath
   var lines: seq[string]
   let code = streamProcess(opts.nimExe, p.compileArgs(opts), p.dir,
-    proc(l: string) {.gcsafe.} =
+    proc(ls: seq[string]) {.gcsafe.} =
       {.cast(gcsafe).}:
-        lines.add l
-        if onLine != nil: onLine(l), nil)
+        for l in ls:
+          lines.add l
+          if onLine != nil: onLine(l), nil)
   result = CompileResult(ok: code == 0, exitCode: code, lines: lines,
                          exe: if code == 0: p.exePath else: "")
 
@@ -149,33 +145,33 @@ proc runCapture*(exe: string, args: seq[string] = @[], workDir = "",
   ## Runs a program on the calling thread and collects its merged output.
   var lines: seq[string]
   let code = streamProcess(exe, args, workDir,
-    proc(l: string) {.gcsafe.} =
+    proc(ls: seq[string]) {.gcsafe.} =
       {.cast(gcsafe).}:
-        lines.add l
-        if onLine != nil: onLine(l), nil)
+        for l in ls:
+          lines.add l
+          if onLine != nil: onLine(l), nil)
   (code, lines)
 
 # ------------------------------------------------------------- async variants
+
+const MaxBacklog = 16          ## batches the UI may be behind before the worker waits
 
 type
   JobKind = enum jkCompile, jkRun
 
   JobArgs = object
     kind: JobKind
-    serial: int
     exe: string
     args: seq[string]
     dir: string
     outExe: string
 
-  LineMsg = object
+  LinesMsg = object
     kind: JobKind
-    serial: int
-    line: string
+    lines: seq[string]
 
   DoneMsg = object
     kind: JobKind
-    serial: int
     code: int
     exe: string
 
@@ -183,89 +179,108 @@ var
   ctls: array[JobKind, JobCtl]          # shared with the workers
   threads: array[JobKind, Thread[JobArgs]]
   threadUsed: array[JobKind, bool]      # UI thread only from here on
+  backlog: Atomic[int]                  # batches sent and not yet delivered
   gState = bsIdle
-  gSerial = 0
-  gOnLine: array[JobKind, LineProc]
+  gCancelled = false
+  gOnLines: array[JobKind, LinesProc]
   gOnCompileDone: DoneProc
   gOnExit: ExitProc
 
 proc buildState*(): BuildState = gState
 
-proc deliverLine(m: LineMsg) =
-  if m.serial == gSerial and gOnLine[m.kind] != nil:
-    try: gOnLine[m.kind](m.line)
-    except CatchableError: discard
+proc wasCancelled*(): bool =
+  ## Whether the job that just ended (see the `onDone` / `onExit` callbacks) was
+  ## stopped by `cancelCompile` / `stopProject`.
+  gCancelled
+
+proc deliverLines(m: LinesMsg) =
+  discard backlog.fetchSub 1
+  let cb = gOnLines[m.kind]
+  if cb != nil: cb(m.lines)
 
 proc deliverDone(m: DoneMsg) =
-  if m.serial != gSerial: return
   gState = bsIdle
-  try:
-    case m.kind
-    of jkCompile:
-      let cb = gOnCompileDone
-      gOnCompileDone = nil
-      if cb != nil: cb(m.code == 0, if m.code == 0: m.exe else: "")
-    of jkRun:
-      let cb = gOnExit
-      gOnExit = nil
-      if cb != nil: cb(m.code)
-  except CatchableError: discard
+  case m.kind
+  of jkCompile:
+    let cb = gOnCompileDone
+    gOnCompileDone = nil
+    if cb != nil: cb(m.code == 0, if m.code == 0: m.exe else: "")
+  of jkRun:
+    let cb = gOnExit
+    gOnExit = nil
+    if cb != nil: cb(m.code)
 
 proc worker(a: JobArgs) {.thread.} =
   let kind = a.kind
-  let serial = a.serial
   var code = -1
   {.cast(gcsafe).}:
     code = streamProcess(a.exe, a.args, a.dir,
-      proc(l: string) {.gcsafe.} =
-        runOnUi(LineMsg(kind: kind, serial: serial, line: l), deliverLine),
+      proc(ls: seq[string]) {.gcsafe.} =
+        # let the UI catch up instead of piling batches into its queue
+        while backlog.load >= MaxBacklog and not ctls[kind].stop.load: sleep 2
+        discard backlog.fetchAdd 1
+        runOnUi(LinesMsg(kind: kind, lines: ls), deliverLines),
       addr ctls[kind])
-  runOnUi(DoneMsg(kind: kind, serial: serial, code: code, exe: a.outExe), deliverDone)
+  runOnUi(DoneMsg(kind: kind, code: code, exe: a.outExe), deliverDone)
 
-proc startJob(kind: JobKind, a: JobArgs) =
+proc startJob(kind: JobKind, a: JobArgs, onLines: LinesProc) =
   if threadUsed[kind]:
     joinThread threads[kind]      # the previous worker has delivered its end
   ctls[kind].stop.store false
   ctls[kind].pid.store 0
+  ctls[kind].job.store 0
+  backlog.store 0
+  gCancelled = false
+  gOnLines[kind] = onLines
   threadUsed[kind] = true
   createThread(threads[kind], worker, a)
 
-proc compileProject*(p: Project, onLine: LineProc, onDone: DoneProc,
+proc eachLine(onLine: LineProc): LinesProc =
+  if onLine == nil: return nil
+  result = proc(lines: seq[string]) =
+    for l in lines: onLine(l)
+
+proc compileProject*(p: Project, onLines: LinesProc, onDone: DoneProc,
                      opts = defaultBuildOptions()): bool =
   ## Starts the compiler in a worker thread. Returns false (and does nothing)
-  ## when a build or program is already running. `onLine` and `onDone` run on
+  ## when a build or program is already running. `onLines` and `onDone` run on
   ## the UI thread; `onDone(ok, exe)` gets `exe = ""` when the build failed.
   if gState != bsIdle: return false
   createDir p.outputPath
-  inc gSerial
   gState = bsCompiling
-  gOnLine[jkCompile] = onLine
   gOnCompileDone = onDone
-  startJob(jkCompile, JobArgs(kind: jkCompile, serial: gSerial, exe: opts.nimExe,
-                              args: p.compileArgs(opts), dir: p.dir, outExe: p.exePath))
+  startJob(jkCompile, JobArgs(kind: jkCompile, exe: opts.nimExe, args: p.compileArgs(opts),
+                              dir: p.dir, outExe: p.exePath), onLines)
+  true
+
+proc compileProject*(p: Project, onLine: LineProc, onDone: DoneProc,
+                     opts = defaultBuildOptions()): bool =
+  compileProject(p, eachLine(onLine), onDone, opts)
+
+proc runProject*(p: Project, onLines: LinesProc, onExit: ExitProc): bool =
+  ## Starts the built program (`exePath`) with the project's `runArgs`; its
+  ## output goes to `onLines`, and `onExit(code)` is called when it ends (also
+  ## after `stopProject`). Returns false when busy or when there is no program.
+  if gState != bsIdle or not fileExists(p.exePath): return false
+  gState = bsRunning
+  gOnExit = onExit
+  startJob(jkRun, JobArgs(kind: jkRun, exe: p.exePath, args: p.runArgs, dir: p.dir,
+                          outExe: p.exePath), onLines)
   true
 
 proc runProject*(p: Project, onLine: LineProc, onExit: ExitProc): bool =
-  ## Starts the built program (`exePath`) with the project's `runArgs`; its
-  ## output goes to `onLine`, and `onExit(code)` is called when it ends (also
-  ## after `stopProject`). Returns false when busy or when there is no program.
-  if gState != bsIdle or not fileExists(p.exePath): return false
-  inc gSerial
-  gState = bsRunning
-  gOnLine[jkRun] = onLine
-  gOnExit = onExit
-  startJob(jkRun, JobArgs(kind: jkRun, serial: gSerial, exe: p.exePath,
-                          args: p.runArgs, dir: p.dir, outExe: p.exePath))
-  true
+  runProject(p, eachLine(onLine), onExit)
 
 proc stopJob(kind: JobKind) =
+  gCancelled = true
   ctls[kind].stop.store true
-  killPid ctls[kind].pid.load
+  killTree addr ctls[kind]
 
 proc stopProject*() =
-  ## Kills the running program (its `onExit` still fires). No-op otherwise.
+  ## Kills the running program and everything it started (its `onExit` still
+  ## fires). No-op otherwise.
   if gState == bsRunning: stopJob jkRun
 
 proc cancelCompile*() =
-  ## Kills a running compiler (`onDone(false, "")` still fires).
+  ## Kills a running compiler and its helpers (`onDone(false, "")` still fires).
   if gState == bsCompiling: stopJob jkCompile

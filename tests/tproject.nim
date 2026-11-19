@@ -32,6 +32,42 @@ suite "project file":
     check q.units[0].isForm and not q.units[1].isForm
     check q.nfmPathOf(q.units[1]) == ""
 
+  test "the format version and the application version are separate keys":
+    let p = Project(filePath: root / "fv" / "fv.nimproj", name: "fv", mainFile: "fv.nim",
+                    outputDir: "build", version: "2.5")
+    let j = p.toJson
+    check j["formatVersion"].getInt == FormatVersion
+    check j["version"].getStr == "2.5"
+    createDir root / "fv"
+    p.save()
+    check loadProject(p.filePath).version == "2.5"
+
+  test "a file from a newer IDE is refused":
+    createDir root / "newer"
+    writeFile(root / "newer" / "n.nimproj", """{"formatVersion": 99, "name": "n"}""")
+    expect ProjectError: discard loadProject(root / "newer" / "n.nimproj")
+
+  test "fields this version does not know survive a save":
+    createDir root / "keep"
+    writeFile(root / "keep" / "k.nimproj",
+              """{"formatVersion": 1, "name": "k", "future": {"a": [1, 2]}, "autoImports": true}""")
+    let p = loadProject(root / "keep" / "k.nimproj")
+    p.autoImports = false
+    p.save()
+    let j = parseJson(readFile(p.filePath))
+    check j["future"]["a"].len == 2
+    check not j.hasKey("autoImports")
+    check j["formatVersion"].getInt == 1
+
+  test "saving an unchanged project does not touch the file":
+    let p = Project(filePath: root / "fv" / "same.nimproj", name: "same", mainFile: "same.nim",
+                    outputDir: "build")
+    p.save()
+    let t = getLastModificationTime(p.filePath)
+    sleep 1100
+    p.save()
+    check getLastModificationTime(p.filePath) == t
+
   test "defaults and tolerance":
     writeFile(root / "min.nimproj", """{"name": "m", "units": [1, {"name": "x"}], "nimFlags": "bad"}""")
     let p = loadProject(root / "min.nimproj")
@@ -127,6 +163,51 @@ suite "new application":
     let r = p.build()
     check r.ok
     check p.smoke().exitCode == 0
+
+suite "units outside the program's folder":
+  test "they are imported by a path relative to the program and still build":
+    let app = root / "outside" / "app"
+    let p = newApplicationProject(app, "app")
+    createDir root / "outside" / "ext"
+    createDir app / "sub"
+    writeFile(root / "outside" / "ext" / "helper.nim", "const helperValue* = 42\n")
+    writeFile(app / "sub" / "local.nim", "const localValue* = 1\n")
+    let h = p.addUnit("helper", root / "outside" / "ext" / "helper.nim")
+    let l = p.addUnit("local", app / "sub" / "local.nim")
+    check p.addToMain(h) and p.addToMain(l)
+    let main = readFile(p.mainPath)
+    check "import ../ext/helper\n" in main and "import sub/local\n" in main
+    check p.build().ok
+    check p.smoke().exitCode == 0
+    # removing takes the same lines out
+    p.removeUnit("helper")
+    check "ext/helper" notin readFile(p.mainPath)
+    # renaming a unit in another folder follows the import
+    p.renameUnit("local", "nearby")
+    check "import sub/nearby\n" in readFile(p.mainPath)
+    check fileExists(app / "sub" / "nearby.nim")
+    check p.build().ok
+
+suite "renaming is all or nothing":
+  test "a write that fails puts the moved files back":
+    when defined(posix):
+      let app = root / "atomic" / "app"
+      let p = newApplicationProject(app, "app")
+      createDir app / "sub"
+      writeFile(app / "sub" / "foo.nim", "const foo* = 1\n")
+      discard p.addUnit("foo", app / "sub" / "foo.nim")
+      p.addToMain(p.units[^1])
+      p.save()
+      let mainBefore = readFile(p.mainPath)
+      let before = p.units
+      setFilePermissions(app, {fpUserRead, fpUserExec})        # the program's folder is read-only
+      try:
+        expect CatchableError: p.renameUnit("foo", "bar")
+      finally:
+        setFilePermissions(app, {fpUserRead, fpUserWrite, fpUserExec})
+      check fileExists(app / "sub" / "foo.nim") and not fileExists(app / "sub" / "bar.nim")
+      check readFile(p.mainPath) == mainBefore
+      check p.units == before
 
 suite "rename the project":
   test "the project file and the main file move, the units stay":

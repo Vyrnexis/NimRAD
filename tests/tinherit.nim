@@ -132,6 +132,25 @@ suite "inherited forms in the IDE":
     let e3 = newUnitEditor(proj, u3.name, host)
     check Button(e3.find("Button1")).caption == "Pushed"
 
+  test "a component the descendants depend on cannot be renamed or deleted in the ancestor":
+    let e1 = newUnitEditor(proj, "unit1", host)
+    e1.bindInspector(insp)
+    let b = e1.find("Button1")
+    e1.selectComponent(b)
+    insp.setValue("name", pvString("OkBtn"))
+    check b.name == "Button1"
+    check "unit2" in insp.lastError
+    check not e1.deleteSelection()
+    check e1.find("Button1") != nil
+    # a component nobody inherits can still be renamed
+    e1.beginCreate "Label"
+    let body = e1.designedForm
+    host.click(pointF(body.formOrigin.x + 200, body.formOrigin.y + 150))
+    let lab = e1.find("Label1")
+    e1.selectComponent(lab)
+    insp.setValue("name", pvString("Title"))
+    check lab.name == "Title"
+
   test "descendant of a descendant; renaming the ancestor updates the files":
     let u = proj.newInheritedFormUnit("unit2", "leaf")
     check u.ancestor == "unit2"

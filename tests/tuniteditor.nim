@@ -217,6 +217,17 @@ suite "unit editor":
     check r.ed.designer.nonVisuals.len == 2
     check r.ed.componentTree.anyIt(it[0].name == "Timer1")
 
+  test "closing the editor stops the form's timers":
+    let r = rig("appTimer")
+    r.ed.beginCreate "Timer"
+    var t: Timer
+    for (c, _) in r.ed.componentTree:
+      if c of Timer: t = Timer(c)
+    check t != nil
+    t.enabled = true
+    r.ed.dispose()
+    check not t.enabled
+
   test "reloadFromDisk matches the files":
     let r = rig("app5")
     let b = r.dropButton()

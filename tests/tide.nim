@@ -855,6 +855,38 @@ suite "running":
     check m.list.items[m.list.items.count - 1].caption.startsWith("Program stopped with exit code")
     check not ide.caption.endsWith("[Running]")
 
+suite "run and stop details":
+  test "Run always asks the compiler, so nothing stale runs":
+    ide.setRunParameters "--smoke"
+    let n = ide.buildCount
+    check ide.run()
+    check ide.waitIdle(120)
+    check ide.buildCount == n + 1
+    check ide.lastExitCode == 0
+
+  test "stopping a build says it was cancelled, not that it failed":
+    ide.setRunParameters "--smoke"
+    check ide.compile()
+    ide.programReset()
+    check ide.waitIdle(60)
+    let m = ide.messages
+    check m.list.items[m.list.items.count - 1].caption == "Build cancelled"
+    check "Build failed" notin ide.messages.output.text
+
+  test "Find Unit in the program file of a project without units does not crash":
+    check ide.closeAllEditors()
+    let saved = ide.project.units
+    ide.project.units = @[]
+    let ed = ide.openMain()
+    check ed != nil
+    ed.code.text = "Button\n"
+    ed.code.caretPos = (0, 2)
+    ide.pickItem = proc(title: string, items: seq[string], selected: int): int = 0
+    discard ide.findUnitImport()
+    ide.pickItem = nil
+    ide.project.units = saved
+    ed.reloadFromDisk()
+
 suite "reopen and startup":
   setup:
     errors.setLen 0

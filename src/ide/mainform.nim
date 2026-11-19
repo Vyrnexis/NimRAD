@@ -60,9 +60,7 @@ type
     pendingRun: bool
     failedWasRun: bool         ## the build that failed was started by Run
     autoRetried: bool          ## the automatic import fix has rebuilt once already
-    optionsChanged: bool       ## compiler options changed since the last build
     running: bool
-    stopRequested: bool
     buildStart: float
     runUnits: int
     lastExitCode*: int          ## exit code of the program that ran last
@@ -561,6 +559,7 @@ proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
   let sheet = ide.sheets[i]
   ide.editors.delete i
   ide.sheets.delete i
+  ed.dispose()
   sheet.free()
   if ide.editors.len > 0:
     ide.pages.activePageIndex = min(i, ide.editors.len - 1)
@@ -804,7 +803,6 @@ proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
     ide.say(if p.importAll: "All units import nimvcl (" & $changed.len & " files changed)"
             else: "Units import the prelude and their controls (" & $changed.len & " files changed)")
   p.save()
-  ide.optionsChanged = true
   if not modeChanged: ide.say "Project options saved"
 
 proc showProjectOptions*(ide: IdeForm) =
@@ -983,20 +981,19 @@ proc startProgram(ide: IdeForm) =
   let p = ide.project
   ide.messages.addOutput "--- running " & p.exePath.extractFilename & " ---"
   # the program's stdout and stderr arrive line by line while it runs
-  let onLine = proc(line: string) = ide.messages.addOutput(line)
+  let onLines = proc(lines: seq[string]) = ide.messages.addOutputLines(lines)
   let onExit = proc(code: int) =
     ide.running = false
     ide.lastExitCode = code
-    let how = if ide.stopRequested: "stopped" else: "ended"
+    let stopped = wasCancelled()
+    let how = if stopped: "stopped" else: "ended"
     ide.messages.addNote("Program " & how & " with exit code " & $code,
-                         if code == 0: icSuccess elif ide.stopRequested: icInfo else: icError)
-    ide.stopRequested = false
+                         if code == 0: icSuccess elif stopped: icInfo else: icError)
     ide.setPart(spState, "Ready")
     ide.say "Program " & how & " (exit code " & $code & ")"
     ide.updateCaption()
     ide.refreshActions()
-  ide.stopRequested = false
-  let started = runProject(p, onLine, onExit)
+  let started = runProject(p, onLines, onExit)
   if started:
     ide.running = true
     ide.messages.showOutput()
@@ -1045,7 +1042,7 @@ proc componentsOf(ide: IdeForm, file: string): seq[string] =
 
 proc fixesOfMessage(ide: IdeForm, m: Message): seq[QuickFix] =
   if ide.project == nil: return
-  result = fixesFor(m, ide.componentsOf(m.file))
+  result = fixesFor(m, proc(): seq[string] = ide.componentsOf(m.file))
   if ide.project.importAll:             # everything is imported already
     result = result.filterIt(it.kind != fkAddImport)
 
@@ -1135,8 +1132,12 @@ proc findUnitImport*(ide: IdeForm): bool {.discardable.} =
     if ide.pickItem != nil: ide.pickItem("Add import for " & word, mods, 0)
     else: pickItemDefault("Add import for " & word, mods, 0)
   if i < 0 or i >= mods.len: return false
-  let file = ide.project.nimPathOf(ide.project.units[max(ide.project.findUnit(ed.unitName), 0)])
-  let target = if ed.unitName == ide.project.name: ide.project.mainPath else: file
+  let target =
+    if ide.isMainEditor(ed): ide.project.mainPath
+    else:
+      let k = ide.project.findUnit(ed.unitName)
+      if k < 0: return false
+      ide.project.nimPathOf(ide.project.units[k])
   result = ide.addImportTo(target, mods[i])
   ide.say(if result: "Added import " & mods[i] else: mods[i] & " is already imported")
 
@@ -1168,7 +1169,11 @@ proc compileDone(ide: IdeForm, ok: bool) =
   ide.lastBuildInfo = $lines & " lines, " & secs(dt)
   ide.setPart(spBuild, ide.lastBuildInfo)
   ide.setPart(spState, "Ready")
-  if ok:
+  if wasCancelled():
+    ide.pendingRun = false
+    ide.messages.addNote("Build cancelled", icInfo)
+    ide.say "Build cancelled"
+  elif ok:
     ide.messages.addNote("Build succeeded: " & ide.project.name & " (" & $ide.messages.warningCount &
                          " warnings, " & secs(dt) & ")", icSuccess)
     ide.say "Build succeeded"
@@ -1190,7 +1195,6 @@ proc compileDone(ide: IdeForm, ok: bool) =
 proc compileWith(ide: IdeForm, notes: seq[string]): bool =
   if ide.project == nil or ide.busy: return false
   ide.saveAll()
-  ide.optionsChanged = false
   ide.messages.clear()
   ide.clearErrorMarkers()
   ide.messages.showMessages()
@@ -1202,9 +1206,9 @@ proc compileWith(ide: IdeForm, notes: seq[string]): bool =
   ide.setPart(spState, "Compiling...")
   ide.say "Compiling " & ide.project.name
   ide.buildStart = epochTime()
-  let onLine = proc(line: string) = ide.messages.feed(line)
+  let onLines = proc(lines: seq[string]) = ide.messages.feedLines(lines)
   let onDone = proc(ok: bool, exe: string) = ide.compileDone(ok)
-  let started = compileProject(ide.project, onLine, onDone, ide.buildOptions)
+  let started = compileProject(ide.project, onLines, onDone, ide.buildOptions)
   if not started:
     ide.setPart(spState, "Ready")
     return false
@@ -1217,38 +1221,20 @@ proc compile*(ide: IdeForm): bool =
   ide.autoRetried = false
   ide.compileWith(@[])
 
-proc needsBuild(ide: IdeForm): bool =
-  let p = ide.project
-  if not fileExists(p.exePath) or ide.optionsChanged: return true
-  if ide.modifiedUnits.len > 0: return true
-  let t = getLastModificationTime(p.exePath)
-  var files = @[p.mainPath, p.dir / "nim.cfg"]
-  for u in p.units:
-    files.add p.nimPathOf(u)
-    if u.nfmPath.len > 0: files.add p.nfmPathOf(u)
-  for f in files:
-    if fileExists(f) and getLastModificationTime(f) > t: return true
-  false
-
 proc run*(ide: IdeForm): bool =
-  ## Run > Run: compiles when something changed, then starts the program.
+  ## Run > Run: builds (the compiler knows what is out of date and does nothing
+  ## when the program is current), then starts the program.
   if ide.project == nil or ide.busy: return false
   ide.saveAll()
-  if ide.needsBuild:
-    ide.pendingRun = true
-    result = ide.compile()
-    if not result: ide.pendingRun = false
-  else:
-    ide.startProgram()
-    result = true
+  ide.pendingRun = true
+  result = ide.compile()
+  if not result: ide.pendingRun = false
 
 proc programReset*(ide: IdeForm) =
   ## Run > Program Reset: stops the running program (or the compiler).
   ide.pendingRun = false
   case buildState()
-  of bsRunning:
-    ide.stopRequested = true
-    stopProject()
+  of bsRunning: stopProject()
   of bsCompiling: cancelCompile()
   of bsIdle: discard
 

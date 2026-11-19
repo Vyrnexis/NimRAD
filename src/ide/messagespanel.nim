@@ -19,6 +19,10 @@ import std/[os, strutils]
 import nimvcl
 import ./[messages, icons, quickfix]
 
+const
+  MaxOutputLines* = 5000     ## what the Output tab keeps
+  OutputTrimStep = 500       ## trimmed in steps, not line by line
+
 type
   Row = object
     msg: int                   ## index into `msgs`, -1 for a note of the IDE
@@ -160,17 +164,33 @@ proc clear*(p: MessagesPanel) =
   p.warningCount = 0
   p.parser = MessageParser()
 
+proc addOutputLines*(p: MessagesPanel, lines: openArray[string]) =
+  ## Raw text for the Output tab, which scrolls to the end once for the whole
+  ## batch. The tab keeps the last `MaxOutputLines` lines.
+  if lines.len == 0: return
+  let o = p.output
+  for l in lines: o.lines.add l
+  if o.lines.count > MaxOutputLines + OutputTrimStep:
+    var kept: seq[string]
+    for i in o.lines.count - MaxOutputLines ..< o.lines.count: kept.add o.lines[i]
+    o.text = kept.join("\n")
+  o.caretPos = (o.lines.count - 1, 0)
+
 proc addOutput*(p: MessagesPanel, line: string) =
   ## A line of raw text for the Output tab (which scrolls to the end).
-  p.output.lines.add line
-  p.output.caretPos = (p.output.lines.count - 1, 0)
+  p.addOutputLines([line])
+
+proc feedLines*(p: MessagesPanel, lines: openArray[string]) =
+  ## Lines of compiler output: to the Output tab and to the parser.
+  p.addOutputLines lines
+  for line in lines:
+    p.parser.feed line
+    for m in p.parser.take():
+      if m.wanted: p.addRow m
 
 proc feed*(p: MessagesPanel, line: string) =
   ## One line of compiler output: to the Output tab and to the parser.
-  p.addOutput line
-  p.parser.feed line
-  for m in p.parser.take():
-    if m.wanted: p.addRow m
+  p.feedLines([line])
 
 proc finish*(p: MessagesPanel) =
   ## The output ended: completes the message that was still open.

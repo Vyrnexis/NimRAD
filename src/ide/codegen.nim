@@ -314,10 +314,12 @@ proc renameComponentRefs*(src, oldName, newName: string, formType = ""): string 
 
 # ---------------------------------------------------------------- imports
 
-proc renameImport*(src, oldUnit, newUnit: string): string =
+proc renameImport*(src, oldUnit, newUnit: string, dir = ""): string =
   ## Updates `import oldUnit`, `import a, oldUnit`, `import dir/[oldUnit, b]`
   ## (as the last path part) and `from oldUnit import x` to the new name.
   ## Longer paths such as `oldUnit/sub` and other identifiers are not touched.
+  ## `dir` is the folder the unit is imported from when it is not the folder of
+  ## the file (`sub`, `../x`): `import sub/oldUnit` is then the import of the unit.
   var s = split(src)
   var edits: seq[tuple[line, start, len: int, repl: string]]
   var inImport = false
@@ -354,7 +356,12 @@ proc renameImport*(src, oldUnit, newUnit: string): string =
       let nextCh = if after < l.len: l[after] else: ' '
       let prevCh = if t.start > 0: l[t.start - 1] else: ' '
       let prev2 = if t.start > 1: l[t.start - 2] else: ' '
-      let startsPath = prevCh in {' ', ',', '[', '\t'} or (prevCh == '/' and prev2 == '.')
+      let before = l[0 ..< t.start]
+      let startsPath =
+        if dir.len > 0:
+          before.endsWith(dir & "/") and
+            (before.len == dir.len + 1 or before[before.len - dir.len - 2] in {' ', ',', '[', '\t'})
+        else: prevCh in {' ', ',', '[', '\t'} or (prevCh == '/' and prev2 == '.')
       if startsPath and nextCh != '/':
         edits.add (t.line, t.start, t.len, newUnit)
     if afterFrom and txt == "import": afterFrom = false
