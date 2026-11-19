@@ -84,8 +84,8 @@ suite "ensureHandler":
 
   test "no loadForm line: the stub goes after the push/pop region of the imports":
     let src = "{.push warning[UnusedImport]: off.}\nimport nimvcl/core/[control, form]\n" &
-              "# nimvcl-ide: imports begin\nimport nimvcl/controls/button\n" &
-              "# nimvcl-ide: imports end\n{.pop.}\n"
+              "# nimrad: imports begin\nimport nimvcl/controls/button\n" &
+              "# nimrad: imports end\n{.pop.}\n"
     let r = ensureHandler(src, "Form1", "aClick", "sender: Control")
     let lines = r.text.splitLines
     check lines[5] == "{.pop.}"

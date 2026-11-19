@@ -442,7 +442,7 @@ proc importPath*(p: Project, u: ProjectUnit, fromDir: string): string =
 
 proc addToMain*(p: Project, u: ProjectUnit): bool {.discardable.} =
   ## Adds `import <unit>` to the main file and, for a form, its create line
-  ## (only between the `nimvcl-ide:` markers, see `mainfile`). True when the
+  ## (only between the `nimrad:` markers, see `mainfile`). True when the
   ## file changed; false when it is missing or has no markers.
   let ft = if u.isForm: u.formType else: ""
   let imp = p.importPath(u, p.mainPath.parentDir)

@@ -2,26 +2,26 @@
 ## between marker comments:
 ##
 ## ```nim
-## # nimvcl-ide: imports begin
+## # nimrad: imports begin
 ## {.push warning[UnusedImport]: off.}
 ## import unit1
 ## {.pop.}
-## # nimvcl-ide: imports end
+## # nimrad: imports end
 ## ...
-##   # nimvcl-ide: forms begin
+##   # nimrad: forms begin
 ##   let mainForm = newForm1()
 ##   let form2 {.used.} = newForm2()
-##   # nimvcl-ide: forms end
+##   # nimrad: forms end
 ## ```
 ##
 ## A top-level `fonts` block (after the imports) registers the project's fonts:
 ##
 ## ```nim
-## # nimvcl-ide: fonts begin
+## # nimrad: fonts begin
 ## import nimvcl/graphics/font
 ## const projectFont1Regular = staticRead("fonts/Foo-Regular.ttf")
 ## registerFontFamilyData("Foo", projectFont1Regular)
-## # nimvcl-ide: fonts end
+## # nimrad: fonts end
 ## ```
 ##
 ## `imports` holds one `import unitN` per unit (inside a `push`/`pop` pair that
@@ -48,16 +48,28 @@ const
 
 type BlockRange* = tuple[b, e: int]   ## line index of the begin and end marker; -1 = none
 
-func beginMarker*(name: string): string = "# nimvcl-ide: " & name & " begin"
-func endMarker*(name: string): string = "# nimvcl-ide: " & name & " end"
+const
+  MarkerPrefix* = "# nimrad: "
+  LegacyMarkerPrefix* = "# nimvcl-ide: "   ## written by the IDE before it was renamed
+  ## Marker prefixes the IDE reads, the current one first. Projects keep the
+  ## prefix they already have (a block is only ever rewritten between its
+  ## markers); every block the IDE creates uses `MarkerPrefix`.
+
+func beginMarker*(name: string): string = MarkerPrefix & name & " begin"
+func endMarker*(name: string): string = MarkerPrefix & name & " end"
+
+func isMarker*(t, name, suffix: string): bool =
+  ## `t` (stripped) is the `suffix` ("begin" / "end") marker of block `name`,
+  ## written with either the current or the legacy prefix.
+  t == MarkerPrefix & name & " " & suffix or t == LegacyMarkerPrefix & name & " " & suffix
 
 proc findBlock*(lines: seq[string], name: string): BlockRange =
   result = (-1, -1)
   for i, l in lines:
     let t = l.strip
     if result.b < 0:
-      if t == beginMarker(name): result.b = i
-    elif t == endMarker(name):
+      if t.isMarker(name, "begin"): result.b = i
+    elif t.isMarker(name, "end"):
       result.e = i
       return
   result = (-1, -1)

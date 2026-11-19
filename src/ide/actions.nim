@@ -80,7 +80,7 @@ const defs: array[ActId, ActDef] = [
   (aCenterH, "Center &Horizontally", "Center the selection horizontally", "", -1),
   (aCenterV, "Center &Vertically", "Center the selection vertically", "", -1),
   (aEditorOptions, "&Editor Options...", "Editor font size", "", -1),
-  (aAbout, "&About nimvcl IDE", "About", "", icHelp)]
+  (aAbout, "&About NimRAD", "About", "", icHelp)]
 
 proc `[]`*(a: IdeActions, id: ActId): Action = a.acts[id]
 

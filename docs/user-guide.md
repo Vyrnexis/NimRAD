@@ -1,6 +1,6 @@
-# nimvcl IDE user guide
+# NimRAD user guide
 
-nimvcl IDE is a Delphi 7-style environment for writing windowed applications
+NimRAD is a Delphi 7-style environment for writing windowed applications
 with [nimvcl](https://github.com/Vyrnexis/nimvcl): you draw a form, double
 click a button to write its handler, press F9, and the program runs.
 
@@ -9,8 +9,8 @@ click a button to write its handler, press F9, and the program runs.
 ## Starting
 
 ```sh
-nimble install https://github.com/Vyrnexis/nimvcl-ide    # or: nimble build -d:release in a clone
-nimvcl_ide
+nimble install https://github.com/Vyrnexis/NimRAD    # or: nimble build -d:release in a clone
+nimrad
 ```
 
 See the [README](../README.md) for the requirements (Nim 2.2+, SDL3, SDL3_ttf,
@@ -22,14 +22,14 @@ works, Compile says so in Messages.
 
 A short walk-through is in the [tutorial](tutorial.md).
 
-`build/nimvcl_ide --project path/to/app.nimproj` opens that project instead of
+`build/nimrad --project path/to/app.nimproj` opens that project instead of
 the last one (when it cannot be opened, the IDE says so and carries on as
 usual).
 
 On start it reopens the project you had open last. The very first time (or
 when that project is gone) it creates `Project1` in
 `~/nimvcl-projects/Project1`, or reopens it when it is already there. The
-title bar always reads `nimvcl IDE - <project name>`.
+title bar always reads `NimRAD - <project name>`.
 
 ## The window
 
@@ -217,7 +217,7 @@ have stay in the list, and the hints in it appear and disappear at once.
 
 ![A compile error and the jump to it](images/ide-compile-error.png)
 
-While the program runs the title bar reads `nimvcl IDE - Project1 [Running]`
+While the program runs the title bar reads `NimRAD - Project1 [Running]`
 and the `Output` tab shows what the program writes to stdout and stderr, line
 by line as it happens. When the program ends (or you stop it with
 `Ctrl+F2`), `Messages` gets a line `Program ended with exit code N`.
@@ -267,17 +267,17 @@ Delphi's `Application.CreateForm` list. The IDE edits the file in exactly two
 places, between marker comments:
 
 ```nim
-# nimvcl-ide: imports begin
+# nimrad: imports begin
 {.push warning[UnusedImport]: off.}
 import unit1
 import unit2
 {.pop.}
-# nimvcl-ide: imports end
+# nimrad: imports end
 ...
-  # nimvcl-ide: forms begin
+  # nimrad: forms begin
   let mainForm = newForm1()
   let form2 {.used.} = newForm2()
-  # nimvcl-ide: forms end
+  # nimrad: forms end
 ```
 
 **New Form** and **Add to Project** add the `import` (and, for a form, the
@@ -296,11 +296,11 @@ does not analyse the whole library on every build:
 {.push warning[UnusedImport]: off.}
 import nimvcl/prelude
 import nimvcl/dsl/formload
-# nimvcl-ide: imports begin
+# nimrad: imports begin
 import nimvcl/controls/button
 import nimvcl/controls/edit
 import nimvcl/controls/label
-# nimvcl-ide: imports end
+# nimrad: imports end
 {.pop.}
 
 loadForm Form1, "unit1.nfm"
@@ -351,7 +351,7 @@ Two project options (**Project > Options**) change how imports are handled:
 | Option | Effect |
 |---|---|
 | Add missing nimvcl imports automatically | Off by default. When a build fails only because of an `undeclared identifier` that exactly one nimvcl module declares, the IDE adds that import and builds once more. What it added is listed in Messages. Names with several candidates are left to Quick Fix |
-| Import all of nimvcl | Off by default. Units and the program say `import nimvcl   # nimvcl-ide: all` instead of the prelude, and the managed block stays empty. Every name is then known, but builds are slower (about twice as slow for a small form). Switching it rewrites every unit; switching it off restores the prelude and the controls of each form |
+| Import all of nimvcl | Off by default. Units and the program say `import nimvcl   # nimrad: all` instead of the prelude, and the managed block stays empty. Every name is then known, but builds are slower (about twice as slow for a small form). Switching it rewrites every unit; switching it off restores the prelude and the controls of each form |
 
 The table of symbols (`src/ide/symbolindex.nim`) is generated from the nimvcl
 sources by `scripts/gen_symbolindex.nim` (`nimble genindex`); a test fails when
@@ -402,19 +402,24 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 
 ## Files the IDE keeps
 
-`~/.config/nimvcl-ide/settings.json` (`$XDG_CONFIG_HOME` is honoured) holds the
+`~/.config/nimrad/settings.json` (`$XDG_CONFIG_HOME` is honoured) holds the
 recent projects, the theme, the editor font size, the compiler to run, whether
-hints are shown and the docking layout.
+hints are shown and the docking layout. (Before the rename to NimRAD the folder
+was `nimvcl-ide`; it is moved to `nimrad` the first time NimRAD starts.)
+
+Projects created by earlier versions have `# nimvcl-ide: ...` markers in their
+`.nim` files. They keep working and stay as they are; blocks NimRAD adds itself
+use `# nimrad: ...`.
 
 ## Screenshots and tests
 
-`nimvcl_ide --shots DIR` runs a scripted session (new application, a Button and
+`nimrad --shots DIR` runs a scripted session (new application, a Button and
 a Label, the handler, compile, dark theme) through simulated mouse and keyboard
 events and saves a PNG after every step. `scripts/docshots.nim` makes the
 pictures of these documents the same way. Run them headless:
 
 ```sh
-SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software nimvcl_ide --shots build/shots
+SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software nimrad --shots build/shots
 SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software nim c -r scripts/docshots.nim docs/images
 ```
 

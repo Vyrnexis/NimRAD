@@ -15,7 +15,7 @@ import ./[project, builder, ideconfig, actions, palette, projecttree,
           messagespanel, uniteditor, editortabs]
 
 const
-  AppName* = "nimvcl IDE"
+  AppName* = "NimRAD"
   AppVersion* = "0.0.1"
 
 type

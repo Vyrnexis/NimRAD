@@ -18,9 +18,9 @@ const unitText = """## unit1
 {.push warning[UnusedImport]: off.}
 import nimvcl/prelude
 import nimvcl/dsl/formload
-# nimvcl-ide: imports begin
+# nimrad: imports begin
 import nimvcl/controls/edit
-# nimvcl-ide: imports end
+# nimrad: imports end
 {.pop.}
 
 loadForm Form1, "unit1.nfm"
@@ -65,12 +65,12 @@ suite "fixesFor":
 suite "edits":
   test "the import goes above the IDE block, after the user imports":
     let a = addUserImport(unitText, "nimvcl/controls/progressbar")
-    check a == unitText.replace("# nimvcl-ide: imports begin",
-      "import nimvcl/controls/progressbar\n# nimvcl-ide: imports begin")
+    check a == unitText.replace("# nimrad: imports begin",
+      "import nimvcl/controls/progressbar\n# nimrad: imports begin")
     let b = addUserImport(a, "nimvcl/controls/trackbar")
     let lines = b.splitLines
     check lines.find("import nimvcl/controls/progressbar") < lines.find("import nimvcl/controls/trackbar")
-    check lines.find("import nimvcl/controls/trackbar") < lines.find("# nimvcl-ide: imports begin")
+    check lines.find("import nimvcl/controls/trackbar") < lines.find("# nimrad: imports begin")
     check addUserImport(b, "nimvcl/controls/trackbar") == b             # twice is once
     # the managed block is not touched by a sync afterwards
     check syncFromNfm(b, "object Form1: Form\n  object Edit1: Edit\n  end\nend\n") == b
@@ -88,9 +88,9 @@ suite "edits":
       "## x\nimport std/os\nimport nimvcl/core/form,\n  nimvcl/core/control\nimport nimvcl/controls/edit\n\nproc a() = discard\n"
     check addUserImport("## doc\n\nproc a() = discard\n", "nimvcl/controls/edit") ==
       "## doc\n\nimport nimvcl/controls/edit\nproc a() = discard\n"
-    let prog = "import std/os\nimport nimvcl/prelude\n# nimvcl-ide: imports begin\nimport unit1\n# nimvcl-ide: imports end\n"
+    let prog = "import std/os\nimport nimvcl/prelude\n# nimrad: imports begin\nimport unit1\n# nimrad: imports end\n"
     check addUserImport(prog, "nimvcl/controls/edit") ==
-      "import std/os\nimport nimvcl/prelude\nimport nimvcl/controls/edit\n# nimvcl-ide: imports begin\nimport unit1\n# nimvcl-ide: imports end\n"
+      "import std/os\nimport nimvcl/prelude\nimport nimvcl/controls/edit\n# nimrad: imports begin\nimport unit1\n# nimrad: imports end\n"
 
   test "line endings are kept":
     let crlf = unitText.replace("\n", "\r\n")
@@ -111,7 +111,7 @@ suite "import all (text)":
   test "on and off are exact opposites; the block follows the form":
     let nfm = "object Form1: Form\n  object Edit1: Edit\n  end\nend\n"
     let on = setImportAll(unitText, true)
-    check "import nimvcl   # nimvcl-ide: all" in on
+    check "import nimvcl   # nimrad: all" in on
     check "import nimvcl/prelude" notin on
     check "import nimvcl/controls/edit" notin on
     check syncFromNfm(on, nfm, "", true) == on            # stays empty while it is on
@@ -130,7 +130,7 @@ suite "import all (text)":
 
 # --------------------------------------------------------------- the IDE
 
-let root = getTempDir() / ("nimvclide-quickfix-" & $getCurrentProcessId())
+let root = getTempDir() / ("nimrad-quickfix-" & $getCurrentProcessId())
 removeDir root
 createDir root
 
@@ -218,8 +218,8 @@ suite "quick fixes in a project":
     let lines = unitSrc().splitLines
     let at = lines.find("import nimvcl/controls/progressbar")
     check at > 0
-    check at < lines.find("# nimvcl-ide: imports begin")
-    check lines.find("import nimvcl/controls/edit") > lines.find("# nimvcl-ide: imports begin")
+    check at < lines.find("# nimrad: imports begin")
+    check lines.find("import nimvcl/controls/edit") > lines.find("# nimrad: imports begin")
     check lines.count("import nimvcl/controls/progressbar") == 1
 
   test "a name with several modules asks which one":
@@ -278,7 +278,7 @@ suite "find unit":
     check picked == @["nimvcl/controls/trackbar"]
     ide.saveAll()
     let lines = unitSrc().splitLines
-    check lines.find("import nimvcl/controls/trackbar") in 1 ..< lines.find("# nimvcl-ide: imports begin")
+    check lines.find("import nimvcl/controls/trackbar") in 1 ..< lines.find("# nimrad: imports begin")
     # again: nothing to add
     ide.acts[aFindUnit].execute()
     check unitSrc().count("import nimvcl/controls/trackbar") == 1
@@ -299,7 +299,7 @@ suite "import all":
     ide.applyOptions ProjectOptions(outputDir: "build", flags: "--errorMax:100", importAll: true)
     check ide.project.importAll and loadProject(ide.project.filePath).importAll
     for src in [unitSrc(), mainSrc()]:
-      check "import nimvcl   # nimvcl-ide: all" in src
+      check "import nimvcl   # nimrad: all" in src
       check "import nimvcl/prelude" notin src
     check "import nimvcl/controls/edit" notin unitSrc()        # the managed block is empty
     check "import nimvcl/controls/trackbar" in unitSrc()       # the user's import stays
@@ -310,7 +310,7 @@ suite "import all":
   test "a new form follows the mode and saving does not refill the block":
     let u = ide.newForm()
     check u != nil
-    check "import nimvcl   # nimvcl-ide: all" in readFile(ide.project.dir / "unit2.nim")
+    check "import nimvcl   # nimrad: all" in readFile(ide.project.dir / "unit2.nim")
     let ed = ide.openUnit("unit1")
     ed.save()
     check "import nimvcl/controls/edit" notin unitSrc()
@@ -321,7 +321,7 @@ suite "import all":
     check not ide.project.importAll
     for src in [unitSrc(), mainSrc()]:
       check "import nimvcl/prelude" in src
-      check "# nimvcl-ide: all" notin src
+      check "# nimrad: all" notin src
     check "import nimvcl/controls/edit" in unitSrc()
     check build()
     let r = runCapture(exePath(ide.project), @["--smoke"], ide.project.dir)

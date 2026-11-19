@@ -1,10 +1,10 @@
-# nimvcl-ide
+# NimRAD
 
-A Delphi 7-style IDE for building windowed applications with
+NimRAD (Rapid Application Development), a Delphi 7-like RAD IDE for Nim built on
 [nimvcl](https://github.com/Vyrnexis/nimvcl): a component palette, a form
 designer, an object inspector, code editor tabs, and one-key build and run.
 
-![nimvcl IDE: the form designer](docs/images/ide-designer.png)
+![NimRAD: the form designer](docs/images/ide-designer.png)
 
 <p>
 <img src="docs/images/ide-code-build.png" width="32%" alt="The handler code and a successful build">
@@ -66,18 +66,18 @@ SDL3_image; Arch: `pacman -S sdl3 sdl3_ttf sdl3_image`). `nim` must be on the
 With nimble (this also installs nimvcl):
 
 ```sh
-nimble install https://github.com/Vyrnexis/nimvcl-ide
-nimvcl_ide
+nimble install https://github.com/Vyrnexis/NimRAD
+nimrad
 ```
 
 From source:
 
 ```sh
-git clone https://github.com/Vyrnexis/nimvcl-ide
-cd nimvcl-ide
-nimble build -d:release        # the program is ./nimvcl_ide
-./nimvcl_ide                   # opens the last project
-./nimvcl_ide --project app.nimproj
+git clone https://github.com/Vyrnexis/NimRAD
+cd NimRAD
+nimble build -d:release        # the program is ./nimrad
+./nimrad                   # opens the last project
+./nimrad --project app.nimproj
 ```
 
 The first start creates `~/nimvcl-projects/Project1`.
@@ -120,7 +120,7 @@ instead of the nimble package (see `config.nims`).
 - **Linux**: built and tested; this is what CI gates on.
 - **Windows** and **macOS**: experimental. CI has jobs for both (allowed to
   fail) that build the IDE and run the headless test suite against the nimvcl
-  release this IDE pins (`nimvcl_ide.nimble`). Known so far:
+  release this IDE pins (`nimrad.nimble`). Known so far:
   - Building and running projects looks `nim` up in `PATH` (`nim.exe` on
     Windows, found with `findExe`), starts it without a shell, and stops a
     running program with `taskkill` on Windows. Project files always store
@@ -134,7 +134,7 @@ instead of the nimble package (see `config.nims`).
     `SDL_VIDEO_DRIVER=dummy` there (what CI does).
   - Install SDL3, SDL3_ttf and SDL3_image:
     - Windows: the release zips from [libsdl-org](https://github.com/libsdl-org)
-      (DLLs next to `nimvcl_ide.exe` or on `PATH`). Do not use the MSYS2
+      (DLLs next to `nimrad.exe` or on `PATH`). Do not use the MSYS2
       `mingw-w64-x86_64-sdl3` build: its `SDL_IOFromFile` fails for every path,
       so pictures and fonts cannot be loaded.
     - macOS: `brew install sdl3 sdl3_ttf sdl3_image`. dyld does not find
@@ -151,7 +151,7 @@ instead of the nimble package (see `config.nims`).
 
 ```sh
 export SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software
-./nimvcl_ide --shots build/shots         # a scripted session, one PNG per step
+./nimrad --shots build/shots         # a scripted session, one PNG per step
 nim c -r scripts/docshots.nim docs/images   # remake the pictures of the documentation
 scripts/test.sh                          # the test suite (add -d:release for a release run)
 ```

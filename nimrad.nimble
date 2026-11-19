@@ -5,7 +5,7 @@ author        = "Vyrnexis"
 description   = "A Delphi 7-style IDE for building nimvcl applications"
 license       = "MIT"
 srcDir        = "src"
-bin           = @["nimvcl_ide"]
+bin           = @["nimrad"]
 
 # Dependencies
 

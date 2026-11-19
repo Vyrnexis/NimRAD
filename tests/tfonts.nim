@@ -10,7 +10,7 @@ import ide/[mainform, session, project, builder, mainfile, uniteditor]
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
-let root = getTempDir() / ("nimvclide-fonts-" & $getCurrentProcessId())
+let root = getTempDir() / ("nimrad-fonts-" & $getCurrentProcessId())
 removeDir root
 createDir root
 
@@ -92,7 +92,7 @@ suite "project fonts":
 end
 """)
     var u = readFile(p.dir / "unit1.nim")
-    u = u.replace("# nimvcl-ide: imports begin\n", "# nimvcl-ide: imports begin\nimport nimvcl/controls/label\n")
+    u = u.replace("# nimrad: imports begin\n", "# nimrad: imports begin\nimport nimvcl/controls/label\n")
     writeFile(p.dir / "unit1.nim", u)
     # the embedded copy must work without the fonts folder at run time
     let res = p.compileProjectSync()
@@ -105,11 +105,11 @@ end
     check r2.exitCode == 0
 
   test "main file without the fonts block gets one":
-    let src = "import x\n# nimvcl-ide: imports begin\nimport u\n# nimvcl-ide: imports end\nmain()\n"
+    let src = "import x\n# nimrad: imports begin\nimport u\n# nimrad: imports end\nmain()\n"
     let t = setFonts(src, @["import a", "reg()"])
-    check t == "import x\n# nimvcl-ide: imports begin\nimport u\n# nimvcl-ide: imports end\n" &
-               "# nimvcl-ide: fonts begin\nimport a\nreg()\n# nimvcl-ide: fonts end\nmain()\n"
-    check setFonts(t, @[]) == src.replace("main()", "# nimvcl-ide: fonts begin\n# nimvcl-ide: fonts end\nmain()")
+    check t == "import x\n# nimrad: imports begin\nimport u\n# nimrad: imports end\n" &
+               "# nimrad: fonts begin\nimport a\nreg()\n# nimrad: fonts end\nmain()\n"
+    check setFonts(t, @[]) == src.replace("main()", "# nimrad: fonts begin\n# nimrad: fonts end\nmain()")
     check setFonts(src, @[]) == src
 
 removeDir root

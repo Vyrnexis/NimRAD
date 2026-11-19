@@ -1,13 +1,13 @@
 ## ${unit}: the code of ${form}. The form itself is described in ${unit}.nfm.
 ##
-## The IDE keeps the lines between the `nimvcl-ide:` markers up to date: one
+## The IDE keeps the lines between the `nimrad:` markers up to date: one
 ## import per kind of control on the form. Other imports are yours; add them
 ## outside the markers.
 {.push warning[UnusedImport]: off.}
 import nimvcl/prelude
 import nimvcl/dsl/formload
-# nimvcl-ide: imports begin
-# nimvcl-ide: imports end
+# nimrad: imports begin
+# nimrad: imports end
 {.pop.}
 
 loadForm ${form}, "${unit}.nfm"

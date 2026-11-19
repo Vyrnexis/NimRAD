@@ -121,7 +121,7 @@ proc addToProject*(ide: IdeForm, path: string): bool =
     ide.project.save()
     if not ide.project.addToMain(u) and fileExists(ide.project.mainPath) and
        not readFile(ide.project.mainPath).hasBlock(ImportsBlock):
-      ide.say "The main file has no nimvcl-ide markers: import " & name & " there yourself"
+      ide.say "The main file has no nimrad markers: import " & name & " there yourself"
     ide.afterMainEdit(mainEd)
     ide.refreshProject()
     discard ide.openUnit(name)
@@ -140,7 +140,7 @@ proc addFontFile*(ide: IdeForm, path: string): bool =
     ide.project.registerFonts()
     if not ide.project.syncFontsBlock() and fileExists(ide.project.mainPath) and
        not readFile(ide.project.mainPath).hasBlock(ImportsBlock):
-      ide.say "The main file has no nimvcl-ide markers: register " & f.file & " there yourself"
+      ide.say "The main file has no nimrad markers: register " & f.file & " there yourself"
     ide.afterMainEdit(mainEd)
     ide.say "Added font " & f.family & " (" & f.style & ")"
     result = true

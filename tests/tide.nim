@@ -17,7 +17,7 @@ import ide/[mainform, session, project, builder, ideconfig, uniteditor, messages
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
-let root = expandFilename(getTempDir()) / ("nimvclide-ide-" & $getCurrentProcessId())
+let root = expandFilename(getTempDir()) / ("nimrad-ide-" & $getCurrentProcessId())
 
 removeDir root
 createDir root
@@ -59,14 +59,14 @@ suite "scripted session":
     check not ide.acts[aCompile].enabled
     check not ide.acts[aRun].enabled
     check not ide.acts[aReset].enabled
-    check ide.caption == "nimvcl IDE"
+    check ide.caption == "NimRAD"
 
   test "new app, Button + Label, handler, typed body, compile":
     sess = ide.runScriptedSession(root)
     check sess.error == ""
     check sess.ok
     check ide.project.name == "Project1"
-    check ide.caption == "nimvcl IDE - Project1"
+    check ide.caption == "NimRAD - Project1"
     projectFile = ide.project.filePath
 
   test "the unit files hold the form and the handler":
@@ -145,7 +145,7 @@ suite "projects":
     check ide.project == nil
     check ide.editors.len == 0
     check ide.projectTree.unitCount == 0
-    check ide.caption == "nimvcl IDE"
+    check ide.caption == "NimRAD"
     check ide.objTree.items.count == 0
     check ide.openProject(projectFile)
     check ide.project.name == "Project1"
@@ -430,7 +430,7 @@ suite "main program file":
     check "let extra {.used.} = newExtra()" in mainText()
     check ide.project.units[^1].formType == "Extra"
     check ide.removeFromProject("extra")
-    check "extra" notin mainText().toLowerAscii.replace("nimvcl-ide", "")
+    check "extra" notin mainText().toLowerAscii.replace("nimrad", "")
 
   test "Remove from Project removes the import and the create line":
     check ide.removeFromProject("helpers")
@@ -518,7 +518,7 @@ suite "save as":
     check ide.openMain() != nil
     check ide.saveProjectAs("Renamed")
     check ide.project.name == "Renamed"
-    check ide.caption == "nimvcl IDE - Renamed"
+    check ide.caption == "NimRAD - Renamed"
     check fileExists(root / "Project1" / "Renamed.nimproj")
     check fileExists(root / "Project1" / "Renamed.nim")
     check not fileExists(root / "Project1" / "Project1.nimproj")
@@ -813,12 +813,12 @@ suite "running":
       "  if \"--hang\" in commandLineParams():\n    echo \"hanging\"\n    sleep(120000)\n" &
       "  Application.init()\n"))
     ide.setRunParameters "--exit3"
-    check ide.caption == "nimvcl IDE - Renamed"
+    check ide.caption == "NimRAD - Renamed"
     check ide.run()
     check waitFor(proc(): bool = "live-line" in ide.messages.output.text, 240)
     check ide.busy                                     # the program has not ended yet
     check "err-line" notin ide.messages.output.text
-    check ide.caption == "nimvcl IDE - Renamed [Running]"
+    check ide.caption == "NimRAD - Renamed [Running]"
     check ide.status.panels[0].text == "Running"
     check ide.messages.root.activePageIndex == 1       # the Output tab
     check ide.acts[aReset].enabled and not ide.acts[aRun].enabled
@@ -831,7 +831,7 @@ suite "running":
     let last = m.list.items[m.list.items.count - 1]
     check last.caption == "Program ended with exit code 3"
     check last.imageIndex == icError
-    check ide.caption == "nimvcl IDE - Renamed"
+    check ide.caption == "NimRAD - Renamed"
     check ide.status.panels[0].text == "Ready"
     check "Program ended" in ide.status.panels[4].text
 

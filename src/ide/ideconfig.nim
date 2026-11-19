@@ -1,4 +1,4 @@
-## User settings of the IDE, in `~/.config/nimvcl-ide/settings.json`
+## User settings of the IDE, in `~/.config/nimrad/settings.json`
 ## (`$XDG_CONFIG_HOME` is honoured):
 ##
 ## ```json
@@ -29,7 +29,9 @@ type
 proc defaultSettings*(): Settings =
   Settings(theme: "light", editorFontSize: DefaultFontSize, nimPath: "nim")
 
-proc settingsDir*(): string = getConfigDir() / "nimvcl-ide"
+const LegacySettingsDirName* = "nimvcl-ide"   ## the folder before the rename to NimRAD
+
+proc settingsDir*(): string = getConfigDir() / "nimrad"
 proc settingsPath*(): string = settingsDir() / "settings.json"
 
 proc addRecent*(s: var Settings, projectPath: string) =
@@ -80,4 +82,19 @@ proc saveSettings*(s: Settings, path = settingsPath()): bool =
     writeFileAtomic(path, j.pretty & "\n")
     true
   except CatchableError:
+    false
+
+proc migrateLegacySettings*(configDir = getConfigDir()): bool =
+  ## One-time move of the settings of the pre-rename IDE (`nimvcl-ide`) to the
+  ## `nimrad` folder under `configDir`. Does nothing when the new folder already
+  ## exists or the old one does not. Returns true when something was moved;
+  ## never raises (the IDE then simply starts with defaults).
+  let old = configDir / LegacySettingsDirName
+  let dest = configDir / "nimrad"
+  if dirExists(dest) or not dirExists(old): return false
+  try:
+    moveDir(old, dest)
+    true
+  except CatchableError:
+    try: removeDir(dest) except CatchableError: discard
     false

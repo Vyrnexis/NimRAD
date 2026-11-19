@@ -1,7 +1,7 @@
 import std/[unittest, os]
 import ide/nimvclpath
 
-let root = getTempDir() / ("nimvclide-path-" & $getCurrentProcessId())
+let root = getTempDir() / ("nimrad-path-" & $getCurrentProcessId())
 removeDir root
 
 proc mk(name: string): string =

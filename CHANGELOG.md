@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- The IDE is now called NimRAD (Rapid Application Development). The package,
+  the program and the main module are `nimrad` (was `nimvcl_ide`), and the
+  repository is https://github.com/Vyrnexis/NimRAD.
+- Settings move from `nimvcl-ide/` to `nimrad/` in the user config folder the
+  first time NimRAD starts (only when `nimrad/` does not exist yet).
+- New projects get `# nimrad: ...` marker comments. Projects with the old
+  `# nimvcl-ide: ...` markers (and the `# nimvcl-ide: all` import tag) are
+  still recognised and are edited in place, keeping their markers.
+
 ## 0.1.6 - 2026-11-19
 
 - Unit paths are stored canonical like the project's own path, so a unit

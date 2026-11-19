@@ -8,7 +8,7 @@ import ide/[mainform, session, palette, actions, uniteditor, project]
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
-let root = getTempDir() / ("nimvclide-palette-" & $getCurrentProcessId())
+let root = getTempDir() / ("nimrad-palette-" & $getCurrentProcessId())
 removeDir root
 createDir root
 

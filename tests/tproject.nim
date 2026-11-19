@@ -3,7 +3,7 @@ import headless
 when defined(posix): import std/posix
 import ide/[project, builder]
 
-let root = expandFilename(getTempDir()) / ("nimvclide-proj-" & $getCurrentProcessId())
+let root = expandFilename(getTempDir()) / ("nimrad-proj-" & $getCurrentProcessId())
 removeDir root
 createDir root
 

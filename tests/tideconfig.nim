@@ -1,7 +1,7 @@
 import std/[unittest, os, strutils, sequtils]
 import ide/ideconfig
 
-let dir = getTempDir() / ("nimvclide-cfg-" & $getCurrentProcessId())
+let dir = getTempDir() / ("nimrad-cfg-" & $getCurrentProcessId())
 removeDir dir
 createDir dir
 let path = dir / "sub" / "settings.json"
@@ -55,5 +55,29 @@ suite "settings":
     let blocker = dir / "blocker"
     writeFile(blocker, "x")
     check not saveSettings(defaultSettings(), blocker / "nope" / "settings.json")
+
+removeDir dir
+
+suite "settings folder rename":
+  test "the nimvcl-ide folder is moved to nimrad once":
+    let cfg = dir / "cfg"
+    createDir(cfg / "nimvcl-ide")
+    writeFile(cfg / "nimvcl-ide" / "settings.json", """{"theme": "dark"}""")
+    check migrateLegacySettings(cfg)
+    check not dirExists(cfg / "nimvcl-ide")
+    check loadSettings(cfg / "nimrad" / "settings.json").theme == "dark"
+    check not migrateLegacySettings(cfg)
+
+  test "an existing nimrad folder wins and the old one is left alone":
+    let cfg = dir / "cfg2"
+    createDir(cfg / "nimvcl-ide")
+    createDir(cfg / "nimrad")
+    writeFile(cfg / "nimvcl-ide" / "settings.json", """{"theme": "dark"}""")
+    check not migrateLegacySettings(cfg)
+    check fileExists(cfg / "nimvcl-ide" / "settings.json")
+    check not fileExists(cfg / "nimrad" / "settings.json")
+
+  test "nothing to migrate":
+    check not migrateLegacySettings(dir / "cfg3")
 
 removeDir dir

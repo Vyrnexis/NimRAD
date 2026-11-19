@@ -6,17 +6,17 @@ import ide/mainfile
 const base = """## demo
 import std/os
 import nimvcl
-# nimvcl-ide: imports begin
+# nimrad: imports begin
 {.push warning[UnusedImport]: off.}
 import unit1
 {.pop.}
-# nimvcl-ide: imports end
+# nimrad: imports end
 
 proc main() =
   Application.init()
-  # nimvcl-ide: forms begin
+  # nimrad: forms begin
   let mainForm = newForm1()
-  # nimvcl-ide: forms end
+  # nimrad: forms end
   Application.run(mainForm)
 
 main()
@@ -38,7 +38,7 @@ suite "main file blocks":
   test "a plain unit only adds the import":
     let s = base.addUnit("helpers", "")
     check "import helpers" in s
-    check "new" notin s.replace("newForm1", "").replace("import nimvcl", "").replace("nimvcl-ide", "")
+    check "new" notin s.replace("newForm1", "").replace("import nimvcl", "").replace("nimrad", "")
     check s.removeUnit("helpers", "") == base
 
   test "adding twice changes nothing more":
@@ -73,10 +73,10 @@ suite "main file blocks":
     check "let mainForm = newForm1()" in base.removeUnit("unitX", "Form")   # not a prefix match
 
   test "a missing marker leaves the file alone":
-    let noImports = base.replace("# nimvcl-ide: imports end\n", "")
+    let noImports = base.replace("# nimrad: imports end\n", "")
     check noImports.addUnit("unit2", "Form2") == noImports.addForm("Form2")   # the forms block still works
     check "import unit2" notin noImports.addUnit("unit2", "Form2")
-    let noForms = base.replace("# nimvcl-ide: forms begin\n", "")
+    let noForms = base.replace("# nimrad: forms begin\n", "")
     check noForms.addForm("Form2") == noForms
     check noForms.removeUnit("unit1", "Form1").contains("let mainForm")  # create line stays
     check not hasBlock(noForms, FormsBlock) and hasBlock(noForms, ImportsBlock)
@@ -84,7 +84,7 @@ suite "main file blocks":
     check "".addUnit("a", "B") == ""
 
   test "an end marker before its begin does not count":
-    let s = "# nimvcl-ide: forms end\n# nimvcl-ide: forms begin\n"
+    let s = "# nimrad: forms end\n# nimrad: forms begin\n"
     check s.addForm("Form2") == s
 
   test "an existing import elsewhere is not repeated":
@@ -99,7 +99,7 @@ suite "main file blocks":
     check s.removeUnit("unit2", "Form2") == crlf
 
   test "indent of the forms block, and tabs":
-    let s = base.replace("  # nimvcl-ide: forms begin", "\t# nimvcl-ide: forms begin")
+    let s = base.replace("  # nimrad: forms begin", "\t# nimrad: forms begin")
     check "\n\tlet form2 {.used.} = newForm2()\n" in s.addForm("Form2")
 
   test "the main form is the one on the mainForm line":
@@ -114,3 +114,21 @@ suite "main file blocks":
     check formVar("Form2") == "form2"
     let s = base.addUnit("mainform2", "MainForm")
     check "let mainFormCreated {.used.} = newMainForm()" in s
+
+suite "projects written before the rename":
+  const old = base.replace("# nimrad: ", "# nimvcl-ide: ")
+
+  test "the old markers are found":
+    check hasBlock(old, ImportsBlock) and hasBlock(old, FormsBlock)
+    check not hasBlock(old, FontsBlock)
+
+  test "blocks are edited in place and keep their markers":
+    let s = old.addUnit("unit2", "Form2")
+    check "# nimvcl-ide: imports begin" in s and "# nimrad:" notin s
+    check "import unit2" in s and "newForm2" in s
+    check s.removeUnit("unit2", "Form2") == old
+
+  test "a new fonts block uses the new marker next to the old ones":
+    let s = old.setFonts(@["reg()"])
+    check "# nimrad: fonts begin" in s and "# nimvcl-ide: imports begin" in s
+    check s.setFonts(@["x()"]).count("fonts begin") == 1

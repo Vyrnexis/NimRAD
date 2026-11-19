@@ -4,7 +4,7 @@
 ##       nim c -r scripts/docshots.nim docs/images
 ##
 ## The IDE is driven headless through simulated mouse and keyboard events (the
-## same helpers as `nimvcl_ide --shots`); nothing opens a window.
+## same helpers as `nimrad --shots`); nothing opens a window.
 
 import std/[os, strutils]
 import nimvcl
@@ -35,7 +35,7 @@ proc shot(ide: IdeForm, dir, name: string) =
 proc main() =
   let dir = if paramCount() >= 1: paramStr(1) else: "docs/images"
   createDir dir
-  let work = getTempDir() / ("nimvcl-ide-docshots-" & $getCurrentProcessId())
+  let work = getTempDir() / ("nimrad-docshots-" & $getCurrentProcessId())
   removeDir work
   createDir work
   Application.init()

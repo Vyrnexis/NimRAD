@@ -37,7 +37,7 @@ proc newDemo(dir: string): Demo =
   new result
   let d = result
   d.initForm()
-  d.caption = "nimvcl-ide: unit editor"
+  d.caption = "NimRAD: unit editor"
   d.setBounds(0, 0, 1180, 720)
   d.proj = newApplicationProject(dir, "demo")
   d.status = newLabel(d, "Pick a class, then click on the form.")
@@ -61,7 +61,7 @@ proc newDemo(dir: string): Demo =
   d.ed.bindInspector(d.insp)
   d.ed.onMessage = proc(e: UnitEditor, m: string) = d.say m
   d.ed.onModifiedChanged = proc(e: UnitEditor) =
-    d.caption = "nimvcl-ide: unit editor" & (if e.modified: " *" else: "")
+    d.caption = "NimRAD: unit editor" & (if e.modified: " *" else: "")
   d.palette.onChange = proc(s: Control) =
     let i = d.palette.itemIndex
     if i >= 0:
@@ -118,7 +118,7 @@ proc pick(d: Demo, cls: string, a, b: PointF) =
 proc shots(dir: string) =
   createDir dir
   Application.init()
-  let tmp = getTempDir() / ("nimvcl-ide-demo-" & $getCurrentProcessId())
+  let tmp = getTempDir() / ("nimrad-demo-" & $getCurrentProcessId())
   removeDir tmp
   let d = newDemo(tmp)
   d.show()
@@ -160,7 +160,7 @@ proc main() =
     shots(if args.len >= 2: args[1] else: "build/unit_editor_shots")
   else:
     Application.init()
-    let d = newDemo(getTempDir() / ("nimvcl-ide-demo-" & $getCurrentProcessId()))
+    let d = newDemo(getTempDir() / ("nimrad-demo-" & $getCurrentProcessId()))
     Application.run(d)
 
 when isMainModule:

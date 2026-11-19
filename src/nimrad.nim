@@ -1,29 +1,29 @@
-## nimvcl IDE: a Delphi 7-style IDE for windowed nimvcl applications.
+## NimRAD, a Delphi 7-like RAD IDE for Nim built on nimvcl.
 ##
 ## Usage:
 ##
-##     nimvcl_ide                 start the IDE (opens the last project)
-##     nimvcl_ide --project FILE  start the IDE with the project FILE (.nimproj)
-##     nimvcl_ide --nimvcl-path   print the nimvcl source folder projects are built with
-##     nimvcl_ide --shots DIR     run the scripted session headless and save
-##                                a PNG of every step into DIR
+##     nimrad                 start the IDE (opens the last project)
+##     nimrad --project FILE  start the IDE with the project FILE (.nimproj)
+##     nimrad --nimvcl-path   print the nimvcl source folder projects are built with
+##     nimrad --shots DIR     run the scripted session headless and save
+##                            a PNG of every step into DIR
 ##
 ## Run `--shots` with `SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software`
 ## set in the environment so that no window opens.
 
 import std/[os, strutils]
 import nimvcl
-import ide/[mainform, session, uniteditor, project, nimvclpath]
+import ide/[mainform, session, uniteditor, project, nimvclpath, ideconfig]
 
-const usage = """nimvcl IDE
-  nimvcl_ide              start the IDE
-  nimvcl_ide --project F  start the IDE and open the project F (.nimproj)
-  nimvcl_ide --nimvcl-path  print where nimvcl's source is found
-  nimvcl_ide --shots DIR  run the scripted session and save screenshots into DIR"""
+const usage = """NimRAD
+  nimrad              start the IDE
+  nimrad --project F  start the IDE and open the project F (.nimproj)
+  nimrad --nimvcl-path  print where nimvcl's source is found
+  nimrad --shots DIR  run the scripted session and save screenshots into DIR"""
 
 proc shots(dir: string): int =
   createDir dir
-  let work = getTempDir() / ("nimvcl-ide-shots-" & $getCurrentProcessId())
+  let work = getTempDir() / ("nimrad-shots-" & $getCurrentProcessId())
   removeDir work
   createDir work
   Application.init()
@@ -61,6 +61,7 @@ proc main() =
   elif args.len >= 1 and args[0] == "--shots":
     quit shots(if args.len >= 2: args[1] else: "build/shots")
   else:
+    discard migrateLegacySettings()
     Application.init()
     let ide = newIdeForm()
     ide.startup(project = projectArg(args))

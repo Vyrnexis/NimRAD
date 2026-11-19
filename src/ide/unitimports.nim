@@ -5,10 +5,10 @@
 ## {.push warning[UnusedImport]: off.}
 ## import nimvcl/prelude
 ## import nimvcl/dsl/formload
-## # nimvcl-ide: imports begin
+## # nimrad: imports begin
 ## import nimvcl/controls/button
 ## import nimvcl/controls/edit
-## # nimvcl-ide: imports end
+## # nimrad: imports end
 ## {.pop.}
 ## ```
 ##
@@ -27,7 +27,8 @@ import ./[mainfile, nimsource]
 
 const
   UnitImportsBlock* = "imports"
-  ImportAllTag* = "# nimvcl-ide: all"
+  ImportAllTag* = MarkerPrefix & "all"
+  LegacyImportAllTag* = LegacyMarkerPrefix & "all"
   PreludeLine* = "import nimvcl/prelude"
 
   classModules* = [
@@ -220,7 +221,7 @@ proc addUserImport*(src, module: string): string =
 # --------------------------------------------------------------- import all
 
 proc setImportAll*(src: string, on: bool): string =
-  ## Turns the prelude line into `import nimvcl   # nimvcl-ide: all` (`on`),
+  ## Turns the prelude line into `import nimvcl   # nimrad: all` (`on`),
   ## empties the managed block, or the reverse. Only the prelude line and the
   ## tagged line are touched; the block is refilled by `syncFromNfm`.
   var lines = src.split('\n')
@@ -230,7 +231,7 @@ proc setImportAll*(src: string, on: bool): string =
     let indent = l[0 ..< l.len - l.strip(trailing = false).len]
     if on and t == PreludeLine:
       lines[i] = indent & "import nimvcl   " & ImportAllTag & tail
-    elif not on and t.startsWith("import nimvcl ") and t.endsWith(ImportAllTag) and
+    elif not on and t.startsWith("import nimvcl ") and (t.endsWith(ImportAllTag) or t.endsWith(LegacyImportAllTag)) and
          t["import nimvcl".len .. ^1].strip.startsWith("#"):
       lines[i] = indent & PreludeLine & tail
   result = lines.join("\n")

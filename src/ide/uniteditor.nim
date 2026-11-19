@@ -795,7 +795,7 @@ proc designNfm(e: UnitEditor): string =
 proc save*(e: UnitEditor) =
   ## Writes the `.nfm` (when the form changed) and the `.nim` (when the code
   ## changed); both are clean afterwards. The control imports between the
-  ## `nimvcl-ide: imports` markers of the `.nim` follow the classes of the form
+  ## `nimrad: imports` markers of the `.nim` follow the classes of the form
   ## (see `unitimports`).
   if e.fDesigner != nil and e.fDesignDirty:
     let nfm = e.designNfm

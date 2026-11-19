@@ -6,7 +6,7 @@ and shows the whole cycle of the IDE: draw a form, set properties, write an
 event handler, run.
 
 You need the IDE installed (see the [README](../README.md)). Start it with
-`nimvcl_ide`.
+`nimrad`.
 
 ## 1. A new project
 

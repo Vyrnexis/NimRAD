@@ -10,8 +10,8 @@ const unitText = """## unit1
 {.push warning[UnusedImport]: off.}
 import nimvcl/prelude
 import nimvcl/dsl/formload
-# nimvcl-ide: imports begin
-# nimvcl-ide: imports end
+# nimrad: imports begin
+# nimrad: imports end
 {.pop.}
 
 loadForm Form1, "unit1.nfm"
@@ -26,9 +26,9 @@ func formWith(classes: varargs[string]): string =
 func blockLines(src: string): seq[string] =
   var inside = false
   for l in src.splitLines:
-    if l.strip == "# nimvcl-ide: imports end": inside = false
+    if l.strip == "# nimrad: imports end": inside = false
     if inside: result.add l
-    if l.strip == "# nimvcl-ide: imports begin": inside = true
+    if l.strip == "# nimrad: imports begin": inside = true
 
 suite "class table":
   test "every creatable class of the registry has a module that exists":
@@ -70,8 +70,8 @@ suite "syncImports":
   test "user imports are untouched":
     var s = unitText.replace("import nimvcl/dsl/formload\n",
       "import nimvcl/dsl/formload\nimport std/[os, strutils]\nimport nimvcl/controls/button\n")
-    s = s.replace("# nimvcl-ide: imports begin\n",
-      "# nimvcl-ide: imports begin\nimport nimvcl/controls/[memo, edit]   # mine\n")
+    s = s.replace("# nimrad: imports begin\n",
+      "# nimrad: imports begin\nimport nimvcl/controls/[memo, edit]   # mine\n")
     s &= "\nimport nimvcl/controls/combobox\n"
     let t = syncFromNfm(s, formWith("Button", "Edit", "ComboBox", "ListBox"))
     check "import std/[os, strutils]" in t
@@ -153,7 +153,7 @@ proc everyClassForm(): string =
 
 suite "generated unit compiles":
   test "every class, enum property and event handler of the registry":
-    let dir = getTempDir() / ("nimvclide-imports-" & $getCurrentProcessId())
+    let dir = getTempDir() / ("nimrad-imports-" & $getCurrentProcessId())
     removeDir dir
     let proj = newApplicationProject(dir, "app")        # the units the IDE generates
     let nfm = everyClassForm()
@@ -179,7 +179,7 @@ suite "generated unit compiles":
 
 suite "prelude and older units":
   test "a unit that still has the old core imports compiles and runs":
-    let dir = getTempDir() / ("nimvclide-oldimports-" & $getCurrentProcessId())
+    let dir = getTempDir() / ("nimrad-oldimports-" & $getCurrentProcessId())
     removeDir dir
     discard newApplicationProject(dir, "app")
     var unit = readFile(dir / "unit1.nim")
@@ -209,9 +209,18 @@ suite "reading imports":
 
   test "a module imported in a group is not added a second time to the block":
     let src = "import nimvcl/controls/[button, edit]  # mine\n" &
-              "# nimvcl-ide: imports begin\n# nimvcl-ide: imports end\n"
+              "# nimrad: imports begin\n# nimrad: imports end\n"
     check syncImports(src, @["nimvcl/controls/button"]) == src
 
   test "names that are keywords or have double underscores are refused":
     for bad in ["block", "type", "a__b", "a_", "1a", ""]: check not validName(bad)
     check validName("my_unit") and validName("Unit1")
+
+suite "units written before the rename":
+  test "old markers and the old import-all tag are still recognised":
+    let src = "import nimvcl/prelude\n# nimvcl-ide: imports begin\n# nimvcl-ide: imports end\n"
+    let s = syncImports(src, @["nimvcl/controls/button"])
+    check s == "import nimvcl/prelude\n# nimvcl-ide: imports begin\nimport nimvcl/controls/button\n# nimvcl-ide: imports end\n"
+    let all = "import nimvcl   # nimvcl-ide: all\n# nimvcl-ide: imports begin\n# nimvcl-ide: imports end\n"
+    check setImportAll(all, false).startsWith("import nimvcl/prelude\n")
+    check setImportAll(src, true).startsWith("import nimvcl   # nimrad: all\n")

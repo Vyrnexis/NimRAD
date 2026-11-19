@@ -4,15 +4,15 @@
 ## available here, e.g. `self.someButton`. A handler named in ${unit}.nfm is
 ## looked up in this unit and replaces the ancestor's binding of that event.
 ##
-## The IDE keeps the lines between the `nimvcl-ide:` markers up to date: one
+## The IDE keeps the lines between the `nimrad:` markers up to date: one
 ## import per kind of control on the form. Other imports are yours; add them
 ## outside the markers.
 {.push warning[UnusedImport]: off.}
 import nimvcl/prelude
 import nimvcl/dsl/formload
 import ${ancestorImport}
-# nimvcl-ide: imports begin
-# nimvcl-ide: imports end
+# nimrad: imports begin
+# nimrad: imports end
 {.pop.}
 
 loadForm ${form}, "${unit}.nfm"

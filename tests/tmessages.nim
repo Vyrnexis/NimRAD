@@ -1,7 +1,7 @@
 import std/[unittest, os, osproc, strutils]
 import ide/messages
 
-let dir0 = getTempDir() / ("nimvclide-msg-" & $getCurrentProcessId())
+let dir0 = getTempDir() / ("nimrad-msg-" & $getCurrentProcessId())
 createDir dir0
 let dir = when defined(macosx): expandFilename(dir0) else: dir0   # the compiler prints real paths (macOS: /private/var/...)
 

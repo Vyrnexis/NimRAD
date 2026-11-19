@@ -5,7 +5,7 @@ import nimvcl/dsl/props
 import nimvcl/controls/inspector
 import ide/[project, builder, uniteditor, codegen]
 
-let root = getTempDir() / ("nimvclide-unitedit-" & $getCurrentProcessId())
+let root = getTempDir() / ("nimrad-unitedit-" & $getCurrentProcessId())
 removeDir root
 createDir root
 

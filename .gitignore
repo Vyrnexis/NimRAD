@@ -1,7 +1,7 @@
 build/
 nimcache/
 *.exe
-/nimvcl_ide
+/nimrad
 /PLAN.md
 # projects created by tests and scripts
 /Project*/

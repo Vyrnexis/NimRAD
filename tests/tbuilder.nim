@@ -2,7 +2,7 @@ import std/[unittest, os, strutils, times, sequtils]
 import nimvcl
 import ide/[project, builder, messages]
 
-let root = getTempDir() / ("nimvclide-build-" & $getCurrentProcessId())
+let root = getTempDir() / ("nimrad-build-" & $getCurrentProcessId())
 removeDir root
 createDir root
 
