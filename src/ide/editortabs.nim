@@ -4,7 +4,7 @@
 ## closing (and asking about unsaved changes) is up to the owner.
 ##
 ## The room for the cross comes from blank space added to the tab's text
-## (`tabText`), so the tab strip itself is the stock PageControl one.
+## (`sheetTabText`), so the tab strip itself is the stock PageControl one.
 
 import std/strutils
 import nimvcl
@@ -24,9 +24,8 @@ proc roomText(p: EditorPages): string =
   let w = max(p.textWidth(" ", p.font), 1'f32)
   " ".repeat(int(Room / w) + 1)
 
-method tabText*(p: EditorPages, i: int): string =
-  let own = procCall tabText(PageControl(p), i)
-  own & p.roomText
+method sheetTabText*(p: EditorPages, s: TabSheet): string =
+  s.caption & p.roomText
 
 proc closeRect*(p: EditorPages, i: int): RectF =
   ## The cross of tab `i` in client coordinates (empty when it is not shown).
