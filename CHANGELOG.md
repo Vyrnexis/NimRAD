@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.4 - 2026-11-19
+
+Fixes from a full code review; requires nimvcl 0.1.4.
+
+- Run always builds first (nim c is incremental), so it can no longer start a
+  stale program.
+- Stop ends the whole process tree (process group on Linux/macOS, job object
+  on Windows).
+- Renaming or deleting a component that a descendant form inherits or uses is
+  refused; renaming a unit or project rolls back if a step fails.
+- Timers of a designed form stop when its editor closes.
+- `.nimproj`: the format version is `formatVersion` (no longer clashing with
+  the application `version`); files from a newer IDE are refused; unknown
+  fields survive a save; project files are written atomically.
+- Units outside the program folder are imported by relative path.
+- Compiler and program output arrive in batches; the Output tab keeps the
+  last 5000 lines.
+- Quick fixes read form files only when an error could need them; panels
+  refresh only when something changed.
+- Internals: project paths are canonical from load; one module for Nim source
+  facts; the main form is split into focused modules with a single build
+  state.
+
 ## 0.1.3 - 2026-11-19
 
 - Windows and macOS support (experimental), with CI jobs for both; requires
