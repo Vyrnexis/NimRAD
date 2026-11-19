@@ -35,6 +35,7 @@ const
   StampVersion = 1
   MaxProjectFiles = 4000       ## a larger folder is not tracked: always build
   MaxHashSize = 4_000_000'i64  ## bigger project files are compared by size and time only
+  MaxHashTotal = 64_000_000'i64 ## so are the files after this many bytes were hashed (UI thread)
 
 type
   FileStamp = object
@@ -125,10 +126,14 @@ proc projectFiles(p: Project, args: seq[string], tooMany: var bool): seq[string]
 proc takeSnapshot*(p: Project, args: seq[string], nimExe: string): Snapshot =
   ## Call just before the compiler starts.
   result = Snapshot(args: args, nimExe: nimExe, started: getTime())
+  var hashed = 0'i64
   for f in p.projectFiles(args, result.tooMany):
     var h = ""
     try:
-      if getFileSize(f) <= MaxHashSize: h = $secureHashFile(f)
+      let size = getFileSize(f)
+      if size <= MaxHashSize and hashed + size <= MaxHashTotal:
+        h = $secureHashFile(f)
+        hashed += size
     except CatchableError: discard
     result.files.add stampOf(f, h)
 
