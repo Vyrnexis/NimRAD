@@ -12,7 +12,9 @@
 ## * every file of the compiler's `depfiles` with its hash, size and time,
 ## * every file of the project folder (forms, fonts, images, configs: the
 ##   compiler does not list what a macro reads with `staticRead`, nor a file
-##   that is new) with hash, size and time.
+##   that is new) with hash, size and time; not the `.nimproj` itself, whose
+##   settings are in the arguments (Run > Parameters changes it, and must not
+##   cause a build).
 ##
 ## `isUpToDate` is true only when all of it is as recorded: a file whose size
 ## or time differs counts as unchanged when its content hash is still the
@@ -105,7 +107,9 @@ proc projectFiles(p: Project, args: seq[string], tooMany: var bool): seq[string]
   let exe = p.exePath
   for f in walkDirRec(p.dir, yieldFilter = {pcFile, pcLinkToFile}, followFilter = {pcDir},
                       skipSpecial = true):
-    if f == exe: continue
+    # the `.nimproj` is not an input: what in it matters is in the arguments (and
+    # the files it makes the IDE write), and Run > Parameters change it
+    if f == exe or f == p.filePath: continue
     let rel = relativePath(f, p.dir)
     var hidden = false
     for part in rel.parentDir.split({DirSep, AltSep}):

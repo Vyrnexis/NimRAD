@@ -55,6 +55,14 @@ suite "up to date":
     check build()
     check current()
 
+  test "the project file changing (Run > Parameters) is not a reason to build":
+    p.runArgs = @["--other"]
+    p.save()
+    check current()
+    p.runArgs = @[]
+    p.save()
+    check current()
+
   test "a file the compiler does not list (read by a macro) builds again":
     writeFile dir / "data.txt", "two\n"
     check not current()
