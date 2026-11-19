@@ -24,6 +24,10 @@ type
     unitName*: string
     onSelectionChanged*: proc(e: UnitEditor)
     onModifiedChanged*: proc(e: UnitEditor)
+    onDesignChanged*: proc(e: UnitEditor)
+      ## The form was edited (any change, also when it was modified before).
+    onStructureChanged*: proc(e: UnitEditor)
+      ## The set or the names of the components changed (the Object TreeView follows).
     onMessage*: proc(e: UnitEditor, msg: string)
       ## A problem or hint for the status line (a refused rename, ...).
     loadError*: string
@@ -145,6 +149,7 @@ proc touchDesign(e: UnitEditor) =
   if e.fBusy: return
   e.fDesignDirty = true
   e.checkModified()
+  if e.onDesignChanged != nil: e.onDesignChanged(e)
 
 # ------------------------------------------------------------------ the tree
 
@@ -180,6 +185,7 @@ proc walkNames(e: UnitEditor, f: proc(c: Component)) =
 proc syncNames(e: UnitEditor) =
   e.fNames.clear()
   e.walkNames(proc(c: Component) = e.fNames[c] = c.name)
+  if e.onStructureChanged != nil: e.onStructureChanged(e)
 
 proc nameTaken(e: UnitEditor, name: string, skip: Component = nil): bool =
   let key = name.styleKey
@@ -523,6 +529,7 @@ proc applyRename(e: UnitEditor, c: Component) =
   if old.len > 0:
     e.setCodeText(renameComponentRefs(e.codeOf, old, nw, e.fUnit.formType))
   e.fNames[c] = nw
+  if e.onStructureChanged != nil: e.onStructureChanged(e)
   let t = e.tileOf(c)
   if t != nil: t.name = nw
   if c of Control: Control(c).invalidate()

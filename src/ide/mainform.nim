@@ -54,6 +54,10 @@ type
     bound: UnitEditor
     defaultLayout*: string
     treeSig: string
+    treeDirty: bool            ## the components of the bound form changed
+    actionsDirty: bool         ## something the action states depend on changed
+    watched: tuple[msgs, panels, units: int, state: BuildState]
+      ## what changes without an event of ours (messages, dock panels, project)
     treeComps: seq[Component]
     treeNodes: seq[TreeNode]
     syncingTree: bool
@@ -132,7 +136,7 @@ proc say*(ide: IdeForm, text: string) =
   ide.status.panels[ord spMessage].text = text
 
 proc setPart(ide: IdeForm, part: StatusPart, text: string) =
-  ide.status.panels[ord part].text = text
+  if ide.status.panels[ord part].text != text: ide.status.panels[ord part].text = text
 
 proc fail(ide: IdeForm, text: string) =
   ide.say text
@@ -349,6 +353,7 @@ proc saveLayout*(ide: IdeForm) =
 # ----------------------------------------------------------------- selection
 
 proc selectionChanged(ide: IdeForm) =
+  ide.actionsDirty = true
   ide.refreshTree()
   let ed = ide.activeEditor
   if ed != nil and ed.isForm and ide.palette.picked.len > 0 and ed.designer.creating.len == 0:
@@ -376,6 +381,7 @@ proc bindActive*(ide: IdeForm) =
     ide.inspector.inspect(newSeq[Obj]())
   ide.bound = ed
   ide.treeSig = "\0"
+  ide.actionsDirty = true
   ide.refreshTree()
   if ed != nil: ide.projectTree.selectUnit(ed.unitName)
 
@@ -439,15 +445,40 @@ proc updateStatus(ide: IdeForm) =
   ide.setPart(spModified, if ed != nil and ed.modified: "Modified" else: "")
 
 proc sync*(ide: IdeForm) =
-  ## Brings the derived UI state up to date (also runs after every batch of
-  ## events). Cheap when nothing changed.
+  ## Brings all the derived UI state up to date at once (scripts and tests;
+  ## the idle hook only does what changed, see `flush`).
   ide.refreshTree()
   ide.refreshActions()
   ide.updateStatus()
   ide.updateTabs()
+  ide.treeDirty = false
+  ide.actionsDirty = false
   let ed = ide.activeEditor
   if ed != nil and ed.isForm and ide.palette.picked.len > 0 and ed.designer.creating.len == 0:
     ide.palette.reset()
+
+proc watchedState(ide: IdeForm): tuple[msgs, panels, units: int, state: BuildState] =
+  ## The few things the action states depend on that nobody tells us about.
+  for p in [ide.pnlProject, ide.pnlInspector, ide.pnlTree, ide.pnlMessages]:
+    result.panels = result.panels * 2 + (if p.state != dpHidden: 1 else: 0)
+  result.msgs = ide.messages.msgs.len
+  result.units = if ide.project == nil: -1 else: ide.project.units.len
+  result.state = buildState()
+
+proc flush(ide: IdeForm) =
+  ## The idle hook: refreshes the Object TreeView and the actions only when
+  ## something they show changed (the editors tell us, see `hookEditor`).
+  let w = ide.watchedState
+  if w != ide.watched:
+    ide.watched = w
+    ide.actionsDirty = true
+  ide.updateStatus()
+  if ide.treeDirty:
+    ide.treeDirty = false
+    ide.refreshTree()
+  if ide.actionsDirty:
+    ide.actionsDirty = false
+    ide.refreshActions()
 
 proc dropComponent*(ide: IdeForm, className: string): bool {.discardable.} =
   ## Puts a `className` on the current form without the mouse: into the
@@ -484,8 +515,11 @@ proc dropComponent*(ide: IdeForm, className: string): bool {.discardable.} =
 proc hookEditor(ide: IdeForm, ed: UnitEditor) =
   ed.onSelectionChanged = proc(e: UnitEditor) = ide.selectionChanged()
   ed.onModifiedChanged = proc(e: UnitEditor) =
+    ide.actionsDirty = true
     ide.updateTabs()
     ide.updateStatus()
+  ed.onDesignChanged = proc(e: UnitEditor) = ide.actionsDirty = true
+  ed.onStructureChanged = proc(e: UnitEditor) = ide.treeDirty = true
   ed.onMessage = proc(e: UnitEditor, msg: string) = ide.say msg
   ed.code.onCaretMove = proc(s: Control, line, col: int) = ide.updateStatus()
 
@@ -590,6 +624,8 @@ proc saveAll*(ide: IdeForm) =
 proc refreshProject(ide: IdeForm) =
   ide.projectTree.refresh(ide.project)
   ide.updateCaption()
+  ide.updateTabs()
+  ide.actionsDirty = true
   let ed = ide.activeEditor
   if ed != nil: ide.projectTree.selectUnit(ed.unitName)
 
@@ -1689,7 +1725,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
     if ide.project != nil: ide.project.save()
     ide.programReset()
     ide.saveLayout()
-  Application.addIdleHook("ide-sync", proc() = ide.sync())
+  Application.addIdleHook("ide-sync", proc() = ide.flush())
   ide
 
 proc projectArg*(args: openArray[string]): string =

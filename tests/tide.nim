@@ -887,6 +887,21 @@ suite "run and stop details":
     ide.project.units = saved
     ed.reloadFromDisk()
 
+suite "the idle hook only refreshes what changed":
+  test "the Object TreeView is rebuilt after a structure change, not on every idle":
+    check ide.closeAllEditors()
+    check ide.openUnit("unit1") != nil
+    ide.settle
+    proc hasMarker(): bool =
+      for i in 0 ..< ide.objTree.items.topCount:
+        if ide.objTree.items.top(i).text == "marker": return true
+    discard ide.objTree.items.addChild(nil, "marker")      # a rebuild would drop it
+    for _ in 1 .. 5: Application.processMessages(0)
+    check hasMarker()
+    check ide.dropComponent("Button")
+    for _ in 1 .. 3: Application.processMessages(0)
+    check not hasMarker()
+
 suite "reopen and startup":
   setup:
     errors.setLen 0
