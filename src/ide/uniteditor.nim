@@ -125,7 +125,13 @@ proc designedForm*(e: UnitEditor): Container =
 proc designerVisible*(e: UnitEditor): bool =
   e.fScroll != nil and e.fScroll.visible
 
+proc isInherited*(e: UnitEditor): bool =
+  ## The unit's form inherits from another form of the project.
+  e.fUnit.isForm and e.fUnit.ancestor.len > 0
+
 proc modified*(e: UnitEditor): bool = e.fDesignDirty or e.fCode.modified
+proc designModified*(e: UnitEditor): bool = e.fDesignDirty
+  ## The form has unsaved changes (the code may have too, see `modified`).
 
 proc checkModified(e: UnitEditor) =
   let m = e.modified
@@ -287,6 +293,11 @@ proc defaultEvent(c: Component): string =
   for p in ci.propsOf:
     if p.kind == pkEvent: return p.name
 
+proc isEvent(className, prop: string): bool =
+  let ci = classByName(className)
+  let p = if ci == nil: nil else: ci.findProp(prop)
+  p != nil and p.kind == pkEvent
+
 proc handlerNameFor(e: UnitEditor, c: Component, event: string): string =
   let tail = if event.startsWith("on") and event.len > 2: event[2 .. ^1] else: event
   ## Delphi style: component name plus the event, e.g. `Button1Click`, `FormShow`.
@@ -414,10 +425,12 @@ proc installDesigner(e: UnitEditor) =
     if comp != nil: e.openHandler(comp, defaultEvent(comp))
   d.attach()
 
-proc buildDesign(e: UnitEditor, text: string) =
+proc buildDesign(e: UnitEditor, text: string, strict = true) =
   ## Builds the model form from `text` and the design surface for it. Raises
-  ## `NfmError` (nothing is changed then).
-  let opt = newNfmOptions(strict = true)
+  ## `NfmError` (nothing is changed then); with `strict = false` what the
+  ## loader cannot place (an override of something the ancestor no longer has)
+  ## is skipped and reported through `onMessage`.
+  let opt = newNfmOptions(strict = strict)
   let form = loadNfm(text, nil, opt, e.project.nfmPathOf(e.fUnit))
   for w in opt.warnings: e.say w          # e.g. a picture that is not there
   e.fBusy = true
@@ -527,7 +540,7 @@ proc propertyChanged(e: UnitEditor, target: Obj, prop: string) =
   let c = Component(target)
   if prop == "name":
     e.applyRename(c)
-  elif prop.startsWith("on"):
+  elif isEvent(c.className, prop):
     # a handler named by hand: make sure it exists in the code
     let h = handlerNameOf(target, prop)
     if h.len > 0 and not hasProc(e.codeOf, h):
@@ -537,6 +550,170 @@ proc propertyChanged(e: UnitEditor, target: Obj, prop: string) =
   if e.fDesigner != nil: e.fDesigner.refresh()
   if e.fInsp != nil: e.fInsp.refresh()
   if c of Control and not (c of Form): Control(c).invalidate()
+
+# ------------------------------------------------------ inherited values
+
+proc findNamed(root: Obj, name: string, seen: var HashSet[Obj]): Obj =
+  if root == nil or seen.containsOrIncl(root): return nil
+  if name.len > 0 and objectName(root) == name: return root
+  for k in kidsOf(root):
+    result = findNamed(k, name, seen)
+    if result != nil: return
+  if root of Component:
+    for x in Component(root).components:
+      result = findNamed(Obj(x), name, seen)
+      if result != nil: return
+
+proc findNamed(root: Obj, name: string): Obj =
+  var seen: HashSet[Obj]
+  findNamed(root, name, seen)
+
+proc releaseCopy(o: Obj) =
+  ## Frees a form that was only built to be read (its timers must not run).
+  var seen: HashSet[Obj]
+  proc stop(x: Obj) =
+    if x == nil or seen.containsOrIncl(x): return
+    if x of Timer: Timer(x).enabled = false
+    for k in kidsOf(x): stop(k)
+    if x of Component:
+      for c in Component(x).components: stop(Obj(c))
+  stop(o)
+  if o of Control:
+    try: Control(o).free()
+    except CatchableError: discard
+
+proc ancestorCopy(e: UnitEditor): Obj =
+  ## A fresh copy of the ancestor's form, as its file says now (nil when the
+  ## form does not inherit or the file cannot be read). Call `releaseCopy` on it.
+  if e.fForm == nil or e.fForm.ancestorPath.len == 0 or not fileExists(e.fForm.ancestorPath):
+    return nil
+  try: loadNfmFile(e.fForm.ancestorPath, nil, newNfmOptions(strict = false))
+  except CatchableError: nil
+
+proc counterpart(e: UnitEditor, anc: Obj, c: Component): Obj =
+  ## The object of the ancestor copy that `c` comes from (nil for a component of
+  ## this form's own).
+  if anc == nil: nil
+  elif c == Component(e.fForm): anc
+  elif c.inherited: findNamed(anc, c.name)
+  else: nil
+
+proc sameValue(info: PropInfo, a, b: Obj): bool =
+  try:
+    if info.kind == pkEvent: return handlerNameOf(a, info.name) == handlerNameOf(b, info.name)
+    # a value that follows the parent (parentColor, parentFont) is "not set": two
+    # of those are the same, whatever the parents make of it
+    if isDefault(a, info) and isDefault(b, info): return true
+    let x = toNfmValue(info, info.get(a))
+    let y = toNfmValue(info, info.get(b))
+    x.kind == y.kind and x.text == y.text and x.items == y.items
+  except PropError:
+    true                       # no text form: not something a form file records
+
+proc revertible(info: PropInfo): bool =
+  info != nil and info.name != "name" and info.kind != pkCollection and info.stored
+
+proc canRevert*(e: UnitEditor, c: Component, prop: string): bool =
+  ## Whether the property differs from what the ancestor form says (and can be
+  ## put back). False for a component of this form's own and for an unknown property.
+  if c == nil or c != Component(e.fForm) and not c.inherited: return false
+  let ci = classOf(Obj(c))
+  let info = if ci == nil: nil else: ci.findProp(prop)
+  if not info.revertible: return false
+  let anc = e.ancestorCopy
+  if anc == nil: return false
+  defer: releaseCopy anc
+  let o = e.counterpart(anc, c)
+  o != nil and not sameValue(info, Obj(c), o)
+
+proc refreshAfterRevert(e: UnitEditor, c: Component) =
+  if c == Component(e.fForm): e.syncGeometry()
+  e.touchDesign()
+  if e.fDesigner != nil: e.fDesigner.refresh()
+  if e.fInsp != nil: e.fInsp.refresh()
+  if c of Control and not (c of Form): Control(c).invalidate()
+  e.syncNames()
+
+proc putBack(e: UnitEditor, info: PropInfo, c: Component, o: Obj): bool =
+  ## Sets the property of `c` to the value `o` (its ancestor's object) has.
+  try:
+    case info.kind
+    of pkEvent:
+      info.set(Obj(c), pvEvent(handlerNameOf(o, info.name)))
+      let i = c.handlerOverrides.find(info.name)
+      if i >= 0: c.handlerOverrides.delete i
+    of pkObject:
+      let v = info.get(o)
+      if v.obj == nil: info.set(Obj(c), pvObject(nil))
+      else:
+        # a reference to another component: the same one of this form
+        let name = objectName(v.obj)
+        var t: Obj
+        if name.len > 0:
+          var seen: HashSet[Obj]
+          t = findNamed(Obj(e.fBody), name, seen)
+          if t == nil:
+            for tile in e.tiles:
+              t = findNamed(Obj(tile.component), name)
+              if t != nil: break
+        if t == nil: return false
+        info.set(Obj(c), pvObject(t))
+    else:
+      info.set(Obj(c), info.get(o))
+    true
+  except PropError:
+    false
+
+proc revertProperty*(e: UnitEditor, c: Component, prop: string): bool {.discardable.} =
+  ## Revert to Inherited for one property: sets it to what the ancestor form
+  ## says, so it leaves this form's `.nfm`. False when it already is that, or
+  ## cannot be put back.
+  if not e.canRevert(c, prop): return false
+  let anc = e.ancestorCopy
+  if anc == nil: return false
+  defer: releaseCopy anc
+  let o = e.counterpart(anc, c)
+  if o == nil: return false
+  let info = classOf(Obj(c)).findProp(prop)
+  if not e.putBack(info, c, o): return false
+  e.refreshAfterRevert(c)
+  true
+
+proc revertComponent*(e: UnitEditor, c: Component): int =
+  ## Revert to Inherited for a whole component: every property that differs from
+  ## the ancestor's is put back (its position among the tiles too). Returns how
+  ## many were.
+  if c == nil or c != Component(e.fForm) and not c.inherited: return 0
+  let anc = e.ancestorCopy
+  if anc == nil: return 0
+  defer: releaseCopy anc
+  let o = e.counterpart(anc, c)
+  if o == nil: return 0
+  let ci = classOf(Obj(c))
+  if ci == nil: return 0
+  for info in ci.propsOf:
+    if not info.revertible or sameValue(info, Obj(c), o): continue
+    if info.name in ["left", "top"] and c == Component(e.fForm): continue
+    if e.putBack(info, c, o): inc result
+  let oc = Component(o)
+  if (c.designLeft != oc.designLeft or c.designTop != oc.designTop) and c != Component(e.fForm):
+    c.designLeft = oc.designLeft
+    c.designTop = oc.designTop
+    inc result
+  if result > 0: e.refreshAfterRevert(c)
+
+proc canRevertComponent*(e: UnitEditor, c: Component): bool =
+  ## Whether `c` is from the ancestor form and has something to put back.
+  if c == nil or c != Component(e.fForm) and not c.inherited: return false
+  let anc = e.ancestorCopy
+  if anc == nil: return false
+  defer: releaseCopy anc
+  let o = e.counterpart(anc, c)
+  let ci = classOf(Obj(c))
+  if o == nil or ci == nil: return false
+  for info in ci.propsOf:
+    if info.revertible and not sameValue(info, Obj(c), o): return true
+  false
 
 proc itemAdded(e: UnitEditor, parent, item: Obj) =
   ## A collection editor made `item` (a menu item, a page, a column...): it
@@ -737,7 +914,7 @@ proc paste*(e: UnitEditor): bool {.discardable.} =
   for top in root.children:
     for n in walk(top):
       for p in n.props.mitems:
-        if p.value.kind == nvIdent and not p.name.startsWith("on") and
+        if p.value.kind == nvIdent and not isEvent(n.className, p.name) and
            p.value.text in renamed:
           p.value.text = renamed[p.value.text]
   var tmp: Obj

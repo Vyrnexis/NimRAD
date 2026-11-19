@@ -89,6 +89,8 @@ proc connectActions*(ide: IdeForm) =
   on aPaste: ide.editPaste()
   on aDelete: ide.editDelete()
   on aSelectAll: ide.editSelectAll()
+  on aRevertProp: ide.revertProperty()
+  on aRevertComponent: ide.revertComponent()
   on aFind: ide.findText(false)
   on aReplace: ide.findText(true)
   on aFindUnit: ide.findUnitImport()
@@ -178,6 +180,9 @@ proc buildMenu*(ide: IdeForm) =
   for id in [aCut, aCopy, aPaste, aDelete]: edit.addAct a[id]
   edit.addSeparator()
   edit.addAct a[aSelectAll]
+  edit.addSeparator()
+  edit.addAct a[aRevertProp]
+  edit.addAct a[aRevertComponent]
   let search = m.addItem("&Search")
   for id in [aFind, aReplace, aFindNext]: search.addAct a[id]
   search.addSeparator()
@@ -255,6 +260,14 @@ proc buildDocking*(ide: IdeForm) =
   ide.inspector = newObjectInspector(nil)
   ide.inspector.onGetFontFamilies = proc(s: Control, t: Obj): seq[string] =
     if ide.project != nil: ide.project.fontFamilies else: @[]
+  # the inspector's context menu: put an inherited property or component back
+  let pm = newPopupMenu(ide)
+  let revProp = pm.addItem(ide.acts[aRevertProp].caption, proc(s: MenuItem) = ide.revertProperty())
+  let revComp = pm.addItem(ide.acts[aRevertComponent].caption, proc(s: MenuItem) = ide.revertComponent())
+  pm.onPopup = proc(m: PopupMenu) =
+    revProp.enabled = ide.canRevertProperty
+    revComp.enabled = ide.canRevertComponent
+  ide.inspector.popupMenu = pm
   ide.pages = newEditorPages()
   ide.pages.onCloseTab = proc(i: int) =
     if i >= 0 and i < ide.editors.len: discard ide.closeEditor(ide.editors[i])

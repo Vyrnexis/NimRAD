@@ -137,6 +137,16 @@ of the ancestor and everything you add to it:
   Change the ancestor's caption or move its button, save, and the descendant
   follows; nothing is copied. A form open in the designer picks the change up
   the next time it is opened (File > Close, then View > Forms...).
+* **Revert to Inherited**: select an inherited component, select a property in
+  the Object Inspector that you changed from the ancestor's value, and choose
+  **Edit > Revert to Inherited** (or right click in the Object Inspector). The
+  property takes the ancestor's value again and leaves the descendant's `.nfm`
+  when you save. **Revert Component to Inherited** (Edit menu, or the same
+  right click menu) does it for every property of the component, and when
+  nothing else differs the whole `inherited Button1` block disappears. It also
+  works for the form itself (its caption, size...). Events go back to the
+  ancestor's handler. A component you added to the descendant has nothing
+  to revert to.
 * In code, `Form2` is a type that inherits from `Form1`: `self.button1` works in
   the descendant's handlers. Double clicking an inherited button creates the
   handler in the descendant's unit, `proc Button1Click(self: Form2, sender:

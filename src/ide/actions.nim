@@ -11,7 +11,7 @@ import ./icons
 type
   ActId* = enum
     aNewApp, aNewForm, aNewInheritedForm, aOpenProject, aSave, aSaveAs, aSaveProjectAs, aSaveAll, aClose, aExit,
-    aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll,
+    aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll, aRevertProp, aRevertComponent,
     aFind, aReplace, aFindNext, aGotoLine, aFindUnit, aQuickFix,
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
@@ -45,6 +45,8 @@ const defs: array[ActId, ActDef] = [
   (aPaste, "&Paste", "Paste", "Ctrl+V", icPaste),
   (aDelete, "&Delete", "Delete the selection", "Ctrl+Del", icDelete),
   (aSelectAll, "Select &All", "Select all", "Ctrl+A", -1),
+  (aRevertProp, "Revert to &Inherited", "Put the selected property of an inherited component back to the ancestor form's value", "", -1),
+  (aRevertComponent, "Revert Component to Inherited", "Put every property of the selected inherited component back to the ancestor form's values", "", -1),
   (aFind, "&Find...", "Find text", "Ctrl+F", icFind),
   (aReplace, "&Replace...", "Find and replace text", "Ctrl+H", -1),
   (aFindNext, "Find &Next", "Find the next match", "F3", -1),

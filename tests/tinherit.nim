@@ -252,3 +252,130 @@ suite "File > New Inherited Form":
     check ide.project.compileProjectSync().ok
     ide.pickItem = nil
     ide.showWindow()
+
+suite "Revert to Inherited":
+  var rp: Project
+  var anc, des: UnitEditor
+  var button: Control
+
+  proc nfmOf(unit: string): string = readFile(root / "rev" / unit & ".nfm")
+
+  test "setup: an ancestor with a button and a label, a descendant that changes them":
+    rp = newApplicationProject(root / "rev", "rev")
+    anc = newUnitEditor(rp, "unit1", host)
+    anc.beginCreate "Button"
+    host.click(pointF(anc.designedForm.formOrigin.x + 40, anc.designedForm.formOrigin.y + 40))
+    anc.beginCreate "Label"
+    host.click(pointF(anc.designedForm.formOrigin.x + 40, anc.designedForm.formOrigin.y + 120))
+    anc.bindInspector(insp)
+    anc.selectComponent(anc.find("Button1"))
+    insp.setValue("caption", pvString("Anc"))
+    anc.save()
+    let u = rp.newInheritedFormUnit("unit1")
+    rp.save()
+    des = newUnitEditor(rp, u.name, host)
+    des.bindInspector(insp)
+    button = des.find("Button1")
+    check button != nil and button.inherited
+    des.selectComponent(button)
+    insp.setValue("caption", pvString("Mine"))
+    insp.setValue("left", pvFloat(150))
+    insp.setValue("width", pvFloat(222))
+    des.selectComponent(des.find("Label1"))
+    insp.setValue("caption", pvString("Changed label"))
+    des.save()
+    let nfm = nfmOf("unit2")
+    check "caption = 'Mine'" in nfm and "left = 150" in nfm and "width = 222" in nfm
+    check "caption = 'Changed label'" in nfm
+
+  test "a changed property can be reverted; an unchanged or own one cannot":
+    let c = Component(button)
+    check des.canRevert(c, "caption")
+    check des.canRevert(c, "left")
+    check des.canRevert(c, "width")
+    check not des.canRevert(c, "top")                  # not changed
+    check not des.canRevert(c, "name")
+    check not des.canRevert(c, "noSuchProperty")
+    check not anc.canRevert(Component(anc.find("Button1")), "caption")   # the ancestor itself
+    check des.revertProperty(c, "caption")
+    check Button(button).caption == "Anc"
+    check not des.canRevert(c, "caption")
+    check not des.revertProperty(c, "caption")         # nothing left to do
+    check des.modified
+
+  test "the reverted property leaves the .nfm of the descendant, the others stay":
+    des.save()
+    let nfm = nfmOf("unit2")
+    check "caption = 'Mine'" notin nfm
+    check "left = 150" in nfm and "width = 222" in nfm
+
+  test "another property reverts on its own":
+    check des.revertProperty(Component(button), "width")
+    check button.width != 222
+    des.save()
+    let nfm = nfmOf("unit2")
+    check "width = 222" notin nfm and "left = 150" in nfm
+
+  test "a whole component: every changed property, and its block disappears":
+    check des.canRevertComponent(Component(button))
+    check des.revertComponent(Component(button)) == 1
+    check button.left == anc.find("Button1").left
+    check not des.canRevertComponent(Component(button))
+    check des.revertComponent(Component(button)) == 0
+    des.save()
+    check "inherited Button1" notin nfmOf("unit2")
+    check "inherited Label1" in nfmOf("unit2")         # the label was not touched
+
+  test "the form itself reverts too; an own component does not":
+    let form = des.componentTree[0][0]
+    des.selectComponent(form)
+    insp.setValue("caption", pvString("Descendant title"))
+    check des.canRevert(form, "caption")
+    check des.revertProperty(form, "caption")
+    check Form(form).caption == "Form1"
+    des.beginCreate "Label"
+    host.click(pointF(des.designedForm.formOrigin.x + 200, des.designedForm.formOrigin.y + 200))
+    let own = des.find("Label2")
+    check own != nil and not own.inherited
+    check not des.canRevertComponent(Component(own))
+    check des.revertComponent(Component(own)) == 0
+
+  test "the saved descendant still builds":
+    des.save()
+    check "caption = 'Descendant title'" notin nfmOf("unit2")
+    check rp.compiles()
+    check rp.smoke().exitCode == 0
+
+suite "Revert to Inherited in the IDE":
+  test "the Edit menu actions and the Object Inspector menu follow the selection":
+    let ide = newIdeForm(settingsFile = root / "settings-rev.json")
+    ide.showWindow(1360, 860)
+    var errors: seq[string]
+    ide.showError = proc(text: string) = errors.add text
+    check ide.openProject(root / "rev" / "rev.nimproj")
+    let ed = ide.openUnit("unit2")
+    check ed != nil
+    let ancEd = ide.openUnit("unit1")
+    ide.sync()
+    check not ide.acts[aRevertProp].enabled              # the ancestor form
+    check not ide.acts[aRevertComponent].enabled
+    discard ide.openUnit("unit2")
+    ide.sync()
+    ed.selectComponent(ed.find("Button1"))
+    ide.inspector.selectProp("caption")
+    ide.inspector.setValue("caption", pvString("Edited"))
+    ide.sync()
+    check ide.acts[aRevertProp].enabled and ide.acts[aRevertComponent].enabled
+    check ide.canRevertProperty and ide.canRevertComponent
+    ide.acts[aRevertProp].execute()
+    ide.sync()
+    check Button(ed.find("Button1")).caption == "Anc"
+    check not ide.canRevertProperty and not ide.canRevertComponent
+    check ide.status.panels[4].text.len > 0
+    # a component of its own: nothing to revert
+    ed.selectComponent(ed.find("Label2"))
+    ide.sync()
+    check not ide.acts[aRevertProp].enabled
+    check errors.len == 0
+    discard ancEd
+    ide.showWindow()

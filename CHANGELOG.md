@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Inherited forms: **Edit > Revert to Inherited** (also in the Object
+  Inspector's context menu) puts the selected property back to the ancestor's
+  value, **Revert Component to Inherited** every property of the component;
+  the value then leaves the descendant's `.nfm`.
 - A right click in the Messages window selects the row under the mouse before
   the context menu opens, so Quick Fix acts on that message.
 - Run skips the compiler when nothing changed: it compares the files the

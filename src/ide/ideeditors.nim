@@ -114,6 +114,49 @@ proc toggleView*(ide: IdeForm) =
   let ed = ide.activeEditor
   if ed != nil and ed.isForm: ed.toggleView()
 
+# inherited forms -------------------------------------------------------
+
+proc singleSelected(ide: IdeForm): Component =
+  let ed = ide.activeEditor
+  if ed == nil or not ed.isForm or not ed.isInherited: return nil
+  let sel = ed.selection
+  if sel.len == 1: sel[0] else: nil
+
+proc canRevertProperty*(ide: IdeForm): bool =
+  ## The Object Inspector's selected property differs from the ancestor form's.
+  let c = ide.singleSelected
+  let prop = ide.inspector.selectedProp
+  c != nil and prop.len > 0 and ide.activeEditor.canRevert(c, prop)
+
+proc canRevertComponent*(ide: IdeForm): bool =
+  let c = ide.singleSelected
+  c != nil and ide.activeEditor.canRevertComponent(c)
+
+proc revertProperty*(ide: IdeForm): bool {.discardable.} =
+  ## Edit > Revert to Inherited (also in the Object Inspector's menu): the
+  ## selected property goes back to the ancestor's value and leaves the `.nfm`
+  ## of this form when it is saved.
+  let c = ide.singleSelected
+  let prop = ide.inspector.selectedProp
+  if c == nil or prop.len == 0:
+    ide.say "Select a property of an inherited component first"
+    return false
+  result = ide.activeEditor.revertProperty(c, prop)
+  ide.say(if result: "Reverted " & c.name & "." & prop & " to the inherited value"
+          else: c.name & "." & prop & " already is the inherited value")
+
+proc revertComponent*(ide: IdeForm): bool {.discardable.} =
+  ## Edit > Revert Component to Inherited: every property of the selected
+  ## inherited component goes back to the ancestor's.
+  let c = ide.singleSelected
+  if c == nil:
+    ide.say "Select an inherited component first"
+    return false
+  let n = ide.activeEditor.revertComponent(c)
+  result = n > 0
+  ide.say(if n > 0: "Reverted " & $n & " properties of " & c.name & " to the inherited values"
+          else: c.name & " is the same as in the ancestor form")
+
 # search ----------------------------------------------------------------
 
 proc codeOfActive*(ide: IdeForm): CodeEdit =
@@ -221,6 +264,9 @@ proc refreshActions*(ide: IdeForm) =
   a[aPaste].enabled = ed != nil
   a[aDelete].enabled = ed != nil and (not designer or hasSel)
   a[aSelectAll].enabled = ed != nil
+  let rc = ide.singleSelected          # an inherited component, or the form of an inherited form
+  a[aRevertProp].enabled = rc != nil and (rc.inherited or rc of Form)
+  a[aRevertComponent].enabled = a[aRevertProp].enabled
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
   a[aFindUnit].enabled = ed != nil
   a[aQuickFix].enabled = hasProject and ide.messages.firstWithFix() >= 0
