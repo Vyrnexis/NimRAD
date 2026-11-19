@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         # the released version the IDE depends on, and nimvcl's main branch
-        nimvcl: [v0.1.2, main]
+        nimvcl: [v0.1.3, main]
     continue-on-error: ${{ matrix.nimvcl == 'main' }}
     env:
       SDL_VIDEO_DRIVER: offscreen
@@ -39,3 +39,86 @@ jobs:
       - name: Test
         working-directory: nimvcl-ide
         run: bash scripts/test.sh
+
+  # Windows and macOS are experimental: nothing here has been run on those
+  # systems by the author yet, so a failure must not turn the workflow red.
+  # Only the nimvcl release the IDE pins (nimvcl_ide.nimble) is tried. If SDL's
+  # "offscreen" video driver turns out to be missing, use SDL_VIDEO_DRIVER=dummy.
+  windows:
+    name: windows (nimvcl v0.1.3)
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    env:
+      SDL_VIDEO_DRIVER: offscreen
+      SDL_RENDER_DRIVER: software
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: nimvcl-ide
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: 2.2.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # The MSYS2 SDL3 build cannot open any file (SDL_IOFromFile fails for every
+      # path, so images, fonts and screenshots all fail); the official SDL
+      # release DLLs work.
+      - name: Install SDL3
+        run: |
+          sdl="$RUNNER_TEMP/sdl"; mkdir -p "$sdl"
+          for u in libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18-win32-x64.zip \
+                   libsdl-org/SDL_ttf/releases/download/release-3.2.2/SDL3_ttf-3.2.2-win32-x64.zip \
+                   libsdl-org/SDL_image/releases/download/release-3.4.8/SDL3_image-3.4.8-win32-x64.zip; do
+            curl -fsSL -o "$sdl/pkg.zip" "https://github.com/$u"
+            unzip -qo "$sdl/pkg.zip" -d "$sdl"
+          done
+          ls "$sdl"/*.dll
+          echo "$RUNNER_TEMP\\sdl" >> "$GITHUB_PATH"
+      - name: Get nimvcl
+        # A sibling checkout is picked up by config.nims.
+        run: git clone --depth 1 --branch v0.1.3 https://github.com/Vyrnexis/nimvcl.git nimvcl
+      - name: Install dependencies
+        working-directory: nimvcl
+        run: nimble install -d -y
+      - name: Build
+        working-directory: nimvcl-ide
+        run: nimble build -y
+      - name: Test
+        working-directory: nimvcl-ide
+        run: bash scripts/test.sh
+      - name: Show failed test logs
+        if: failure()
+        working-directory: nimvcl-ide
+        run: for f in build/tests/run-*/*.log; do echo "=== $f"; tail -n 60 "$f"; done
+
+  macos:
+    name: macos (nimvcl v0.1.3)
+    runs-on: macos-latest
+    continue-on-error: true
+    env:
+      # SDL's offscreen driver cannot create windows on macOS (it wants OpenGL/EGL)
+      SDL_VIDEO_DRIVER: dummy
+      SDL_RENDER_DRIVER: software
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: nimvcl-ide
+      - name: Install Nim and SDL3
+        run: brew install nim sdl3 sdl3_ttf sdl3_image
+      - name: Get nimvcl
+        run: git clone --depth 1 --branch v0.1.3 https://github.com/Vyrnexis/nimvcl.git nimvcl
+      - name: Install dependencies
+        working-directory: nimvcl
+        run: nimble install -d -y
+      - name: Build
+        working-directory: nimvcl-ide
+        run: nimble build -y
+      - name: Test
+        working-directory: nimvcl-ide
+        run: bash scripts/test.sh
+      - name: Show failed test logs
+        if: failure()
+        working-directory: nimvcl-ide
+        run: for f in build/tests/run-*/*.log; do echo "=== $f"; tail -n 60 "$f"; done

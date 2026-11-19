@@ -51,6 +51,9 @@ suite "settings":
     check s.layout == "L" and not s.showHints
 
   test "unwritable location":
-    check not saveSettings(defaultSettings(), "/proc/nope/settings.json")
+    # a plain file where the settings folder should be: createDir cannot succeed
+    let blocker = dir / "blocker"
+    writeFile(blocker, "x")
+    check not saveSettings(defaultSettings(), blocker / "nope" / "settings.json")
 
 removeDir dir

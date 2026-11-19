@@ -11,7 +11,7 @@ import nimvcl
 import ide/[mainform, session, project, builder, uniteditor, messagespanel, messages,
             actions, quickfix, unitimports, symbols, symbolindex]
 
-putEnv("SDL_VIDEO_DRIVER", "offscreen")
+if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
 const unitText = """## unit1

@@ -6,7 +6,7 @@
 # removed when all tests pass and kept (with logs) when one fails.
 set -u
 cd "$(dirname "$0")/.."
-export SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software
+export SDL_VIDEO_DRIVER="${SDL_VIDEO_DRIVER:-offscreen}" SDL_RENDER_DRIVER="${SDL_RENDER_DRIVER:-software}"
 out="build/tests/run-$$"
 mkdir -p "$out"
 flags=(--hints:off --warnings:off "$@" --outdir:"$out" --nimcache:"$out/cache")

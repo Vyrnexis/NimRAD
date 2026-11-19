@@ -168,7 +168,7 @@ suite "generated unit compiles":
     let cmd = "nim c --hints:off --warnings:off --path:" & quoteShell(detectNimvclPath()) &
               " --nimcache:" & quoteShell(dir / "cache") & " --outdir:" & quoteShell(dir) &
               " -r " & quoteShell(dir / "app.nim") & " --smoke"
-    putEnv("SDL_VIDEO_DRIVER", "offscreen")
+    if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
     putEnv("SDL_RENDER_DRIVER", "software")
     let (output, code) = execCmdEx(cmd)
     if code != 0:
@@ -187,7 +187,7 @@ suite "prelude and older units":
     unit = unit.replace("import nimvcl/prelude\n",
       "import nimvcl/core/[control, form, application]\nimport nimvcl/controls/common\n")
     writeFile(dir / "unit1.nim", unit)
-    putEnv("SDL_VIDEO_DRIVER", "offscreen")
+    if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
     putEnv("SDL_RENDER_DRIVER", "software")
     let (output, code) = execCmdEx("nim c --hints:off --warnings:off --path:" &
       quoteShell(detectNimvclPath()) & " --nimcache:" & quoteShell(dir / "cache") &

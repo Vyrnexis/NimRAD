@@ -1,4 +1,5 @@
 import std/[unittest, os, osproc, strutils, sequtils]
+import headless
 import nimvcl
 import nimvcl/dsl/props
 import nimvcl/controls/inspector
@@ -37,8 +38,7 @@ proc tileCenter(e: UnitEditor, i: int): PointF =
   pointF(o.x + t.left + t.width / 2, o.y + t.top + t.height / 2)
 
 proc smoke(p: Project): tuple[output: string, exitCode: int] =
-  execCmdEx("SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software " &
-            quoteShell(p.exePath) & " --smoke 2>&1")
+  headlessCmd(quoteShell(p.exePath) & " --smoke")
 
 proc compiles(p: Project): bool =
   let r = p.compileProjectSync()

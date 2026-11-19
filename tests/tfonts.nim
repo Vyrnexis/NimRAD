@@ -7,7 +7,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import ide/[mainform, session, project, builder, mainfile, uniteditor]
 
-putEnv("SDL_VIDEO_DRIVER", "offscreen")
+if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
 let root = getTempDir() / ("nimvclide-fonts-" & $getCurrentProcessId())

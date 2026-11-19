@@ -16,7 +16,7 @@ designer, an object inspector, code editor tabs, and one-key build and run.
 <img src="docs/images/ide-dark.png" width="32%" alt="The dark theme">
 </p>
 
-**Status:** version 0.1.0. New to it? Start with the
+**Status:** version 0.1.3. New to it? Start with the
 [tutorial](docs/tutorial.md); the [user guide](docs/user-guide.md) covers the
 rest.
 
@@ -58,7 +58,7 @@ rest.
 
 ## Install
 
-Requirements: Linux, Nim 2.2 or newer, and the SDL3 libraries that
+Requirements: Linux (Windows and macOS: see [Platform support](#platform-support)), Nim 2.2 or newer, and the SDL3 libraries that
 [nimvcl](https://github.com/Vyrnexis/nimvcl) draws with (SDL3, SDL3_ttf,
 SDL3_image; Arch: `pacman -S sdl3 sdl3_ttf sdl3_image`). `nim` must be on the
 `PATH` when you build projects from the IDE.
@@ -114,6 +114,38 @@ instead of the nimble package (see `config.nims`).
 | `Alt+G` | Go to Line | `Shift+Ctrl+F11` | Project Options |
 | `Ctrl+F12` | View Units | `F8` / `Ctrl+Alt+Down` | Next compiler message |
 | `Shift+F12` | View Forms | `Alt+F4` | Exit |
+
+## Platform support
+
+- **Linux**: built and tested; this is what CI gates on.
+- **Windows** and **macOS**: experimental. CI has jobs for both (allowed to
+  fail) that build the IDE and run the headless test suite against the nimvcl
+  release this IDE pins (`nimvcl_ide.nimble`). Known so far:
+  - Building and running projects looks `nim` up in `PATH` (`nim.exe` on
+    Windows, found with `findExe`), starts it without a shell, and stops a
+    running program with `taskkill` on Windows. Project files always store
+    paths with `/`, and backslashes are converted when a project is loaded.
+  - The compiler reports real paths (macOS: `/private/var/...` for a project
+    under `/var/...`); messages are matched to units by real path.
+  - nimvcl finds system fonts by scanning the font folders on those systems
+    (fontconfig-free); the bundled fonts always work.
+  - Not verified: native file dialogs, clipboard, HiDPI and docking popups.
+  - Headless runs: SDL's `offscreen` driver cannot create windows on macOS, use
+    `SDL_VIDEO_DRIVER=dummy` there (what CI does).
+  - Install SDL3, SDL3_ttf and SDL3_image:
+    - Windows: the release zips from [libsdl-org](https://github.com/libsdl-org)
+      (DLLs next to `nimvcl_ide.exe` or on `PATH`). Do not use the MSYS2
+      `mingw-w64-x86_64-sdl3` build: its `SDL_IOFromFile` fails for every path,
+      so pictures and fonts cannot be loaded.
+    - macOS: `brew install sdl3 sdl3_ttf sdl3_image`. dyld does not find
+      Homebrew's dylibs by bare name, so SDL is linked at build time instead:
+      the IDE (for itself and for the projects it builds) passes
+      `--dynlibOverride:SDL3 --dynlibOverride:SDL3_ttf --dynlibOverride:SDL3_image
+      --passL:"-L/opt/homebrew/lib -L/usr/local/lib -lSDL3 -lSDL3_ttf -lSDL3_image"`
+      (defined once in `src/ide/sdllink.nim`; new projects get the same in
+      their `nim.cfg`). Add it to your own project's config when building
+      without the IDE.
+  - `scripts/test.sh` needs bash (Git Bash on Windows).
 
 ## Screenshots and tests
 

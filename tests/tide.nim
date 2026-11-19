@@ -14,7 +14,7 @@ import nimvcl/controls/inspector
 import ide/[mainform, session, project, builder, ideconfig, uniteditor, messagespanel,
             messages, palette, actions, projecttree, mainfile, editortabs, icons]
 
-putEnv("SDL_VIDEO_DRIVER", "offscreen")
+if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
 let root = getTempDir() / ("nimvclide-ide-" & $getCurrentProcessId())
@@ -534,7 +534,7 @@ suite "save as":
   test "the project builds under its new name and smoke-runs":
     let r = buildAndSmoke()
     check r.ok and r.warnings == 0 and r.exit == 0
-    check exePath(ide.project).extractFilename == "Renamed" & ExeExt
+    check exePath(ide.project).extractFilename == "Renamed".addFileExt(ExeExt)
     check fileExists(exePath(ide.project))
 
 

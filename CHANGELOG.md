@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.3 - 2026-11-19
+
+- Windows and macOS support (experimental), with CI jobs for both; requires
+  nimvcl 0.1.3.
+- Windows: the built program's path gets the `.exe` suffix; `nim` is found
+  on `PATH` as `nim.exe`.
+- macOS: the IDE and the projects it builds link SDL at build time, and new
+  projects get the same flags in their `nim.cfg` so `nim c` works outside
+  the IDE. Compiler messages match units by real path (`/private/var`).
+- Project files are read with `/` or `\` path separators.
+
 ## 0.1.2 - 2026-11-19
 
 - Quick fix for missing imports: when a build fails on an undeclared nimvcl

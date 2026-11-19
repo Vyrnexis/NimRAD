@@ -1,4 +1,5 @@
 import std/[unittest, os, osproc, strutils, json, sequtils]
+import headless
 import ide/[project, builder]
 
 let root = getTempDir() / ("nimvclide-proj-" & $getCurrentProcessId())
@@ -6,8 +7,7 @@ removeDir root
 createDir root
 
 proc smoke(p: Project): tuple[output: string, exitCode: int] =
-  execCmdEx("SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software " &
-            quoteShell(p.exePath) & " --smoke 2>&1")
+  headlessCmd(quoteShell(p.exePath) & " --smoke")
 
 proc build(p: Project): CompileResult =
   result = p.compileProjectSync()
@@ -42,7 +42,8 @@ suite "project file":
     expect ProjectError: discard loadProject(root / "missing.nimproj")
 
   test "nimvcl path detection":
-    check detectNimvclPath().endsWith("nimvcl/src") or detectNimvclPath() == ""
+    let found = detectNimvclPath().replace(DirSep, '/')
+    check found.endsWith("nimvcl/src") or found == ""
     let p = Project(filePath: root / "x.nimproj", nimvclPath: "../elsewhere/src")
     check p.nimvclSrc == root.parentDir / "elsewhere" / "src"
 
@@ -144,7 +145,7 @@ suite "rename the project":
     check q.name == "world" and q.units.len == 2
     check readFile(root / "app" / "world.nim").contains("import unit1")
     check q.build().ok
-    check q.exePath.extractFilename == "world" & ExeExt
+    check q.exePath.extractFilename == "world".addFileExt(ExeExt)
     check q.smoke().exitCode == 0
 
 removeDir root

@@ -20,6 +20,7 @@ import std/[os, osproc, strutils, atomics, streams]
 when defined(posix): import std/posix
 import nimvcl
 import ./project
+when defined(macosx): import ./sdllink
 
 type
   BuildState* = enum bsIdle, bsCompiling, bsRunning
@@ -46,7 +47,13 @@ proc defaultBuildOptions*(): BuildOptions =
 
 proc exePath*(p: Project): string =
   ## Where `nim c` puts the program: `<outputDir>/<main file stem>`.
-  p.outputPath / (p.mainFile.splitFile.name & ExeExt)
+  p.outputPath / (p.mainFile.splitFile.name.addFileExt(ExeExt))
+
+# macOS: programs link SDL at build time (see sdllink.nim for why).
+proc sdlLinkArgs(): seq[string] =
+  when defined(macosx):
+    for l in SdlLibs: result.add "--dynlibOverride:" & l
+    result.add "--passL:" & sdlPassL()
 
 proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
   ## Arguments of the `nim` command (without the executable itself).
@@ -59,6 +66,7 @@ proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
   if p.version.len > 0: result.add "-d:appVersion=" & p.version
   let src = p.nimvclSrc
   if src.len > 0: result.add "--path:" & src
+  result.add sdlLinkArgs()
   result.add "--outdir:" & p.outputPath
   result.add opts.extraArgs
   result.add p.mainPath
@@ -81,8 +89,14 @@ proc streamProcess(exe: string, args: seq[string], workDir: string,
   ## Runs the process with stdout and stderr merged, calling `emit` for every
   ## line, and returns its exit code (-1 when it cannot be started).
   var p: Process
+  # A bare name ("nim") is looked up in PATH here; findExe also tries the
+  # executable suffixes of the platform (nim.exe, ...).
+  var cmd = exe
+  if not (exe.isAbsolute or '/' in exe or '\\' in exe):
+    let found = findExe(exe)
+    if found.len > 0: cmd = found
   try:
-    p = startProcess(exe, workDir, args, nil, {poUsePath, poStdErrToStdOut})
+    p = startProcess(cmd, workDir, args, nil, {poUsePath, poStdErrToStdOut})
   except OSError as e:
     emit "cannot start " & exe & ": " & e.msg
     return -1

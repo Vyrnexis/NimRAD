@@ -3,6 +3,7 @@
 ## and the unit editor (headless; the dialogs are driven through their procs).
 
 import std/[unittest, os, osproc, strutils, sequtils]
+import headless
 import nimvcl
 import nimvcl/dsl/[props, props_std]
 import nimvcl/controls/[inspector, propeditors]
@@ -144,8 +145,7 @@ suite "pictures in the designer":
     if not res.ok: echo res.lines.join("\n")
     check res.ok
     removeDir r.proj.dir / "images"
-    let (o, c) = execCmdEx("SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software " &
-                           quoteShell(r.proj.exePath) & " --smoke 2>&1")
+    let (o, c) = headlessCmd(quoteShell(r.proj.exePath) & " --smoke")
     check c == 0
     check "picture ok" in o
 

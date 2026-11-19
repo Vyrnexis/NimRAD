@@ -52,7 +52,7 @@
 import std/[json, os, strutils, sequtils]
 import nimvcl/graphics/[font, context]
 import nimvcl/dsl/nfmsyntax
-import ./[codegen, mainfile, nimvclpath, unitimports]
+import ./[codegen, mainfile, nimvclpath, sdllink, unitimports]
 
 const
   ProjectExt* = ".nimproj"
@@ -190,7 +190,7 @@ proc loadProject*(path: string): Project =
   if j.kind != JObject:
     raise newException(ProjectError, abs & " is not a project file")
   result = Project(filePath: abs, name: j.str("name", abs.splitFile.name),
-                   mainFile: j.str("mainFile", ""), outputDir: j.str("outputDir", "build"),
+                   mainFile: unixPath(j.str("mainFile", "")), outputDir: unixPath(j.str("outputDir", "build")),
                    nimFlags: j.strs("nimFlags"), defines: j.strs("defines"),
                    title: j.str("title", ""), version: j.str("version", ""),
                    runArgs: j.strs("runArgs"),
@@ -202,15 +202,16 @@ proc loadProject*(path: string): Project =
   if j.hasKey("units") and j["units"].kind == JArray:
     for e in j["units"]:
       if e.kind != JObject: continue
-      var u = ProjectUnit(name: e.str("name", ""), nimPath: e.str("nim", ""),
-                          nfmPath: e.str("nfm", ""), formType: e.str("formType", ""),
-                          ancestor: e.str("ancestor", ""))
+      # Paths are stored with '/'; a file written by hand on Windows may use '\'.
+      var u = ProjectUnit(name: e.str("name", ""), nimPath: unixPath(e.str("nim", "")),
+                          nfmPath: unixPath(e.str("nfm", "")), formType: e.str("formType", ""),
+                          ancestor: unixPath(e.str("ancestor", "")))
       u.isForm = e.hasKey("isForm") and e["isForm"].kind == JBool and e["isForm"].getBool
       if u.name.len > 0 and u.nimPath.len > 0: result.units.add u
   if j.hasKey("fonts") and j["fonts"].kind == JArray:
     for e in j["fonts"]:
       if e.kind != JObject: continue
-      let f = ProjectFont(file: e.str("file", ""), family: e.str("family", ""),
+      let f = ProjectFont(file: unixPath(e.str("file", "")), family: e.str("family", ""),
                           style: e.str("style", "regular"))
       if f.file.len > 0 and f.family.len > 0: result.fonts.add f
 
@@ -565,7 +566,7 @@ proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =
   let u = result.newFormUnit()
   writeFile(d / result.mainFile,
             expand(tmplMain, {"name": name, "unit": u.name, "form": u.formType}))
-  writeFile(d / "nim.cfg", expand(tmplCfg, {"nimvclPath": cfgPath}))
+  writeFile(d / "nim.cfg", expand(tmplCfg, {"nimvclPath": cfgPath, "sdlLink": sdlCfgBlock()}))
   result.save()
 
 proc rewriteImports*(p: Project): seq[string] =

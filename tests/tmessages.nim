@@ -1,8 +1,9 @@
 import std/[unittest, os, osproc, strutils]
 import ide/messages
 
-let dir = getTempDir() / ("nimvclide-msg-" & $getCurrentProcessId())
-createDir dir
+let dir0 = getTempDir() / ("nimvclide-msg-" & $getCurrentProcessId())
+createDir dir0
+let dir = when defined(macosx): expandFilename(dir0) else: dir0   # the compiler prints real paths (macOS: /private/var/...)
 
 
 proc nimOut(name, src: string, run = false, extra = ""): string =
@@ -11,10 +12,16 @@ proc nimOut(name, src: string, run = false, extra = ""): string =
   writeFile(f, src)
   let cmd = "nim c --colors:off --listFullPaths:on --hints:off " & extra &
             " --nimcache:" & quoteShell(dir / "cache-" & name) & " --outdir:" & quoteShell(dir) &
-            (if run: " -r " else: " ") & quoteShell(f) & " 2>&1"
+            (if run: " -r " else: " ") & quoteShell(f)
   execCmdEx(cmd).output
 
 suite "single lines":
+  test "windows paths with a drive letter":
+    let m = parseLine("C:\\Users\\me\\app (1)\\unit1.nim(3, 11) Error: undeclared identifier: 'y'")
+    check m.kind == mkError and m.line == 3 and m.col == 11
+    check m.file == "C:\\Users\\me\\app (1)\\unit1.nim"
+    check m.text == "undeclared identifier: 'y'"
+
   test "error":
     let m = parseLine("/a/b.nim(3, 11) Error: undeclared identifier: 'y'")
     check m.kind == mkError

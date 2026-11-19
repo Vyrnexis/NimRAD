@@ -3,12 +3,13 @@
 ## the differences, building and smoke-running the project, and a changed
 ## ancestor showing up in the descendant without any copy.
 import std/[unittest, os, osproc, strutils, sequtils]
+import headless
 import nimvcl
 import nimvcl/dsl/props
 import nimvcl/controls/inspector
 import ide/[project, builder, uniteditor, mainform, actions, session]
 
-putEnv("SDL_VIDEO_DRIVER", "offscreen")
+if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
 let root = getTempDir() / ("nimvclide-inherit-" & $getCurrentProcessId())
@@ -36,8 +37,7 @@ proc find(e: UnitEditor, name: string): Control =
     if c.name == name and c of Control: return Control(c)
 
 proc smoke(p: Project): tuple[output: string, exitCode: int] =
-  execCmdEx("SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software " &
-            quoteShell(p.exePath) & " --smoke 2>&1")
+  headlessCmd(quoteShell(p.exePath) & " --smoke")
 
 proc compiles(p: Project): bool =
   let r = p.compileProjectSync()
@@ -204,8 +204,7 @@ suite "same handler name in ancestor and descendant":
     main = main.replace("import std/os\n", "import std/os\nimport unit1\n")
     writeFile(root / "ovr" / "ovr.nim", main)
     check p.compiles()
-    let (o, code) = execCmdEx("SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software " &
-                              quoteShell(p.exePath) & " --click 2>&1")
+    let (o, code) = headlessCmd(quoteShell(p.exePath) & " --click")
     check code == 0
     check o.strip == "@[\"F2\", \"F1\", \"F1\"]"         # Form2's, its call of Form1's, then Form1's own
 

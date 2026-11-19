@@ -80,7 +80,7 @@ suite "sync":
     check not r.ok and r.exe == ""
     let ms = parseMessages(r.lines.join("\n"))
     check ms.len >= 1 and ms[0].kind == mkError
-    check ms[0].file == p.mainPath and ms[0].line == 2
+    check expandFilename(ms[0].file) == expandFilename(p.mainPath) and ms[0].line == 2
 
   test "arguments":
     let p = mkProject("syncargs", okSrc)
