@@ -243,12 +243,19 @@ suite "lists and collections in the designer":
       c.insp.setValue("caption", pvString("Size"))
       mrOk
     r.insp.beginEdit("columns")
-    r.pick proc(d: Form): ModalResult =
-      StringListDlgForm(d).memo.text = "a.txt\t10\nb.txt\t20"
+    r.pick proc(d: Form): ModalResult =          # the ListView Items Editor
+      let dd = ItemsDlgForm(d)
+      dd.addItem()
+      dd.capEdit.text = "a.txt"
+      dd.subMemo.text = "10"
+      dd.addItem()
+      dd.capEdit.text = "b.txt"
+      dd.subMemo.text = "20"
       mrOk
     r.insp.beginEdit("items")
     let lv = ListView(r.ed.find("ListView1"))
     check lv.columns.len == 2 and lv.items.count == 2
+    check lv.itemLines == @["a.txt\t10", "b.txt\t20"]
     r.ed.save()
     check r.proj.compiles()
 
