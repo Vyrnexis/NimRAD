@@ -653,6 +653,20 @@ suite "options and run parameters":
     ide.setRunParameters ""
     check ide.project.runArgs.len == 0
 
+  test "a compiler flag with a quoted space survives the options and the project file":
+    var o = ide.currentOptions
+    let before = o.flags
+    o.flags = "--hints:off --passL:\"-L/my path\" -d:x"
+    ide.applyOptions o
+    check ide.project.nimFlags == @["--hints:off", "--passL:-L/my path", "-d:x"]
+    check ide.currentOptions.flags == "--hints:off \"--passL:-L/my path\" -d:x"
+    check loadProject(ide.project.filePath).nimFlags == ide.project.nimFlags
+    ide.applyOptions ide.currentOptions                # the displayed text gives the same flags
+    check ide.project.nimFlags == @["--hints:off", "--passL:-L/my path", "-d:x"]
+    o.flags = before
+    ide.applyOptions o
+    check ide.project.nimFlags == before.splitWhitespace
+
 suite "units and forms lists":
   var shown: seq[string]
   var title = ""

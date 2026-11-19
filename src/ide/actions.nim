@@ -15,7 +15,7 @@ type
     aFind, aReplace, aFindNext, aGotoLine, aFindUnit, aQuickFix,
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
-    aAddToProject, aAddFont, aRemoveFromProject, aViewSource, aProjectOptions,
+    aAddToProject, aAddFont, aRemoveFont, aRemoveFromProject, aViewSource, aProjectOptions,
     aCompile, aRun, aReset, aRunParameters, aShowHints, aNextMessage, aNextMessageAlt,
     aPointer, aFindComponent, aBringToFront, aSendToBack, aAlignLefts, aAlignTops, aCenterH, aCenterV,
     aEditorOptions, aAbout
@@ -63,6 +63,7 @@ const defs: array[ActId, ActDef] = [
   (aViewForms, "Fo&rms...", "Open a form of the project", "Shift+F12", icFormUnit),
   (aAddToProject, "&Add to Project...", "Add an existing unit to the project", "Shift+F11", icAdd),
   (aAddFont, "Add &Font File...", "Copy a .ttf or .otf into the project's fonts folder and embed it in the program", "", -1),
+  (aRemoveFont, "Remove Fo&nt...", "Remove a font from the project, its embed block and the fonts folder", "", -1),
   (aRemoveFromProject, "&Remove from Project", "Remove the current unit from the project", "", icRemove),
   (aViewSource, "&View Source", "Show the main program file", "", icProject),
   (aProjectOptions, "&Options...", "Compiler flags and output folder", "Shift+Ctrl+F11", icOptions),

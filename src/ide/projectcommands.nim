@@ -4,7 +4,7 @@
 
 import nimvcl
 import std/[os, strutils, sequtils]
-import ./[project, ideconfig, messagespanel, uniteditor, mainfile,
+import ./[cmdargs, project, ideconfig, messagespanel, uniteditor, mainfile,
           ideform, ideeditors]
 
 proc closeProject*(ide: IdeForm): bool =
@@ -147,6 +147,36 @@ proc addFontFile*(ide: IdeForm, path: string): bool =
   except CatchableError as e:
     ide.fail "Cannot add " & path & ": " & e.msg
 
+proc removeFont*(ide: IdeForm, file = ""): bool =
+  ## Project > Remove Font: takes a font out of the project, out of the main
+  ## file's `fonts` block and out of the project's `fonts` folder (the file is
+  ## deleted). Without `file` (as in `Project.fonts`) the font is chosen from a
+  ## list, which is also the confirmation. The family stays registered in this
+  ## IDE session; it is gone from the Object Inspector's list and from the
+  ## next build.
+  if ide.project == nil: return false
+  if ide.project.fonts.len == 0:
+    ide.say "The project has no fonts"
+    return false
+  var target = file
+  if target.len == 0:
+    var labels: seq[string]
+    for f in ide.project.fonts: labels.add f.family & " (" & f.style & ")  " & f.file
+    let i = ide.pickItem("Remove Font: deletes the file from the project", labels, 0)
+    if i < 0 or i >= ide.project.fonts.len: return false
+    target = ide.project.fonts[i].file
+  let mainEd = ide.beforeMainEdit()
+  try:
+    let f = ide.project.removeFont(target)
+    ide.project.save()
+    ide.project.syncFontsBlock()
+    ide.afterMainEdit(mainEd)
+    ide.refreshProject()
+    ide.say "Removed font " & f.family & " (" & f.style & ")"
+    result = true
+  except CatchableError as e:
+    ide.fail "Cannot remove " & target & ": " & e.msg
+
 proc removeFromProject*(ide: IdeForm, unitName: string): bool =
   ## Takes a unit out of the project (its files stay on disk). The unit that
   ## makes the main form cannot be removed.
@@ -184,7 +214,7 @@ proc splitDefines*(text: string): seq[string] =
 
 proc currentOptions*(ide: IdeForm): ProjectOptions =
   let p = ide.project
-  ProjectOptions(outputDir: p.outputDir, flags: p.nimFlags.join(" "),
+  ProjectOptions(outputDir: p.outputDir, flags: p.nimFlags.map(quoteArg).join(" "),
                  defines: p.defines.join(" "), title: p.title, version: p.version,
                  autoImports: p.autoImports, importAll: p.importAll)
 
@@ -193,7 +223,7 @@ proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
   if ide.project == nil: return
   let p = ide.project
   p.outputDir = if o.outputDir.strip.len > 0: o.outputDir.strip else: "build"
-  p.nimFlags = o.flags.splitWhitespace
+  p.nimFlags = splitArgs(o.flags)       # a quoted flag keeps its spaces
   p.defines = splitDefines(o.defines)
   p.title = o.title.strip
   p.version = o.version.strip
@@ -209,16 +239,13 @@ proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
   p.save()
   if not modeChanged: ide.say "Project options saved"
 
-proc quoteArg(a: string): string =
-  if a.len == 0 or a.anyIt(it in {' ', '\t', '"'}): "\"" & a.replace("\"", "\\\"") & "\"" else: a
-
 proc runParameters*(ide: IdeForm): string =
   ## The program arguments as one line (as shown by Run > Parameters).
   if ide.project != nil: ide.project.runArgs.map(quoteArg).join(" ") else: ""
 
 proc setRunParameters*(ide: IdeForm, text: string) =
   if ide.project == nil: return
-  ide.project.runArgs = parseCmdLine(text)
+  ide.project.runArgs = splitArgs(text)
   ide.project.save()
   ide.say "Run parameters saved"
 

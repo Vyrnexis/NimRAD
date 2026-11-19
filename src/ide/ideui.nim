@@ -111,6 +111,7 @@ proc connectActions*(ide: IdeForm) =
   on aAddFont:
     let f = ide.pickFile("Add Font File", @[("Fonts", "ttf;otf")])
     if f.len > 0: discard ide.addFontFile(f)
+  on aRemoveFont: discard ide.removeFont()
   on aRemoveFromProject:
     let ed = ide.activeEditor
     if ed != nil: discard ide.removeFromProject(ed.unitName)
@@ -201,7 +202,7 @@ proc buildMenu*(ide: IdeForm) =
   view.addAct a[aTheme]
   view.addItem("Reset &Layout", proc(s: MenuItem) = ide.resetLayout())
   let proj = m.addItem("&Project")
-  for id in [aAddToProject, aAddFont, aRemoveFromProject, aViewSource]: proj.addAct a[id]
+  for id in [aAddToProject, aAddFont, aRemoveFont, aRemoveFromProject, aViewSource]: proj.addAct a[id]
   proj.addSeparator()
   proj.addAct a[aProjectOptions]
   let run = m.addItem("&Run")
