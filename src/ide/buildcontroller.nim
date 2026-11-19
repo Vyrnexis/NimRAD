@@ -96,8 +96,20 @@ proc compile*(ide: IdeForm): bool =
   ide.startBuild(bpCompiling)
 
 proc run*(ide: IdeForm): bool =
-  ## Run > Run: builds (the compiler knows what is out of date and does nothing
-  ## when the program is current), then starts the program.
+  ## Run > Run: builds, then starts the program. A program the last build made
+  ## from exactly these files and arguments is not built again (`isUpToDate`;
+  ## at any doubt it is).
+  if ide.project == nil or ide.busy: return false
+  ide.saveAll()
+  if ide.project.isUpToDate(ide.buildOptions):
+    ide.messages.clear()
+    ide.clearErrorMarkers()
+    ide.messages.showMessages()
+    ide.messages.addNote("Up to date: " & ide.project.name & " is not built again", icSuccess)
+    ide.say "Up to date"
+    ide.lastBuildOk = true
+    ide.startProgram()
+    return true
   ide.startBuild(bpCompilingForRun)
 
 proc compileDone(ide: IdeForm, ok: bool) =

@@ -856,13 +856,28 @@ suite "running":
     check not ide.caption.endsWith("[Running]")
 
 suite "run and stop details":
-  test "Run always asks the compiler, so nothing stale runs":
+  test "Run does not build again what is up to date, and builds what changed":
     ide.setRunParameters "--smoke"
     let n = ide.buildCount
+    check ide.run()                                    # built by the runs before
+    check ide.waitIdle(120)
+    check ide.buildCount == n
+    check ide.lastExitCode == 0
+    let m = ide.messages
+    check m.list.items[0].caption.startsWith("Up to date")
+    # an edit of the program file is built
+    let main = ide.project.mainPath
+    writeFile(main, readFile(main) & "\n# changed\n")
     check ide.run()
     check ide.waitIdle(120)
     check ide.buildCount == n + 1
     check ide.lastExitCode == 0
+    # a changed option is built too
+    ide.project.defines = @["upToDateTest"]
+    check ide.run()
+    check ide.waitIdle(120)
+    check ide.buildCount == n + 2
+    ide.project.defines = @[]
 
   test "stopping a build says it was cancelled, not that it failed":
     ide.setRunParameters "--smoke"

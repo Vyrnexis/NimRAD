@@ -21,7 +21,7 @@
 
 import std/[os, strutils, atomics]
 import nimvcl
-import ./[project, proctree]
+import ./[project, proctree, buildcheck]
 when defined(macosx): import ./sdllink
 
 type
@@ -49,10 +49,6 @@ proc defaultBuildOptions*(): BuildOptions =
 
 # ---------------------------------------------------------------- arguments
 
-proc exePath*(p: Project): string =
-  ## Where `nim c` puts the program: `<outputDir>/<main file stem>`.
-  p.outputPath / (p.mainFile.splitFile.name.addFileExt(ExeExt))
-
 # macOS: programs link SDL at build time (see sdllink.nim for why).
 proc sdlLinkArgs(): seq[string] =
   when defined(macosx):
@@ -62,6 +58,10 @@ proc sdlLinkArgs(): seq[string] =
 proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
   ## Arguments of the `nim` command (without the executable itself).
   result = @["c", "--colors:off", "--listFullPaths:on"]
+  # the compiler leaves the list of the files it read next to its cache, which
+  # is what `isUpToDate` works from (see buildcheck)
+  result.add "-d:nimBetterRun"
+  result.add "--nimcache:" & (p.outputPath / "nimcache")
   if not opts.hints: result.add "--hints:off"
   result.add p.nimFlags
   for d in p.defines:
@@ -125,18 +125,26 @@ proc streamProcess(exe: string, args: seq[string], workDir: string,
 
 # --------------------------------------------------------------- sync variants
 
+proc isUpToDate*(p: Project, opts = defaultBuildOptions()): bool =
+  ## Whether the program of the last successful build is still what building
+  ## now would give (see `buildcheck`); false at any doubt.
+  fileExists(p.exePath) and buildcheck.isUpToDate(p, p.compileArgs(opts), opts.nimExe)
+
 proc compileProjectSync*(p: Project, onLine: LineProc = nil,
                          opts = defaultBuildOptions()): CompileResult =
   ## Compiles on the calling thread; `onLine` (optional) gets each line, and
   ## all lines are also returned in `lines`.
   createDir p.outputPath
   var lines: seq[string]
-  let code = streamProcess(opts.nimExe, p.compileArgs(opts), p.dir,
+  let args = p.compileArgs(opts)
+  let snap = takeSnapshot(p, args, opts.nimExe)
+  let code = streamProcess(opts.nimExe, args, p.dir,
     proc(ls: seq[string]) {.gcsafe.} =
       {.cast(gcsafe).}:
         for l in ls:
           lines.add l
           if onLine != nil: onLine(l), nil)
+  if code == 0: recordBuild(p, snap)
   result = CompileResult(ok: code == 0, exitCode: code, lines: lines,
                          exe: if code == 0: p.exePath else: "")
 
@@ -182,6 +190,8 @@ var
   backlog: Atomic[int]                  # batches sent and not yet delivered
   gState = bsIdle
   gCancelled = false
+  gProject: Project                     # the project being compiled (for the stamp)
+  gSnapshot: Snapshot
   gOnLines: array[JobKind, LinesProc]
   gOnCompileDone: DoneProc
   gOnExit: ExitProc
@@ -202,6 +212,8 @@ proc deliverDone(m: DoneMsg) =
   gState = bsIdle
   case m.kind
   of jkCompile:
+    if m.code == 0 and gProject != nil: recordBuild(gProject, gSnapshot)
+    gProject = nil
     let cb = gOnCompileDone
     gOnCompileDone = nil
     if cb != nil: cb(m.code == 0, if m.code == 0: m.exe else: "")
@@ -249,7 +261,10 @@ proc compileProject*(p: Project, onLines: LinesProc, onDone: DoneProc,
   createDir p.outputPath
   gState = bsCompiling
   gOnCompileDone = onDone
-  startJob(jkCompile, JobArgs(kind: jkCompile, exe: opts.nimExe, args: p.compileArgs(opts),
+  let args = p.compileArgs(opts)
+  gProject = p
+  gSnapshot = takeSnapshot(p, args, opts.nimExe)
+  startJob(jkCompile, JobArgs(kind: jkCompile, exe: opts.nimExe, args: args,
                               dir: p.dir, outExe: p.exePath), onLines)
   true
 

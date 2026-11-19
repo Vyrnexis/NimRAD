@@ -195,7 +195,7 @@ compile time. The family then appears under **Project** in the drop-down.
 | Command | Shortcut | Notes |
 |---|---|---|
 | Run > Compile | `Ctrl+F9` | Saves all, compiles in the background |
-| Run > Run | `F9` | Compiles when something changed, then starts the program |
+| Run > Run | `F9` | Compiles when something changed, then starts the program (see below) |
 | Run > Program Reset | `Ctrl+F2` | Stops the running program (or the compiler) |
 | Run > Parameters... | | The command line arguments of the program, written like a shell line (`--fast "a b"`) |
 | Run > Next Message | `F8` or `Ctrl+Alt+Down` | Goes to the next compiler message that has a place in a file |
@@ -216,6 +216,15 @@ message it starts again at the first. **Run > Show Hints** switches hints on
 have stay in the list, and the hints in it appear and disappear at once.
 
 ![A compile error and the jump to it](images/ide-compile-error.png)
+
+**Run** does not start the compiler when nothing changed since the last
+successful build: it checks every file the compiler read (your units, nimvcl,
+the standard library, config files), every file in the project folder (forms,
+fonts, images, `nim.cfg`), the compiler arguments, the compiler itself and the
+program. A file that was only touched or saved unchanged does not count. When
+anything cannot be told, it builds. The Messages window says `Up to date` when
+it skipped the build; **Compile** always builds. The compiler's cache and this
+check's record live in `<output folder>/nimcache`.
 
 While the program runs the title bar reads `NimRAD - Project1 [Running]`
 and the `Output` tab shows what the program writes to stdout and stderr, line

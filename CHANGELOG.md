@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Run skips the compiler when nothing changed: it compares the files the
+  compiler read (from the list it leaves in the nimcache), the project
+  folder, the compiler arguments and the program, and builds at any doubt.
+  The nimcache of a project is now `<output folder>/nimcache`.
 - The IDE is now called NimRAD (Rapid Application Development). The package,
   the program and the main module are `nimrad` (was `nimvcl_ide`), and the
   repository is https://github.com/Vyrnexis/NimRAD.

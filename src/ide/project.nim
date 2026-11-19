@@ -160,6 +160,9 @@ proc nimvclSrc*(p: Project): string =
 
 proc mainPath*(p: Project): string = p.resolve(p.mainFile)
 proc outputPath*(p: Project): string = p.resolve(p.outputDir)
+proc exePath*(p: Project): string =
+  ## Where `nim c` puts the program: `<outputDir>/<main file stem>`.
+  p.outputPath / (p.mainFile.splitFile.name.addFileExt(ExeExt))
 proc nimPathOf*(p: Project, u: ProjectUnit): string = p.resolve(u.nimPath)
 proc nfmPathOf*(p: Project, u: ProjectUnit): string =
   if u.nfmPath.len > 0: p.resolve(u.nfmPath) else: ""
