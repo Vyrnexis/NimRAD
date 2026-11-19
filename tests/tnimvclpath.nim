@@ -31,4 +31,20 @@ suite "nimvcl source resolution":
     check isNimvclSrc(compiledAgainst)
     check detectNimvclSrc().len > 0
 
+suite "detectNimvclSrc is remembered":
+  test "an environment change or a vanished folder is noticed":
+    let keep = getEnv("NIMVCL_SRC")
+    defer:
+      if keep.len > 0: putEnv("NIMVCL_SRC", keep) else: delEnv("NIMVCL_SRC")
+      forgetNimvclSrc()
+    putEnv("NIMVCL_SRC", a)
+    forgetNimvclSrc()
+    check detectNimvclSrc() == a
+    putEnv("NIMVCL_SRC", b)                    # another setting: not the cached answer
+    check detectNimvclSrc() == b
+    check detectNimvclSrc() == b
+    removeFile b / "nimvcl.nim"                # the folder is not nimvcl any more
+    check detectNimvclSrc() != b               # looked up again
+    writeFile(b / "nimvcl.nim", "")
+
 removeDir root

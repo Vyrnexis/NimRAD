@@ -19,6 +19,15 @@
 ## outside it, is left alone. A unit without the block (an older project that
 ## says `import nimvcl`) is never changed.
 ##
+## **Classes of your own.** A form can use a component class that is not
+## nimvcl's: one a unit of the project declares or registers
+## (`Project.userClassImports`), or one the `.nimproj` names in `classImports`.
+## `importsFor` takes those as a (class, module) list next to the nimvcl table, so
+## the unit gets `import gauge` (the path from the unit's own folder) between
+## the markers as well, and loses it when the last object of the class goes. The
+## IDE only manages the lines of modules that are in that list; any other line
+## in the block is the user's.
+##
 ## Pure string functions plus the class table; no UI.
 
 import std/[strutils, algorithm, sets, sequtils, os]
@@ -78,11 +87,20 @@ const
     ("ActionList", "nimvcl/controls/actions"),
     ("Action", "nimvcl/controls/actions")]
 
+type UserClasses* = openArray[(string, string)]
+  ## (class, import path) of classes that are not nimvcl's.
+
 proc moduleOf*(className: string): string =
-  ## The module that declares a class, "" for the base classes and for classes
-  ## the IDE does not know (the user's own).
+  ## The module that declares a nimvcl class, "" for the base classes and for
+  ## classes the table does not know (the user's own, see `UserClasses`).
   for (c, m) in classModules:
     if c == className: return m
+
+proc moduleOf*(className: string, user: UserClasses): string =
+  ## Like `moduleOf`, a class of the user's list first.
+  for (c, m) in user:
+    if c == className: return m
+  moduleOf(className)
 
 proc collectClasses(root: NfmNode, baseDir: string, classes: var HashSet[string],
                     depth = 0) =
@@ -94,10 +112,11 @@ proc collectClasses(root: NfmNode, baseDir: string, classes: var HashSet[string]
       collectClasses(parseNfm(readFile(apath)), apath.parentDir, classes, depth + 1)
     except CatchableError: discard
 
-proc importsFor*(nfmText: string, baseDir = ""): seq[string] =
+proc importsFor*(nfmText: string, baseDir = "", user: UserClasses = []): seq[string] =
   ## The module paths (sorted, no duplicates) of the classes a form file uses.
   ## A form file that does not parse needs none. `baseDir` (the folder of the
   ## file) lets an inherited form count the classes of its ancestors' files too.
+  ## `user` names the modules of classes that are not nimvcl's.
   var root: NfmNode
   try: root = parseNfm(nfmText)
   except NfmError: return
@@ -105,31 +124,34 @@ proc importsFor*(nfmText: string, baseDir = ""): seq[string] =
   collectClasses(root, baseDir, classes)
   var seen = initHashSet[string]()
   for c in classes:
-    let m = moduleOf(c)
+    let m = moduleOf(c, user)
     if m.len > 0 and m notin seen:
       seen.incl m
       result.add m
   result.sort
 
-func managedPath(line: string): string =
-  ## `nimvcl/controls/button` for the line `import nimvcl/controls/button`,
-  ## "" for anything else.
+func managedPath(line: string, owned: openArray[string]): string =
+  ## `nimvcl/controls/button` for the line `import nimvcl/controls/button`, the
+  ## module for the line that imports one of `owned` (a project unit that
+  ## provides a class); "" for anything else.
   let t = line.strip
-  if t.startsWith("import nimvcl/"):
+  if t.startsWith("import "):
     let p = t["import ".len .. ^1].strip
-    if p.len > 0 and not p.anyIt(it in {' ', ',', '[', ']', '#', '{'}): return p
+    if p.len > 0 and not p.anyIt(it in {' ', ',', '[', ']', '#', '{'}) and
+       (p.startsWith("nimvcl/") or p in owned): return p
 
-proc syncImports*(src: string, wanted: seq[string]): string =
+proc syncImports*(src: string, wanted: seq[string], owned: openArray[string] = []): string =
   ## Makes the managed lines of the `imports` block match `wanted`. A module
   ## the file already imports elsewhere is not added again. Returns `src`
-  ## unchanged when the block is missing.
+  ## unchanged when the block is missing. The lines the IDE manages are the
+  ## `nimvcl/...` imports and those of the modules in `owned`.
   var lines = src.split('\n')
   let r = findBlock(lines, UnitImportsBlock)
   if r.b < 0: return src
   var present = initHashSet[string]()
   var i = r.e - 1
   while i > r.b:                       # drop the lines that are no longer needed
-    let p = managedPath(lines[i])
+    let p = managedPath(lines[i], owned)
     if p.len > 0:
       if p in wanted and p notin present: present.incl p
       else: lines.delete i             # stale (or a duplicate)
@@ -146,10 +168,15 @@ proc syncImports*(src: string, wanted: seq[string]): string =
       inc at
   lines.join("\n")
 
-proc syncFromNfm*(src, nfmText: string, baseDir = "", importAll = false): string =
+proc syncFromNfm*(src, nfmText: string, baseDir = "", importAll = false,
+                  user: UserClasses = []): string =
   ## `syncImports` for the classes of a form file; with `importAll` the block
-  ## is kept empty (the unit imports all of nimvcl).
-  syncImports(src, if importAll: @[] else: importsFor(nfmText, baseDir))
+  ## holds only the modules of the user's classes (the unit imports all of
+  ## nimvcl).
+  var owned: seq[string]
+  for (_, m) in user: owned.add m
+  let wanted = importsFor(nfmText, baseDir, user)
+  syncImports(src, if importAll: wanted.filterIt(it in owned) else: wanted, owned)
 
 proc collectNames(root: NfmNode, dir: string, seen: var HashSet[string],
                   names: var seq[string], depth = 0) =

@@ -25,7 +25,8 @@
 ##   "runArgs": [],
 ##   "nimvclPath": "",
 ##   "autoImports": true,
-##   "importAll": true
+##   "importAll": true,
+##   "classImports": {"Gauge": "mylib/gauge"}
 ## }
 ## ```
 ##
@@ -47,13 +48,17 @@
 ##   against, then `nimble path nimvcl`).
 ## * `autoImports` (Project > Options > "Add missing nimvcl imports automatically")
 ##   and `importAll` ("Import all of nimvcl") are written only when on.
+## * `classImports` (optional) maps a component class that is not nimvcl's to the
+##   module a unit imports for it (`import mylib/gauge`), for classes from
+##   outside the project. A class a unit of the project declares or registers
+##   needs no entry: see `userClassImports`.
 ## * Missing fields take their defaults when loading; unknown fields are kept
 ##   and written back unchanged.
 ##
 ## Files of a new project come from `templates/` (read at compile time) with
 ## `${placeholder}` substitution.
 
-import std/[json, os, strutils, sequtils]
+import std/[json, os, strutils, sequtils, tables, times]
 import nimvcl/graphics/[font, context]
 import nimvcl/dsl/nfmsyntax
 import ./[codegen, fileio, mainfile, nimsource, nimvclpath, sdllink, unitimports]
@@ -62,7 +67,8 @@ const
   ProjectExt* = ".nimproj"
   FormatVersion* = 1          ## of the `.nimproj` file
   KnownKeys = ["formatVersion", "name", "mainFile", "units", "fonts", "outputDir", "nimFlags",
-               "defines", "title", "version", "runArgs", "nimvclPath", "autoImports", "importAll"]
+               "defines", "title", "version", "runArgs", "nimvclPath", "autoImports", "importAll",
+               "classImports"]
   tmplMain = staticRead("../../templates/main.nim.tmpl")
   tmplUnit = staticRead("../../templates/unit.nim.tmpl")
   tmplNfm = staticRead("../../templates/unit.nfm.tmpl")
@@ -80,6 +86,11 @@ type
     isForm*: bool
     formType*: string    ## `Form1` for a form unit
     ancestor*: string    ## unit of the ancestor form when this form is inherited, else ""
+
+  ClassScan = object
+    size: int64
+    mtime: Time
+    classes: seq[string]
 
   ProjectFont* = object
     file*: string        ## relative to the project folder, `fonts/Foo-Regular.ttf`
@@ -101,6 +112,8 @@ type
     nimvclPath*: string  ## "" = detect
     autoImports*: bool   ## add a missing `import nimvcl/...` by itself when a build fails for it
     importAll*: bool     ## units and the program import `nimvcl` (slower builds), not the prelude and the control imports
+    classImports*: seq[(string, string)]  ## (class, module) of classes from outside the project
+    classScan: Table[string, ClassScan]   ## the classes each unit file provides, by path
     extra: JsonNode      ## the fields of the file this version does not know, kept for `save`
 
 # ------------------------------------------------------------------- helpers
@@ -207,6 +220,10 @@ proc toJson*(p: Project): JsonNode =
      "units": us, "fonts": fs, "outputDir": p.outputDir, "nimFlags": p.nimFlags,
      "defines": p.defines, "title": p.title, "version": p.version, "runArgs": p.runArgs,
      "nimvclPath": p.nimvclPath}
+  if p.classImports.len > 0:
+    var ci = newJObject()
+    for (c, m) in p.classImports: ci[c] = %m
+    result["classImports"] = ci
   if p.autoImports: result["autoImports"] = %true
   if p.importAll: result["importAll"] = %true
   if p.extra != nil:
@@ -258,6 +275,9 @@ proc loadProject*(path: string): Project =
                           ancestor: unixPath(e.str("ancestor", "")))
       u.isForm = e.hasKey("isForm") and e["isForm"].kind == JBool and e["isForm"].getBool
       if u.name.len > 0 and u.nimPath.len > 0: result.units.add u
+  if j.hasKey("classImports") and j["classImports"].kind == JObject:
+    for c, m in j["classImports"]:
+      if m.kind == JString and c.len > 0 and m.getStr.len > 0: result.classImports.add (c, m.getStr)
   if j.hasKey("fonts") and j["fonts"].kind == JArray:
     for e in j["fonts"]:
       if e.kind != JObject: continue
@@ -426,6 +446,29 @@ proc addFontFile*(p: Project, path: string): ProjectFont =
   p.fonts = p.fonts.filterIt(it.file != rel)
   p.fonts.add result
 
+proc removeFont*(p: Project, file: string): ProjectFont =
+  ## Takes the font (named by its `file`, as in `p.fonts`) out of the project and
+  ## deletes its file from `<project>/fonts/` (a file elsewhere is left alone, and
+  ## so is one another entry still uses); the folder goes when it is empty.
+  ## Saving the project and updating the main file (`syncFontsBlock`) is up to the caller.
+  let key = unixPath(file)
+  var i = -1
+  for k, f in p.fonts:
+    if f.file == key: i = k
+  if i < 0: raise newException(ProjectError, "no font " & file & " in the project")
+  result = p.fonts[i]
+  p.fonts.delete i
+  if p.fonts.anyIt(it.file == result.file): return
+  let path = p.resolve(result.file)
+  let folder = p.dir / "fonts"
+  if path.parentDir == normalizedPath(folder) and fileExists(path):
+    removeFile path
+    try:
+      var left = false
+      for _ in walkDir(folder): left = true
+      if not left: removeDir folder
+    except OSError: discard
+
 # ------------------------------------------------------------------ main file
 
 proc editMain(p: Project, change: proc(src: string): string): bool =
@@ -442,6 +485,35 @@ proc importPath*(p: Project, u: ProjectUnit, fromDir: string): string =
   ## What `import` says to reach the unit from a file in `fromDir`: its name when
   ## it is in that folder, else the path relative to it (`sub/foo`, `../x/foo`).
   unixPath(relativePath(p.nimPathOf(u).changeFileExt(""), fromDir))
+
+proc classesOf(p: Project, u: ProjectUnit): seq[string] =
+  ## The classes the unit declares or registers (cached until the file changes).
+  let path = p.nimPathOf(u)
+  try:
+    let fi = getFileInfo(path)
+    if p.classScan.hasKey(path):
+      let c = p.classScan[path]
+      if c.size == fi.size and c.mtime == fi.lastWriteTime: return c.classes
+    let found = declaredClasses(readFile(path))
+    p.classScan[path] = ClassScan(size: fi.size, mtime: fi.lastWriteTime, classes: found)
+    result = found
+  except CatchableError: discard
+
+proc userClassImports*(p: Project, forUnit = ""): seq[(string, string)] =
+  ## (class, module to import) for the component classes that are not nimvcl's
+  ## and that the form of unit `forUnit` may use: the `classImports` of the
+  ## project, then the classes the other units of the project declare
+  ## (`Badge* = ref object of Panel`) or register (`registerClass(Badge, ...)`),
+  ## each with the import path from the folder of `forUnit` (its name when the
+  ## unit is beside it, else `sub/foo`, `../x/foo`). A unit does not import
+  ## itself.
+  result = p.classImports
+  let k = p.findUnit(forUnit)
+  let fromDir = if k >= 0: p.nimPathOf(p.units[k]).parentDir else: p.mainPath.parentDir
+  for u in p.units:
+    if u.name == forUnit: continue
+    for c in p.classesOf(u):
+      if result.allIt(it[0] != c): result.add (c, p.importPath(u, fromDir))
 
 proc addToMain*(p: Project, u: ProjectUnit): bool {.discardable.} =
   ## Adds `import <unit>` to the main file and, for a form, its create line
@@ -474,6 +546,9 @@ proc removeUnit*(p: Project, name: string, deleteFiles = false) =
   let i = p.findUnit(name)
   if i < 0: raise newException(ProjectError, "no unit " & name)
   let u = p.units[i]
+  if p.isMainForm(u):
+    raise newException(ProjectError, "the form of unit " & name & " is the program's main form; " &
+                       "it cannot be removed")
   let kids = p.units.filterIt(it.ancestor == name).mapIt(it.name)
   if kids.len > 0:
     raise newException(ProjectError, "unit " & name & " is the ancestor of " &
@@ -601,7 +676,8 @@ proc nextFormNumber(p: Project): int =
     var used = false
     for u in p.units:
       if u.name == "unit" & $result or u.formType == "Form" & $result: used = true
-    if not used and not fileExists(p.dir / ("unit" & $result & ".nim")): return
+    if not used and not fileExists(p.dir / ("unit" & $result & ".nim")) and
+       not fileExists(p.dir / ("unit" & $result & ".nfm")): return
     inc result
 
 proc importModeOf(p: Project, src: string): string =
@@ -613,10 +689,10 @@ proc writeUnitFiles(p: Project, unit, form: string) =
   writeFile(p.dir / unit & ".nim", p.importModeOf expand(tmplUnit, vars))
   writeFile(p.dir / unit & ".nfm", expand(tmplNfm, vars))
 
-proc newFormUnit*(p: Project, name = ""): ProjectUnit =
-  ## Adds `unitN.nim` / `unitN.nfm` (form `FormN`) and registers it; `name`
-  ## chooses another unit name (the form type is then its capitalised form).
-  ## The main file imports it and creates the form (`addToMain`).
+proc unitAndForm(p: Project, name: string): tuple[unit, form: string] =
+  ## The unit and form type names of a new form: the next `unitN` / `FormN`, or
+  ## `name` and its capitalised form. Raises `ProjectError` when the name is bad,
+  ## the unit or its files exist, or the form type is a unit's already.
   var unit = name
   var form: string
   if unit.len == 0:
@@ -630,6 +706,17 @@ proc newFormUnit*(p: Project, name = ""): ProjectUnit =
   if p.findUnit(unit) >= 0 or fileExists(p.dir / unit & ".nim") or
      fileExists(p.dir / unit & ".nfm"):
     raise newException(ProjectError, "unit " & unit & " already exists")
+  for u in p.units:
+    if u.formType == form:
+      raise newException(ProjectError, "the form type " & form & " is already the form of " &
+                         u.name & "; choose another unit name")
+  (unit, form)
+
+proc newFormUnit*(p: Project, name = ""): ProjectUnit =
+  ## Adds `unitN.nim` / `unitN.nfm` (form `FormN`) and registers it; `name`
+  ## chooses another unit name (the form type is then its capitalised form).
+  ## The main file imports it and creates the form (`addToMain`).
+  let (unit, form) = p.unitAndForm(name)
   p.writeUnitFiles(unit, form)
   result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form)
   p.addToMain(result)
@@ -651,19 +738,7 @@ proc newInheritedFormUnit*(p: Project, ancestorUnit: string, name = ""): Project
     raise newException(ProjectError, "unit " & ancestorUnit & " is not a form")
   if not fileExists(p.nfmPathOf(anc)):
     raise newException(ProjectError, "the form file of " & ancestorUnit & " is missing")
-  var unit = name
-  var form: string
-  if unit.len == 0:
-    let n = p.nextFormNumber
-    unit = "unit" & $n
-    form = "Form" & $n
-  else:
-    if not validName(unit): raise newException(ProjectError, "bad unit name " & unit)
-    form = unit.capitalizeAscii
-    if form == unit: form &= "Form"
-  if p.findUnit(unit) >= 0 or fileExists(p.dir / unit & ".nim") or
-     fileExists(p.dir / unit & ".nfm"):
-    raise newException(ProjectError, "unit " & unit & " already exists")
+  let (unit, form) = p.unitAndForm(name)
   let rel = unixPath(relativePath(p.nfmPathOf(anc), p.dir))
   writeFile(p.dir / unit & ".nim",
             p.importModeOf expand(tmplInhNim, {"unit": unit, "form": form, "ancestor": anc.name,
@@ -681,6 +756,9 @@ proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =
   if name == "unit1": raise newException(ProjectError, "project name clashes with unit1")
   createDir absolutePath(dir)
   let d = canonical(dir)
+  for f in [name & ProjectExt, name & ".nim", "nim.cfg", "unit1.nim", "unit1.nfm"]:
+    if fileExists(d / f):
+      raise newException(ProjectError, d / f & " already exists; choose an empty folder")
   result = Project(filePath: d / name & ProjectExt, name: name, mainFile: name & ".nim",
                    outputDir: "build", nimvclPath: nimvclPath)
   let src = result.nimvclSrc
@@ -702,7 +780,8 @@ proc rewriteImports*(p: Project): seq[string] =
     var res = setImportAll(src, p.importAll)
     for u in p.units:
       if p.nimPathOf(u) == f and u.isForm and u.nfmPath.len > 0 and fileExists(p.nfmPathOf(u)):
-        res = syncFromNfm(res, readFile(p.nfmPathOf(u)), p.nfmPathOf(u).parentDir, p.importAll)
+        res = syncFromNfm(res, readFile(p.nfmPathOf(u)), p.nfmPathOf(u).parentDir, p.importAll,
+                          p.userClassImports(u.name))
     if res != src:
       writeFileAtomic(f, res)
       result.add f

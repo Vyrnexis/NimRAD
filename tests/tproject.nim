@@ -258,4 +258,40 @@ suite "rename the project":
     check q.exePath.extractFilename == "world".addFileExt(ExeExt)
     check q.smoke().exitCode == 0
 
+suite "units and forms: names and invariants":
+  test "a stray .nfm makes New Form take the next number":
+    let p = newApplicationProject(root / "nums", "nums")
+    writeFile(root / "nums" / "unit2.nfm", "object Form2: Form\nend\n")
+    let u = p.newFormUnit()
+    check u.name == "unit3" and u.formType == "Form3"
+
+  test "two units cannot get the same form type":
+    let p = loadProject(root / "nums" / "nums.nimproj")
+    check p.newFormUnit("bar").formType == "Bar"
+    check p.newFormUnit("barForm").formType == "BarForm"
+    var msg = ""
+    try: discard p.newFormUnit("Bar")                  # would be BarForm again
+    except ProjectError as e: msg = e.msg
+    check msg.len > 0
+    check p.units.filterIt(it.formType == "BarForm").len == 1
+
+  test "a new application does not overwrite files that are there":
+    createDir root / "taken"
+    writeFile(root / "taken" / "taken.nim", "echo 1\n")
+    expect ProjectError: discard newApplicationProject(root / "taken", "taken")
+    check readFile(root / "taken" / "taken.nim") == "echo 1\n"
+    createDir root / "cfg"
+    writeFile(root / "cfg" / "nim.cfg", "-d:mine\n")
+    expect ProjectError: discard newApplicationProject(root / "cfg", "other")
+    check readFile(root / "cfg" / "nim.cfg") == "-d:mine\n"
+
+  test "the unit of the main form cannot be removed from the model either":
+    let p = newApplicationProject(root / "mainform", "mainform")
+    expect ProjectError: p.removeUnit("unit1")
+    check p.findUnit("unit1") >= 0
+    let u = p.newFormUnit()                            # the main form is still unit1's
+    p.removeUnit(u.name)
+    check p.findUnit(u.name) < 0
+
+
 removeDir root

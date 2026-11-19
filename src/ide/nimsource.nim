@@ -91,3 +91,85 @@ proc importedModules*(src: string): seq[string] =
     let open = text.count('[') - text.count(']')
     if open <= 0 and not code.endsWith(","): finish()
   finish()
+
+# ------------------------------------------------------------------- lines
+
+type LineClass* = enum
+  lcBlank       ## nothing on the line
+  lcComment     ## only a comment (a doc comment too)
+  lcCode        ## code starts on this line (it may continue a multi-line string)
+  lcInside      ## the line is inside a multi-line string or comment that began above
+
+proc classifyLines*(lines: openArray[string]): seq[LineClass] =
+  ## One class per line, from nimvcl's lexer, so a `proc` at the start of a line
+  ## of a triple-quoted string, or a comment at column 0 inside a body, is not
+  ## mistaken for code.
+  let h = newNimHighlighter()
+  var state = 0
+  var toks: seq[Token]
+  for raw in lines:
+    let line = raw.strip(chars = {'\r'}, leading = false)
+    toks.setLen 0
+    let inside = state != 0
+    state = h.lexLine(line, state, toks)
+    if inside:
+      result.add lcInside
+    elif line.strip.len == 0:
+      result.add lcBlank
+    else:
+      var code = false
+      for t in toks:
+        if t.kind notin {tkComment, tkDocComment} and
+           line[t.start ..< min(t.start + t.len, line.len)].strip.len > 0: code = true
+      result.add(if code: lcCode else: lcComment)
+
+# ------------------------------------------------------------------ classes
+
+proc identAt(code: string, i: int): string =
+  var j = i
+  while j < code.len and (code[j] in IdentChars or ord(code[j]) >= 0x80): inc j
+  code[i ..< j]
+
+proc declaredClasses*(src: string): seq[string] =
+  ## The classes a unit provides for forms: the ones it registers
+  ## (`registerClass(Badge, parent = Panel): ...`) and the `ref object` types it
+  ## declares (`Badge* = ref object of Panel`), in order, without duplicates.
+  ## Comments and strings never count.
+  let h = newNimHighlighter()
+  var state = 0
+  proc addName(r: var seq[string], name: string) =
+    if name.len > 0 and name[0] in IdentStartChars and name notin r: r.add name
+  var toks: seq[Token]
+  for raw in src.split('\n'):
+    var code = raw.strip(chars = {'\r'}, leading = false)
+    toks.setLen 0
+    let inside = state != 0
+    state = h.lexLine(code, state, toks)
+    if inside: continue
+    for t in toks:                      # comments and strings do not count
+      if t.kind in {tkComment, tkDocComment, tkString, tkChar}:
+        for k in t.start ..< min(t.start + t.len, code.len): code[k] = ' '
+    if code.strip.len == 0: continue
+    var at = code.find("registerClass(")
+    while at >= 0:
+      if at == 0 or code[at - 1] notin IdentChars:
+        var k = at + "registerClass(".len
+        while k < code.len and code[k] == ' ': inc k
+        result.addName code.identAt(k)
+      at = code.find("registerClass(", at + 1)
+    # `Name* = ref object of Base`, also as `type Name* = ...`
+    var t = code.strip
+    if t.startsWith("type "): t = t["type ".len .. ^1].strip
+    let name = t.identAt(0)
+    if name.len == 0: continue
+    var k = name.len
+    if k < t.len and t[k] == '*': inc k
+    while k < t.len and t[k] == ' ': inc k
+    if k < t.len and t[k] == '[':                  # generic parameters
+      let close = t.find(']', k)
+      if close < 0: continue
+      k = close + 1
+      while k < t.len and t[k] == ' ': inc k
+    if k < t.len and t[k] == '=':
+      let rest = t[k + 1 .. ^1].strip
+      if rest.startsWith("ref object") and name notin ["object", "ref"]: result.addName name

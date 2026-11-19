@@ -2,7 +2,7 @@
 ## and (the real check) that a unit with every class of the registry, every
 ## enum property and every event handler compiles with only those imports.
 
-import std/[unittest, strutils, os, osproc, sequtils]
+import std/[unittest, strutils, os, osproc, sequtils, times]
 import nimvcl/dsl/[props, props_std, nfmsyntax]
 import ide/[unitimports, codegen, project, nimsource]
 
@@ -224,3 +224,108 @@ suite "units written before the rename":
     let all = "import nimvcl   # nimvcl-ide: all\n# nimvcl-ide: imports begin\n# nimvcl-ide: imports end\n"
     check setImportAll(all, false).startsWith("import nimvcl/prelude\n")
     check setImportAll(src, true).startsWith("import nimvcl   # nimrad: all\n")
+
+suite "classes of the user's":
+  const badgeUnit = """## badge
+import nimvcl
+type Badge* = ref object of Panel
+  fLevel: int   # registerClass(Fake) in a comment
+proc newBadge*(parent: Container = nil): Badge =
+  new result
+  result.initPanel(parent)
+  if parent != nil: parent.insertControl result
+
+registerClass(Badge, parent = Panel):
+  category Data:
+    level: int
+registerClass(Gauge, parent = Control)
+const s = "registerClass(InString)"
+type
+  Plain = object
+    x: int
+  Meter*[T] = ref object of Control
+  Handle = ref int
+"""
+
+  test "the classes a unit declares or registers":
+    check declaredClasses(badgeUnit) == @["Badge", "Gauge", "Meter"]
+    check declaredClasses("") == newSeq[string]()
+    check declaredClasses("type X = ref object of RootObj\n") == @["X"]
+    check declaredClasses("let registerClassX = 1\nobject of\n") == newSeq[string]()
+
+  test "importsFor names the module of a class of the user's":
+    let user = @[("Badge", "badge"), ("Meter", "sub/meter")]
+    let t = formWith("Button", "Badge", "Meter", "Unknown")
+    check importsFor(t, "", user) == @["badge", "nimvcl/controls/button", "sub/meter"]
+    check importsFor(t) == @["nimvcl/controls/button"]            # without the list: as before
+    check moduleOf("Badge", user) == "badge" and moduleOf("Badge") == ""
+    check moduleOf("Button", user) == "nimvcl/controls/button"
+
+  test "syncFromNfm adds the unit's import, keeps it while an object uses the class, drops it after":
+    let user = @[("Badge", "badge")]
+    let a = syncFromNfm(unitText, formWith("Button", "Badge"), "", false, user)
+    check blockLines(a) == @["import badge", "import nimvcl/controls/button"]
+    let b = syncFromNfm(a, formWith("Badge", "Badge"), "", false, user)
+    check blockLines(b) == @["import badge"]
+    let c = syncFromNfm(b, formWith("Label"), "", false, user)
+    check blockLines(c) == @["import nimvcl/controls/label"]
+    check syncFromNfm(c, formWith("Label"), "", false, user) == c       # idempotent
+
+  test "a line of the block that is not a project module is the user's":
+    var src = unitText.replace("# nimrad: imports begin\n", "# nimrad: imports begin\nimport mystuff\n")
+    let a = syncFromNfm(src, formWith("Badge"), "", false, @[("Badge", "badge")])
+    check blockLines(a) == @["import mystuff", "import badge"]
+    check blockLines(syncFromNfm(a, formWith("Label"), "", false, @[("Badge", "badge")])) ==
+          @["import mystuff", "import nimvcl/controls/label"]
+
+  test "a module imported elsewhere in the unit is not added again":
+    let src = unitText.replace("import nimvcl/dsl/formload\n", "import nimvcl/dsl/formload\nimport badge\n")
+    check syncFromNfm(src, formWith("Badge"), "", false, @[("Badge", "badge")]) == src
+
+  test "with all of nimvcl imported only the user's modules are in the block":
+    let a = syncFromNfm(unitText, formWith("Button", "Badge"), "", true, @[("Badge", "badge")])
+    check blockLines(a) == @["import badge"]
+
+suite "project classes":
+  let dir = getTempDir() / ("nimrad-userclass-" & $getCurrentProcessId())
+  removeDir dir
+  var proj: Project
+
+  test "units that provide classes, found by the project":
+    proj = newApplicationProject(dir, "app")
+    writeFile(dir / "badge.nim", "type Badge* = ref object of RootObj\n")
+    createDir dir / "widgets"
+    writeFile(dir / "widgets" / "meter.nim", "registerClass(Meter, parent = Control)\n")
+    discard proj.addUnit("badge", "badge.nim")
+    discard proj.addUnit("meter", "widgets/meter.nim")
+    check proj.userClassImports("unit1") == @[("Badge", "badge"), ("Meter", "widgets/meter")]
+    check proj.userClassImports("meter") == @[("Badge", "../badge")]   # not itself; paths from its folder
+    check proj.userClassImports() == @[("Badge", "badge"), ("Meter", "widgets/meter")]
+
+  test "the scan follows the file":
+    sleep 20
+    writeFile(dir / "badge.nim", "type Dial* = ref object of RootObj\n")
+    setLastModificationTime(dir / "badge.nim", getLastModificationTime(dir / "badge.nim") + initDuration(seconds = 3))
+    check proj.userClassImports("unit1")[0] == ("Dial", "badge")
+
+  test "classImports of the project file win and survive saving":
+    proj.classImports = @[("Dial", "mylib/dial"), ("Gauge", "mylib/gauge")]
+    check proj.userClassImports("unit1")[0 .. 1] == @[("Dial", "mylib/dial"), ("Gauge", "mylib/gauge")]
+    proj.save()
+    let back = loadProject(proj.filePath)
+    check back.classImports == proj.classImports
+    check "classImports" in readFile(proj.filePath)
+    proj.classImports = @[]
+    proj.save()
+    check "classImports" notin readFile(proj.filePath)
+
+  test "a form that uses a class of the project gets the import (rewriteImports)":
+    writeFile(dir / "badge.nim", "type Badge* = ref object of RootObj\n")
+    var nfm = readFile(dir / "unit1.nfm")
+    nfm = nfm.replace("end\n", "  object Badge1: Badge\n  end\nend\n")
+    writeFile(dir / "unit1.nfm", nfm)
+    check proj.rewriteImports().len == 1
+    check "import badge\n" in readFile(dir / "unit1.nim")
+    check proj.rewriteImports().len == 0
+
+  removeDir dir

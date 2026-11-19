@@ -15,6 +15,7 @@ import std/[strutils, algorithm]
 import nimvcl/controls/nimlexer
 import nimvcl/dsl/[props, props_std]
 import nimvcl
+import ./nimsource
 
 type
   StubResult* = object
@@ -96,12 +97,18 @@ proc identAt(l: string, i: int): string =
   l[i ..< j]
 
 proc parseProcs(s: Src): seq[ProcInfo] =
-  ## Top-level `proc`/`func`/`method` definitions (column 0).
+  ## Top-level `proc`/`func`/`method` definitions (column 0). A definition goes on
+  ## while the lines are indented, blank, comments, or inside a multi-line
+  ## string; comments and strings come from the lexer (see `classifyLines`).
   let n = s.codeLines
+  let cls = classifyLines(s.lines[0 ..< n])
   var i = 0
   while i < n:
     let l = s.lines[i]
     var kw = 0
+    if cls[i] != lcCode:
+      inc i
+      continue
     for k in ["proc ", "func ", "method "]:
       if l.startsWith(k): kw = k.len
     if kw == 0:
@@ -128,15 +135,16 @@ proc parseProcs(s: Src): seq[ProcInfo] =
         var e = 0
         while e < ty.len and (isIdentChar(ty[e]) or ty[e] == '.'): inc e
         info.firstType = ty[0 ..< e]
-    # extent: following lines that are blank or indented
+    # extent: following lines that are blank, indented, a comment, or inside a literal
     var last = i
     var k = i + 1
     while k < n:
       let m = s.lines[k]
-      if isBlank(m): inc k
-      elif m[0] in {' ', '\t'}:
+      if cls[k] == lcBlank: inc k
+      elif cls[k] == lcInside or m[0] in {' ', '\t'}:
         last = k
         inc k
+      elif cls[k] == lcComment: inc k        # a comment at column 0 does not end the body
       else: break
     info.last = last
     # a one-line proc `proc f() = body` has its body on the header line
@@ -275,7 +283,11 @@ proc applyEdits(s: var Src, edits: seq[tuple[line, start, len: int, repl: string
 
 proc renameHandler*(src, oldName, newName: string): string =
   ## Renames the proc and every identifier use of it (calls, other references).
-  ## Member accesses (`x.oldName`) are left alone.
+  ## Member accesses (`x.oldName`) are left alone. This works on tokens, not on
+  ## scopes: a local variable or a parameter with the same name is renamed too,
+  ## and Nim's style-insensitive spellings (`oldname`) do not match. That is
+  ## right for the generated handler names it is meant for; it is not a general
+  ## rename.
   var s = split(src)
   var edits: seq[tuple[line, start, len: int, repl: string]]
   for t in tokenize(s):
@@ -295,7 +307,8 @@ proc renameComponentRefs*(src, oldName, newName: string, formType = ""): string 
   ## Renames `self.oldName` / `f.oldName`. With `formType` the receiver must be
   ## `self` or the name of the first parameter of a proc of that form type;
   ## without it any `x.oldName` is renamed. Strings and comments are skipped,
-  ## and only whole identifiers match.
+  ## and only whole identifiers match. Token level: a receiver that is not a plain
+  ## name (`Form1(x).oldName`) or an alias (`let f = self; f.oldName`) is not found.
   var s = split(src)
   let recv = if formType.len > 0: receivers(s, formType) else: @[]
   var edits: seq[tuple[line, start, len: int, repl: string]]
@@ -324,7 +337,8 @@ proc renameImport*(src, oldUnit, newUnit: string, dir = ""): string =
   var edits: seq[tuple[line, start, len: int, repl: string]]
   var inImport = false
   var depth = 0
-  var afterFrom = false
+  var afterFrom = false          # in `from <module>`, before its `import`
+  var fromNames = false          # after that `import`: the names are not modules
   var lastText = ""
   var prevLine = -1
   let toks = tokenize(s)
@@ -340,6 +354,7 @@ proc renameImport*(src, oldUnit, newUnit: string, dir = ""): string =
       inImport = true
       depth = 0
       afterFrom = txt == "from"
+      fromNames = false
       lastText = txt
       continue
     if not inImport:
@@ -350,7 +365,7 @@ proc renameImport*(src, oldUnit, newUnit: string, dir = ""): string =
       for c in txt:
         if c == '[': inc depth
         elif c == ']': dec depth
-    if t.kind == tkIdent and txt == oldUnit:
+    if t.kind == tkIdent and txt == oldUnit and not fromNames:
       let l = s.lines[t.line]
       let after = t.start + t.len
       let nextCh = if after < l.len: l[after] else: ' '
@@ -364,7 +379,9 @@ proc renameImport*(src, oldUnit, newUnit: string, dir = ""): string =
         else: prevCh in {' ', ',', '[', '\t'} or (prevCh == '/' and prev2 == '.')
       if startsPath and nextCh != '/':
         edits.add (t.line, t.start, t.len, newUnit)
-    if afterFrom and txt == "import": afterFrom = false
+    if afterFrom and txt == "import":
+      afterFrom = false
+      fromNames = true
   s.applyEdits edits
   s.join
 

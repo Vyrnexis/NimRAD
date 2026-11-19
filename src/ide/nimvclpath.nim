@@ -4,7 +4,7 @@
 ## Order: `$NIMVCL_SRC` (override), the folder this IDE was compiled against,
 ## then `nimble path nimvcl`. The result is "" when nothing is found.
 
-import std/[os, osproc, strutils, compilesettings]
+import std/[os, osproc, strutils, compilesettings, times]
 
 proc isNimvclSrc*(dir: string): bool =
   dir.len > 0 and fileExists(dir / "nimvcl.nim")
@@ -38,8 +38,27 @@ proc resolveNimvclSrc*(env, baked: string, nimblePath: proc(): string): string =
     for c in [n / "src", n]:
       if isNimvclSrc(c): return normalizedPath(c)
 
+var cache: tuple[env, path: string, at: float]   ## the last answer (UI thread only)
+
+const NotFoundAgain = 5.0   ## seconds before "not found" is looked up again
+
+proc forgetNimvclSrc*() =
+  ## Drops the remembered answer of `detectNimvclSrc` (it looks again).
+  cache = ("", "", 0.0)
+
 proc detectNimvclSrc*(): string =
-  resolveNimvclSrc(getEnv("NIMVCL_SRC"), compiledAgainst, nimblePathOfNimvcl)
+  ## The nimvcl source folder; the answer is remembered, because the last step
+  ## starts `nimble` (a visible pause on the UI thread, once per compile). A
+  ## folder that is gone is looked for again, and so is "not found" after a few
+  ## seconds.
+  let env = getEnv("NIMVCL_SRC")
+  let now = epochTime()
+  if cache.at > 0 and cache.env == env:
+    if cache.path.len > 0:
+      if isNimvclSrc(cache.path): return cache.path
+    elif now - cache.at < NotFoundAgain: return ""
+  result = resolveNimvclSrc(env, compiledAgainst, nimblePathOfNimvcl)
+  cache = (env, result, now)
 
 const NimvclNotFound* =
   "nimvcl was not found. Install it with `nimble install nimvcl` (or " &

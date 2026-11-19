@@ -159,3 +159,47 @@ suite "imports":
   test "renameLoadFormPath":
     check renameLoadFormPath("loadForm Form1, \"unit1.nfm\"\n", "unit1.nfm", "main.nfm") ==
       "loadForm Form1, \"main.nfm\"\n"
+
+suite "procs the way the lexer sees them":
+  const tricky = "loadForm Form1, \"unit1.nfm\"\n\n" &
+    "proc emptyOne(self: Form1, sender: Control) =\n" &
+    "  discard\n" &
+    "# a comment at column 0 inside the body\n" &
+    "  discard\n\n" &
+    "proc withText(self: Form1, sender: Control) =\n" &
+    "  let s = \"\"\"\n" &
+    "proc fake(self: Form1) =\n" &
+    "not code either\n" &
+    "\"\"\"\n" &
+    "  echo s\n\n" &
+    "proc last(self: Form1, sender: Control) =\n" &
+    "  discard\n"
+
+  test "a comment at column 0 does not cut a body, and a string line is no proc":
+    check handlerNames(tricky, "Form1") == @["emptyOne", "withText", "last"]
+    check not hasProc(tricky, "fake")
+    check hasProc(tricky, "withText")
+
+  test "a column-0 comment in a body is part of it: the proc is not empty and stays":
+    check emptyHandlers(tricky, "Form1") == @["last"]
+    check removeEmptyHandler(tricky, "emptyOne") == tricky     # the comment is the user's
+    check removeEmptyHandler(tricky, "withText") == tricky
+
+  test "an empty proc after the multi-line string goes, the rest stays whole":
+    let r = removeEmptyHandler(tricky, "last")
+    check "proc last" notin r
+    check "proc withText" in r and "echo s" in r and "not code either" in r
+    check r.count("discard") == 2                              # emptyOne's two
+
+  test "a stub goes after the last proc even when a string has column-0 text":
+    let r = ensureHandler(tricky, "Form1", "newOne", "sender: Control")
+    check r.text.find("proc last") < r.text.find("proc newOne")
+    check r.text.find("echo s") < r.text.find("proc newOne")
+
+suite "from imports":
+  test "names after `from x import` are not modules":
+    check renameImport("from strutils import unit1\nimport unit1\n", "unit1", "base") ==
+          "from strutils import unit1\nimport base\n"
+    check renameImport("from unit1 import x\n", "unit1", "base") == "from base import x\n"
+    check renameImport("from a/unit1 import x, unit1\n", "unit1", "base", "a") ==
+          "from a/base import x, unit1\n"
