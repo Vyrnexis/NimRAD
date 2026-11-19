@@ -1,8 +1,8 @@
 # Design-time component audit
 
 What a Delphi 7 user expects to set at design time for each class on the
-palette, and what was not possible. "Status" is the state after the work that
-accompanies this file. Where a class is not listed, its registered properties
+palette, and what was not possible. "Status" is the state as of NimRAD 0.2.0
+with nimvcl 0.2.0 (rows marked 0.2.0 were closed in that release). Where a class is not listed, its registered properties
 cover the usual set (position, size, align, anchors, font, color, caption or
 text, enabled, visible, hint, tab order, events).
 
@@ -34,10 +34,11 @@ writer skips it), *not restored* (`loadNfm` / `loadForm` cannot read it),
 | PageControl | pages (TabSheet) | no way to add a page in the IDE; TabSheet is not on the palette | Fixed: `pages` collection editor; new sheets are named and captioned |
 | StatusBar | panels | no way to add panels | Fixed: `panels` collection editor (also `deletePanel`, `movePanel` in the library) |
 | ListView | columns | no way to add columns | Fixed: `columns` collection editor (also `columns.move`) |
-| ListView | items | no property, no text form | Fixed as text: one row per line, cells separated by a tab; saved and restored by both loaders |
-| ListView | per-item imageIndex, checked | not stored | Later |
-| TreeView | items (nodes) | no property, no text form | Fixed as an outline, two spaces per level; saved and restored by both loaders |
-| TreeView | node imageIndex, expanded, checked | not stored | Later |
+| ListView | items | no property, no text form | Fixed as text: one row per line, cells separated by a tab; saved and restored by both loaders. Edited in the Items Editor |
+| ListView | per-item imageIndex, checked | not stored | Fixed (0.2.0): `itemImages` and `checkedItems` string lists, edited in the Items Editor (image index, check state) |
+| TreeView | items (nodes) | no property, no text form | Fixed as an outline, two spaces per level; saved and restored by both loaders. Edited in the Items Editor (Add, Add child, Indent, Outdent, Up, Down) |
+| TreeView | node imageIndex, selectedIndex, checked | not stored | Fixed (0.2.0): `itemImages`, `itemSelectedImages`, `checkedItems` |
+| TreeView | node expanded | not stored | Later (by design: expansion is a run-time state) |
 | MainMenu | items | no menu editor in the IDE: items could not be added | Fixed: `items` collection editor (sub-items open another editor); items are named and captioned |
 | MainMenu | (palette drop) | dropping it created a bar inside the form that only became a tile after a reload | Fixed: it is a tile at once, like the other non-visual components |
 | PopupMenu | items | no editor | Fixed (same collection editor) |
@@ -47,14 +48,15 @@ writer skips it), *not restored* (`loadNfm` / `loadForm` cannot read it),
 | All controls | color | only some controls painted their own `color` | Fixed: every control with a background fills with it |
 | Label | textRole | not registered (theme colour role) | Later |
 | Panel, GroupBox | caption colour | `textColor` was not registered | Fixed: `font.color` (Panel caption; GroupBox caption too) |
-| Edit | passwordChar | not registered (`password` is) | Later |
+| Edit | passwordChar | not registered (`password` is) | Fixed (0.2.0): a one-character string property; `password = true` stays the bullet |
 | Edit | textHint | alias of `placeholder`, which is registered | Works |
-| Button | image / glyph | the control has no image support | Later (library feature) |
+| Button | images, imageIndex, imageAlignment | the control had no image support | Fixed (0.2.0): `images` (drop-down of the form's ImageLists), `imageIndex`, `imageAlignment` |
 | Button, CheckBox, RadioButton | action | see All controls | Fixed |
-| StringGrid, DrawGrid | cells (StringGrid) | no property, not stored | Later |
-| StringGrid, DrawGrid | per-column widths, fixed row/column titles | not stored | Later |
+| StringGrid | cells | no property, not stored | Fixed (0.2.0): `cells` string list (one row per entry, cells separated by a tab, fixed row and column titles included), cell editor dialog; OK also sets `colCount` and `rowCount` |
+| StringGrid, DrawGrid | per-column widths, per-row heights | not stored | Fixed (0.2.0): `colWidths` and `rowHeights` as comma separated lists |
 | CodeEdit | highlighter | code only; `language` / `autoHighlighter` are registered | Later |
-| Form | menu, icon, keyPreview | no such properties (a MainMenu is a child of the form) | Later |
+| Form | menu, icon | no such properties (a MainMenu is a child of the form) | Fixed (0.2.0): `menu` (drop-down of MainMenus; a MainMenu that is a child of the form is its menu already and is not written), `icon` (picture dialog, becomes the window icon) |
+| Form | keyPreview | not registered | Later |
 | ScrollBar, TrackBar, ProgressBar, SpinEdit, CheckBox, RadioButton, GroupBox, Bevel, PaintBox, ScrollBox, Splitter, Timer | | all usual properties and events are registered, saved and restored | No gap found |
 
 ## What "Fixed" means for the files
@@ -70,7 +72,5 @@ writer skips it), *not restored* (`loadNfm` / `loadForm` cannot read it),
 
 ## Left for later
 
-Per-item image index, check state and expansion of ListView and TreeView items;
-StringGrid cells and column widths; `Label.textRole`, `Edit.passwordChar`;
-`ToolButton.glyph`, `CodeEdit.highlighter`; image support for `Button`; form
-`menu`, `icon`, `keyPreview`.
+Expansion of TreeView nodes (a run-time state); `Label.textRole`;
+`ToolButton.glyph`; `CodeEdit.highlighter`; `Form.keyPreview`.

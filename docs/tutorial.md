@@ -5,8 +5,10 @@ press a button, and the text appears in a label. It takes about five minutes
 and shows the whole cycle of the IDE: draw a form, set properties, write an
 event handler, run.
 
-You need the IDE installed (see the [README](../README.md)). Start it with
-`nimrad`.
+You need the IDE installed (see the [README](../README.md); on Windows and
+macOS see its platform notes). Start it with `nimrad`. (If you used it as
+`nimvcl-ide` before version 0.2.0: your settings are moved over the first time it
+starts, and your projects open as before.)
 
 ## 1. A new project
 
@@ -83,14 +85,23 @@ The program opens in its own window. Change the text in the edit box and press
 
 ![The running program](images/tutorial-4-running.png)
 
-Close the window (or press `Ctrl+F2` in the IDE) to stop the program.
+Close the window (or press `Ctrl+F2` in the IDE) to stop the program;
+`Ctrl+F2` also ends anything the program started. Press **F9** again without
+changing anything: Messages says `Up to date` and the program starts at once,
+because the compiler is only run when something changed. **Ctrl+F9**
+(Compile) always runs it.
+
+If the compiler reports `undeclared identifier` for a name that nimvcl has,
+select the message and press `Ctrl+.` (Quick Fix): the IDE adds the import and
+builds again.
 
 ## Where to go from here
 
 * Give the form a better look: set `color` and the `font` of components (see
   *Colours and fonts* in the [user guide](user-guide.md)).
 * Add a second form with **File > New Form**, or a descendant of the first with
-  **File > New Inherited Form**.
+  **File > New Inherited Form**: it follows its ancestor, shows the properties
+  you changed in bold and can put them back with **Edit > Revert to Inherited**.
 * Try the **Dark Theme** in the View menu.
 * The [user guide](user-guide.md) describes every part of the window, project
   options, and the files the IDE keeps.

@@ -22,7 +22,7 @@ works, Compile says so in Messages.
 
 A short walk-through is in the [tutorial](tutorial.md).
 
-`build/nimrad --project path/to/app.nimproj` opens that project instead of
+`nimrad --project path/to/app.nimproj` opens that project instead of
 the last one (when it cannot be opened, the IDE says so and carries on as
 usual).
 
@@ -145,9 +145,14 @@ of the ancestor and everything you add to it:
   changed, that change is dropped, the status line says so, and the form is
   marked modified. Save All writes descendants before their ancestors, so each
   `.nfm` holds differences from the ancestor as it was when you made them.
+* In the Object Inspector, a property whose value differs from the ancestor's
+  shows its **name** in bold (the bold value still means "differs from the
+  default of the class"). The ancestor form is read once per version of its file,
+  so this costs nothing while you edit.
 * **Revert to Inherited**: select an inherited component, select a property in
   the Object Inspector that you changed from the ancestor's value, and choose
-  **Edit > Revert to Inherited** (or right click in the Object Inspector). The
+  **Edit > Revert to Inherited** (or right click the row in the Object Inspector:
+  the menu acts on the row under the mouse, which the click selects). The
   property takes the ancestor's value again and leaves the descendant's `.nfm`
   when you save. **Revert Component to Inherited** (Edit menu, or the same
   right click menu) does it for every property of the component, and when
@@ -175,7 +180,10 @@ value (or select the row and press Enter).
 |---|---|
 | `picture` of an Image, `image` of a ToolButton | Picture: preview, **Load...** (a PNG, JPG or BMP; Clear removes it). Delete on the row clears it too |
 | `images` of an ImageList | Image list: thumbnails, **Add...** (several files at once), Delete, Up, Down |
-| `items` of a ListBox or ComboBox, `lines` of a Memo, `tabs` of a TabControl, `items` of a ListView (one row per line, cells separated by a tab) or TreeView (an outline, two spaces per level) | One entry per line |
+| `items` of a ListBox or ComboBox, `lines` of a Memo, `tabs` of a TabControl | One entry per line |
+| `items` of a ListView or TreeView | **Items Editor**: Add, Delete, Up, Down (and Add child, Indent, Outdent for a tree), and for the selected item its caption, sub-items (list view), image index, selected image index (tree) and check state. OK also sets the per-item images and checks (`itemImages`, `itemSelectedImages`, `checkedItems`) |
+| `cells` of a StringGrid | Cell editor: an editable grid (type, Tab and arrows move, `Ctrl+V` pastes a block) with Add and Delete for rows and columns; OK sets `colCount`, `rowCount` and the cells |
+| `icon` of a Form | The picture dialog; the file is stored relative to the `.nfm` and becomes the window icon |
 | `columns` (ListView), `panels` (StatusBar), `pages` (PageControl), `buttons` (ToolBar), `actions` (ActionList), `items` (MainMenu, PopupMenu, MenuItem) | Collection editor: Add, Delete, Up, Down and an inspector for the selected item. A menu item's `items` opens another editor for its sub-items |
 
 Pictures are stored in the `.nfm` as a path relative to it
@@ -188,8 +196,14 @@ the status line says so and the path is kept.
 
 To link components, pick them from the drop-down of the property: `images` of a
 ToolBar, TreeView, ListView, menus or ActionList takes an ImageList of the form,
-`popupMenu` a PopupMenu, `action` an Action. `imageIndex` is a number that
-counts the images of the linked list from 0.
+`popupMenu` a PopupMenu, `action` an Action, `menu` of a Form a MainMenu (a
+MainMenu dropped on the form is its menu already). A Button takes an ImageList in
+`images` and shows image `imageIndex` next to its caption (`imageAlignment`:
+left, right, top or bottom). `imageIndex` is a number that counts the images of
+the linked list from 0 (-1: none). `passwordChar` of an Edit is the one
+character that masks the text; a `DrawGrid` or `StringGrid` has `colWidths`
+and `rowHeights` as plain properties (a comma separated list, one number per
+column or row).
 
 ### Colours and fonts
 
@@ -209,17 +223,18 @@ register it at start-up (between marker comments), embedded in the executable at
 compile time. The family then appears under **Project** in the drop-down.
 **Project > Remove Font...** lists the fonts of the project; the one you choose
 leaves the `.nimproj` and the program file's font block, and its file is deleted
-from `fonts/` (the folder goes too when it is empty). The family stays loaded in
-the running IDE until you restart it, but it is gone from the drop-down and from
-the next build.
+from `fonts/` (the folder goes too when it is empty). The family is unregistered
+in the running IDE at once (faces of the same family that stay in the project
+are registered again), so it leaves the drop-down; closing the project or
+switching to another one unregisters the project's fonts as well.
 
 ## Building and running
 
 | Command | Shortcut | Notes |
 |---|---|---|
-| Run > Compile | `Ctrl+F9` | Saves all, compiles in the background |
-| Run > Run | `F9` | Compiles when something changed, then starts the program (see below) |
-| Run > Program Reset | `Ctrl+F2` | Stops the running program (or the compiler) |
+| Run > Compile | `Ctrl+F9` | Saves all, compiles in the background; always runs the compiler |
+| Run > Run | `F9` | Compiles when something changed (otherwise says `Up to date`), then starts the program (see below) |
+| Run > Program Reset | `Ctrl+F2` | Stops the running program or the compiler, and every process they started (the C compiler, programs your program launched) |
 | Run > Parameters... | | The command line arguments of the program, written like a shell line (`--fast "a b"`) |
 | Run > Next Message | `F8` or `Ctrl+Alt+Down` | Goes to the next compiler message that has a place in a file |
 | Run > Show Hints | | Asks the compiler for hints and lists them in Messages |
@@ -245,14 +260,20 @@ successful build: it checks every file the compiler read (your units, nimvcl,
 the standard library, config files), every file in the project folder (forms,
 fonts, images, `nim.cfg`), the compiler arguments, the compiler itself and the
 program. A file that was only touched or saved unchanged does not count. When
-anything cannot be told, it builds. The Messages window says `Up to date` when
-it skipped the build; **Compile** always builds. The compiler's cache and this
-check's record live in `<output folder>/nimcache`.
+anything cannot be told, it builds: no record yet, an unreadable file, a project
+folder with more than 4000 files. Files over 4 MB are compared by size and
+time only, and after 64 MB have been read in one check the rest are too. The
+status bar and Messages say `Up to date` when the build was skipped;
+**Compile** always builds. The compiler's cache and this check's record
+(`nimrad-build.json`) live in `<output folder>/nimcache`.
 
 While the program runs the title bar reads `NimRAD - Project1 [Running]`
 and the `Output` tab shows what the program writes to stdout and stderr, line
 by line as it happens. When the program ends (or you stop it with
-`Ctrl+F2`), `Messages` gets a line `Program ended with exit code N`.
+`Ctrl+F2`; this ends the whole process tree: a process group on Linux and
+macOS, a job object on Windows), `Messages` gets a line `Program ended with exit
+code N`. A program started by Run sees the end of its input at once instead of
+waiting for a keyboard.
 
 ## Projects
 
@@ -279,6 +300,51 @@ A project is a folder with `<name>.nimproj` (JSON), `<name>.nim` (the program),
 `nim.cfg` (the path to nimvcl's source), and for each form `unitN.nim` and `unitN.nfm`.
 Everything is plain text and builds with a plain `nim c <name>.nim` too (the
 options of the project then have to be given on the command line).
+
+### The project file
+
+`<name>.nimproj` is JSON; paths in it are relative to its folder and always
+written with `/` (a file with `\` separators is read too).
+
+```json
+{
+  "formatVersion": 1,
+  "name": "hello",
+  "mainFile": "hello.nim",
+  "units": [
+    {"name": "unit1", "nim": "unit1.nim", "nfm": "unit1.nfm",
+     "isForm": true, "formType": "Form1"},
+    {"name": "unit2", "nim": "unit2.nim", "nfm": "unit2.nfm",
+     "isForm": true, "formType": "Form2", "ancestor": "unit1"}
+  ],
+  "fonts": [{"file": "fonts/Foo-Regular.ttf", "family": "Foo", "style": "regular"}],
+  "outputDir": "build",
+  "nimFlags": ["-d:release"],
+  "defines": ["useFoo", "level=2"],
+  "title": "My App",
+  "version": "1.0.0",
+  "runArgs": [],
+  "nimvclPath": "",
+  "autoImports": true,
+  "importAll": true,
+  "classImports": {"Gauge": "mylib/gauge"}
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `formatVersion` | The version of this file format (missing: 1). A file with a larger number was made by a newer NimRAD and is refused. Not the application's `version` |
+| `units` | The units; `ancestor` (form units) names the unit whose form this one inherits |
+| `fonts` | Project fonts (Project > Add Font File), `style` is `regular`, `bold`, `italic` or `bolditalic` |
+| `outputDir` | Where the program and the compiler's cache go (default `build`) |
+| `nimFlags`, `defines`, `title`, `version`, `runArgs` | Project > Options and Run > Parameters |
+| `nimvclPath` | The nimvcl `src` folder for this project; empty detects it (see the README) |
+| `autoImports`, `importAll` | The two import options below; written only when on |
+| `classImports` | Optional: class name to module for component classes from outside the project (see "Component classes of your own") |
+
+Fields NimRAD does not know are kept and written back unchanged, and the file is
+written atomically (a temporary file, then a rename). Files of the units are
+saved the same way.
 
 ### Project options
 
@@ -402,6 +468,30 @@ The table of symbols (`src/ide/symbolindex.nim`) is generated from the nimvcl
 sources by `scripts/gen_symbolindex.nim` (`nimble genindex`); a test fails when
 it no longer matches the nimvcl the IDE is built against.
 
+## Platform notes
+
+Linux is what NimRAD is built and tested on. Windows and macOS are experimental
+(CI builds the IDE and runs the tests there, allowed to fail).
+
+* **Windows**: install SDL3, SDL3_ttf and SDL3_image from the official release
+  zips of [libsdl-org](https://github.com/libsdl-org) and put the DLLs next to
+  `nimrad.exe` (and, for the programs you build, next to them or on `PATH`). Do
+  not use MSYS2's `mingw-w64-x86_64-sdl3`: its `SDL_IOFromFile` fails for every
+  path, so pictures and fonts cannot be loaded. `nim` is found on `PATH` as
+  `nim.exe`; the built program is `<name>.exe`.
+* **macOS**: `brew install sdl3 sdl3_ttf sdl3_image`. dyld does not find
+  Homebrew's libraries by bare name, so SDL is linked at build time: NimRAD
+  itself and every project it builds get `--dynlibOverride` and `--passL` flags
+  (one definition, `src/ide/sdllink.nim`), and a new project's `nim.cfg` carries
+  the same flags in an `@if macosx` block so a plain `nim c` works too. Add that
+  block by hand to older projects when you build them outside NimRAD. A project
+  in `/var/...` is reported by the compiler as `/private/var/...`; messages are
+  matched to units by real path, and unit paths are stored in that canonical form.
+* **Everywhere**: project files store `/` in paths. Native file dialogs,
+  clipboard, HiDPI and docking popups are not verified on Windows and macOS.
+  Headless runs (the tests, `scripts/docshots.nim`) use SDL's `offscreen` video
+  driver; on macOS use `SDL_VIDEO_DRIVER=dummy`.
+
 ## Search and editing
 
 `Ctrl+F` find, `Ctrl+H` replace, `F3` next match, `Alt+G` go to line. The code
@@ -449,12 +539,16 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 
 `~/.config/nimrad/settings.json` (`$XDG_CONFIG_HOME` is honoured) holds the
 recent projects, the theme, the editor font size, the compiler to run, whether
-hints are shown and the docking layout. (Before the rename to NimRAD the folder
-was `nimvcl-ide`; it is moved to `nimrad` the first time NimRAD starts.)
+hints are shown and the docking layout. (Before the rename to NimRAD, version
+0.2.0, the program was called nimvcl-ide and its folder was `nimvcl-ide`; the
+folder is moved to `nimrad` the first time NimRAD starts, and only when `nimrad`
+does not exist yet.)
 
 Projects created by earlier versions have `# nimvcl-ide: ...` markers in their
-`.nim` files. They keep working and stay as they are; blocks NimRAD adds itself
-use `# nimrad: ...`.
+`.nim` files (`# nimvcl-ide: imports begin`, ... and the `import nimvcl   #
+nimvcl-ide: all` tag of "Import all of nimvcl"). They keep working: NimRAD still
+recognises the old markers and edits those blocks in place, keeping the old
+spelling. Blocks and files NimRAD creates itself use `# nimrad: ...`.
 
 ## Screenshots and tests
 
@@ -481,8 +575,10 @@ same session as an automated test, followed by a smoke run of the built program.
   program has no markers (an older one) needs its imports added by hand.
 * The Output tab shows a line of the program when it is complete; text
   without a newline at the end appears when the program ends.
-* ListView and TreeView items have no per-item image index, check state or
-  expansion in the designer; set them in code.
-* Grid cells (StringGrid) are not stored in the form; fill them in code.
+* The expansion state of TreeView nodes is not stored in the form; expand them
+  in code.
+* A few properties are code only: `Label.textRole`, `ToolButton.glyph`,
+  `CodeEdit`'s highlighter and `Form.keyPreview` (see the
+  [component audit](dev/component-audit.md)).
 * Cut, copy and paste in the form designer use the clipboard as text, so they
   also work between two IDE windows.

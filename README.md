@@ -1,8 +1,13 @@
 # NimRAD
 
-NimRAD (Rapid Application Development), a Delphi 7-like RAD IDE for Nim built on
-[nimvcl](https://github.com/Vyrnexis/nimvcl): a component palette, a form
-designer, an object inspector, code editor tabs, and one-key build and run.
+NimRAD (Rapid Application Development) is a Delphi 7-like RAD IDE for Nim,
+built on [nimvcl](https://github.com/Vyrnexis/nimvcl), the Delphi VCL-style GUI
+library for Nim and SDL3. You draw a form from a component palette, set
+properties in an object inspector, write event handlers in a code editor, and
+build and run the program with one key. Forms are saved as plain-text `.nfm`
+files that nimvcl loads at compile time, so a finished program has no designer
+runtime. (NimRAD was called nimvcl-ide before 0.2.0; see
+[Upgrading](#upgrading-from-nimvcl-ide).)
 
 ![NimRAD: the form designer](docs/images/ide-designer.png)
 
@@ -16,9 +21,11 @@ designer, an object inspector, code editor tabs, and one-key build and run.
 <img src="docs/images/ide-dark.png" width="32%" alt="The dark theme">
 </p>
 
-**Status:** version 0.2.0. New to it? Start with the
-[tutorial](docs/tutorial.md); the [user guide](docs/user-guide.md) covers the
-rest.
+**Status:** version 0.2.0, built on nimvcl 0.2.0 (`nimrad.nimble` pins the
+release tag). Linux is the supported platform; Windows and macOS are
+experimental. New to it? Start with the [tutorial](docs/tutorial.md); the
+[user guide](docs/user-guide.md) covers the rest. Source:
+<https://github.com/Vyrnexis/NimRAD>.
 
 ## Features
 
@@ -30,14 +37,19 @@ rest.
   arrow keys, `Enter` drops it on the form.
 - **Inherited forms** (File > New Inherited Form): a descendant stores only
   its differences and follows the ancestor, like Delphi's visual form
-  inheritance.
+  inheritance. Open descendants are rebuilt when the ancestor is saved,
+  properties that differ from the ancestor show in bold, and **Revert to
+  Inherited** puts a property or a whole component back.
 - **Property editors** for pictures, image lists, string lists (items, lines,
-  tabs) and collections (columns, panels, pages, buttons, actions, menu
-  items), plus a drop-down for components (`images`, `popupMenu`, `action`).
+  tabs), collections (columns, panels, pages, buttons, actions, menu items),
+  the Items Editor of `ListView` and `TreeView` (captions, images, check
+  state), the cell editor of `StringGrid`, plus a drop-down for components
+  (`images`, `popupMenu`, `action`, `menu`).
 - **Colour and `font.color`** (a swatch, a drop-down of colours or a typed
   `#rrggbb`), a **font drop-down**
   (bundled, project and system families) and **project fonts**: Project > Add
-  Font File embeds a `.ttf` or `.otf` in the program.
+  Font File embeds a `.ttf` or `.otf` in the program and Project > Remove Font
+  takes it out again.
 - **Events**: double click a component to create its handler in the unit's
   code; `F12` switches between form and code.
 - **Code editor** with Nim highlighting, folding, bracket matching, find and
@@ -48,7 +60,15 @@ rest.
 - **Compile** (`Ctrl+F9`) and **Run** (`F9`) in the background; errors,
   warnings and hints are listed in Messages, the first error is opened for you
   and `F8` goes to the next. The program's output is shown live, with its exit
-  code when it ends.
+  code when it ends. Compile always builds; Run skips the compiler when
+  nothing changed since the last build; Stop (`Ctrl+F2`) ends the program and
+  everything it started.
+- **Quick fixes** (`Ctrl+.`, also on a right click in Messages) add a missing
+  nimvcl import or correct the case of a component name; **Find Unit**
+  (`Shift+Ctrl+A`) adds the import for the name at the caret.
+- **Your own components**: a form that uses a component class of the project
+  (or one named in `classImports` of the `.nimproj`) gets the import in its
+  managed block.
 - **The program file** is part of the project and editable (Project > View
   Source); New Form, Add to Project and Remove from Project keep its imports
   and form list up to date between marker comments.
@@ -58,10 +78,20 @@ rest.
 
 ## Install
 
-Requirements: Linux (Windows and macOS: see [Platform support](#platform-support)), Nim 2.2 or newer, and the SDL3 libraries that
+Requirements: Nim 2.2 or newer and the SDL3 libraries that
 [nimvcl](https://github.com/Vyrnexis/nimvcl) draws with (SDL3, SDL3_ttf,
-SDL3_image; Arch: `pacman -S sdl3 sdl3_ttf sdl3_image`). `nim` must be on the
-`PATH` when you build projects from the IDE.
+SDL3_image). `nim` must be on the `PATH` when you build projects from the IDE.
+
+- **Linux**: `pacman -S sdl3 sdl3_ttf sdl3_image` on Arch; see nimvcl's
+  [Getting started](https://github.com/Vyrnexis/nimvcl/blob/main/docs/getting-started.md)
+  for other distributions.
+- **Windows** (experimental): the official SDL3, SDL3_ttf and SDL3_image release
+  zips from [libsdl-org](https://github.com/libsdl-org), with the DLLs next to
+  `nimrad.exe` or on `PATH` (not the MSYS2 build).
+- **macOS** (experimental): `brew install sdl3 sdl3_ttf sdl3_image`; SDL is
+  linked at build time.
+
+Details are under [Platform support](#platform-support).
 
 With nimble (this also installs nimvcl):
 
@@ -76,11 +106,20 @@ From source:
 git clone https://github.com/Vyrnexis/NimRAD
 cd NimRAD
 nimble build -d:release        # the program is ./nimrad
-./nimrad                   # opens the last project
+./nimrad                       # opens the last project
 ./nimrad --project app.nimproj
+./nimrad --nimvcl-path       # print the nimvcl source folder projects are built with
 ```
 
 The first start creates `~/nimvcl-projects/Project1`.
+
+### Upgrading from nimvcl-ide
+
+The package, the program and the main module are `nimrad` now. The first time
+NimRAD starts it moves the settings folder `nimvcl-ide` to `nimrad` in your user
+config folder (only when `nimrad` does not exist yet). Projects made before the
+rename keep their `# nimvcl-ide: ...` marker comments; NimRAD still recognises
+them and edits those blocks in place, while new blocks use `# nimrad: ...`.
 
 ### Where the IDE finds nimvcl
 
@@ -108,12 +147,13 @@ instead of the nimble package (see `config.nims`).
 | `Ctrl+Z` / `Shift+Ctrl+Z` | Undo / Redo | `F11` | Object Inspector |
 | `Ctrl+X` `Ctrl+C` `Ctrl+V` | Cut, Copy, Paste | `Ctrl+Alt+P` | Project Manager |
 | `Ctrl+A` | Select All | `Shift+Alt+F11` | Object TreeView |
-| `Ctrl+Alt+C` | Search the palette | | |
+| `Ctrl+Alt+C` | Search the palette | `Ctrl+.` | Quick Fix |
 | `Ctrl+F` / `Ctrl+H` | Find / Replace | `Alt+0` | Messages |
 | `F3` | Find Next | `Shift+F11` | Add to Project |
 | `Alt+G` | Go to Line | `Shift+Ctrl+F11` | Project Options |
 | `Ctrl+F12` | View Units | `F8` / `Ctrl+Alt+Down` | Next compiler message |
 | `Shift+F12` | View Forms | `Alt+F4` | Exit |
+| `Shift+Ctrl+A` | Find Unit | | |
 
 ## Platform support
 
@@ -122,8 +162,9 @@ instead of the nimble package (see `config.nims`).
   fail) that build the IDE and run the headless test suite against the nimvcl
   release this IDE pins (`nimrad.nimble`). Known so far:
   - Building and running projects looks `nim` up in `PATH` (`nim.exe` on
-    Windows, found with `findExe`), starts it without a shell, and stops a
-    running program with `taskkill` on Windows. Project files always store
+    Windows, found with `findExe`) and starts it without a shell. Stop ends the
+    whole process tree: a process group on Linux and macOS, a job object on
+    Windows. Project files always store
     paths with `/`, and backslashes are converted when a project is loaded.
   - The compiler reports real paths (macOS: `/private/var/...` for a project
     under `/var/...`); messages are matched to units by real path.
@@ -159,7 +200,7 @@ scripts/test.sh                          # the test suite (add -d:release for a 
 
 - [Tutorial: your first application](docs/tutorial.md)
 - [User guide](docs/user-guide.md)
-- [Component audit](docs/dev/component-audit.md) (developer notes)
+- [Module layout](docs/dev/modules.md) and [component audit](docs/dev/component-audit.md) (developer notes)
 
 ## License
 
