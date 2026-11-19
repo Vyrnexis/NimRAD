@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- Inherited forms stay current while open: saving an ancestor rebuilds the open
+  descendants on top of its new file, keeping their selection, their unsaved
+  code and their unsaved form changes (laid over the new ancestor as
+  differences). Save All writes descendants before ancestors.
+- **Project > Remove Font...** removes a font from the project, the program
+  file's font block and the `fonts/` folder.
+- A form that uses a component class of the project (declared with
+  `ref object of` or registered with `registerClass` in one of its units, or
+  named in `classImports` of the `.nimproj`) gets the import in its managed
+  import block, also when the designer cannot show the form. Quick Fix and
+  Find Unit offer those units too.
+- Renaming an event handler in the Object Inspector renames its proc (when no
+  other event uses it) instead of leaving it behind with a second stub.
+- Code review leftovers: a unit file is saved through a temporary file;
+  `codegen` finds procs with the lexer (a column-0 comment or a string line no
+  longer cuts a body); `from x import name` is not taken for an import of unit
+  `name` when a unit is renamed; compiler flags with a quoted space survive
+  Project > Options; New Form skips a number whose `.nfm` exists and refuses a
+  form type another unit has; New Application refuses a folder that holds its
+  files; the main form's unit cannot be removed through the model; an open
+  descendant follows the rename of its ancestor; the Object TreeView follows
+  edits through the editor's own notification; the nimvcl folder is looked up
+  once, not for every compile; `--shots` is gone from the program (use
+  `scripts/docshots.nim`).
 - Inherited forms: **Edit > Revert to Inherited** (also in the Object
   Inspector's context menu) puts the selected property back to the ancestor's
   value, **Revert Component to Inherited** every property of the component;

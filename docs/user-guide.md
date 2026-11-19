@@ -135,8 +135,16 @@ of the ancestor and everything you add to it:
   disappears from the file again.
 * The ancestor is read afresh every time the descendant is opened and built.
   Change the ancestor's caption or move its button, save, and the descendant
-  follows; nothing is copied. A form open in the designer picks the change up
-  the next time it is opened (File > Close, then View > Forms...).
+  follows; nothing is copied. A descendant that is open in the designer
+  follows too, at once: when you save the ancestor (Save, Save All or Save in the
+  close prompt) the open descendants are rebuilt on top of its new file, keeping
+  their selection and their unsaved code. Changes you made in a descendant and
+  have not saved yet are kept as well; they are laid over the new ancestor as
+  differences, and stay unsaved. (The undo history of that form's designer starts
+  again.) If the new ancestor no longer has something the descendant had
+  changed, that change is dropped, the status line says so, and the form is
+  marked modified. Save All writes descendants before their ancestors, so each
+  `.nfm` holds differences from the ancestor as it was when you made them.
 * **Revert to Inherited**: select an inherited component, select a property in
   the Object Inspector that you changed from the ancestor's value, and choose
   **Edit > Revert to Inherited** (or right click in the Object Inspector). The
@@ -199,6 +207,11 @@ use **Project > Add Font File...**: it copies the `.ttf` or `.otf` into the
 project's `fonts/` folder, lists it in the `.nimproj` and makes the program file
 register it at start-up (between marker comments), embedded in the executable at
 compile time. The family then appears under **Project** in the drop-down.
+**Project > Remove Font...** lists the fonts of the project; the one you choose
+leaves the `.nimproj` and the program file's font block, and its file is deleted
+from `fonts/` (the folder goes too when it is empty). The family stays loaded in
+the running IDE until you restart it, but it is gone from the drop-down and from
+the next build.
 
 ## Building and running
 
@@ -257,6 +270,7 @@ by line as it happens. When the program ends (or you stop it with
 | Project > View Source | Opens the program file (`<name>.nim`) in the editor; so does a double click on the project node |
 | Project > Options... | Output folder, compiler flags, conditional defines, application title, version |
 | Project > Add Font File... | Copies a font into the project and embeds it in the program (see Colours and fonts) |
+| Project > Remove Font... | Takes a font out of the project, the program file and the `fonts/` folder |
 
 Closing a unit, closing the project or quitting with unsaved changes asks
 **Save**, **Don't Save** or **Cancel**.
@@ -342,8 +356,19 @@ as slow for a small form). The main program imports the prelude too.
 
 A unit made by an older version (it imports `nimvcl/core/[control, form,
 application]` and `nimvcl/controls/common` instead of the prelude) keeps
-working unchanged. A unit without the markers (`import nimvcl`) is never changed and keeps building as before. A control class
-that the IDE does not know (your own) needs its import added by hand.
+working unchanged. A unit without the markers (`import nimvcl`) is never changed and keeps building as before.
+
+**Component classes of your own.** A form can use a class that is not nimvcl's.
+When a unit of the project declares the class (`Badge* = ref object of Panel`) or
+registers it (`registerClass(Badge, parent = Panel)`), a form that has an object of
+that class gets `import badge` between the markers (the path from the form
+unit's folder: `import sub/badge`, `import ../badge`), and loses it with the last
+object of the class. This also happens for a form the designer cannot show: the
+IDE's palette and designer only know nimvcl's classes, so such a form opens in
+the code view (the status line says why) but its imports are kept. For a class
+that comes from outside the project (a nimble package) name its module in the
+`.nimproj`: `"classImports": {"Gauge": "mylib/gauge"}`. Quick Fix and Find Unit
+offer the units of the project for an `undeclared identifier` too.
 
 ### Missing imports: quick fixes
 
@@ -353,7 +378,8 @@ nimvcl/controls/progressbar]`. **Search > Quick Fix** (`Ctrl+.`, also the
 context menu of the Messages window) adds `import nimvcl/controls/progressbar`
 to the unit, above the IDE's markers and after your own imports (never inside
 the managed block), and builds again (or runs again, if you pressed Run). It
-works on the selected message, else on the error at the caret, else on the
+works on the selected message (a right click in Messages selects the row under
+the mouse first), else on the error at the caret, else on the
 first message that has a fix. When several modules declare the name, a small
 list asks which one.
 
@@ -432,13 +458,12 @@ use `# nimrad: ...`.
 
 ## Screenshots and tests
 
-`nimrad --shots DIR` runs a scripted session (new application, a Button and
+`scripts/docshots.nim` runs a scripted session (new application, a Button and
 a Label, the handler, compile, dark theme) through simulated mouse and keyboard
-events and saves a PNG after every step. `scripts/docshots.nim` makes the
-pictures of these documents the same way. Run them headless:
+events and saves a PNG after every step; it makes the pictures of these
+documents. It is not part of the `nimrad` program. Run it headless:
 
 ```sh
-SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software nimrad --shots build/shots
 SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software nim c -r scripts/docshots.nim docs/images
 ```
 
@@ -447,8 +472,9 @@ same session as an automated test, followed by a smoke run of the built program.
 
 ## Known limits
 
-* "Revert to inherited" for a single property is not there yet: set the value
-  back by hand and it vanishes from the descendant's file.
+* The designer and the palette only know nimvcl's own classes; a form that uses a
+  component class of yours compiles and runs, and its imports are kept, but it
+  opens in the code view.
 * Save As keeps the form type (`Form2`) of a renamed form unit; rename the type
   in the code by hand if you want.
 * The IDE only edits the program file between its markers; a project whose
