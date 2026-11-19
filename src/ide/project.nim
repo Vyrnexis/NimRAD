@@ -137,8 +137,17 @@ proc resolve*(p: Project, rel: string): string =
   ## Absolute path of a stored path.
   if rel.isAbsolute: normalizedPath(rel) else: normalizedPath(p.dir / rel)
 
+proc canonical(path: string): string =
+  ## The absolute path with symlinks resolved (the compiler reports real paths:
+  ## macOS puts a project under /var in /private/var). A path that does not
+  ## exist is only normalised.
+  let abs = absolutePath(path)
+  try: expandFilename(abs) except OSError: normalizedPath(abs)
+
 proc relativeTo(p: Project, path: string): string =
-  let abs = if path.isAbsolute: normalizedPath(path) else: normalizedPath(p.dir / path)
+  ## `path` as stored in the project: relative to its folder, both sides
+  ## canonical (a file named through a symlink still gets the right path).
+  let abs = canonical(if path.isAbsolute: path else: p.dir / path)
   unixPath(relativePath(abs, p.dir))
 
 proc detectNimvclPath*(): string =
@@ -207,13 +216,6 @@ proc save*(p: Project) =
     if readFile(p.filePath) == text: return
   except IOError: discard
   writeFileAtomic(p.filePath, text)
-
-proc canonical(path: string): string =
-  ## The absolute path with symlinks resolved (the compiler reports real paths:
-  ## macOS puts a project under /var in /private/var). A path that does not
-  ## exist is only normalised.
-  let abs = absolutePath(path)
-  try: expandFilename(abs) except OSError: normalizedPath(abs)
 
 proc loadProject*(path: string): Project =
   ## Raises `ProjectError` when the file is missing or not a project. The

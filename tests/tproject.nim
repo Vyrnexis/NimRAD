@@ -3,7 +3,7 @@ import headless
 when defined(posix): import std/posix
 import ide/[project, builder]
 
-let root = getTempDir() / ("nimvclide-proj-" & $getCurrentProcessId())
+let root = expandFilename(getTempDir()) / ("nimvclide-proj-" & $getCurrentProcessId())
 removeDir root
 createDir root
 
@@ -201,6 +201,18 @@ suite "units outside the program's folder":
     check "import sub/nearby\n" in readFile(p.mainPath)
     check fileExists(app / "sub" / "nearby.nim")
     check p.build().ok
+
+suite "symlinked paths":
+  test "a unit named through a symlink is stored by its real path":
+    when defined(posix):
+      let real = root / "unitreal"
+      createDir real / "lib"
+      writeFile(real / "lib" / "util.nim", "const util* = 1\n")
+      createSymlink(real, root / "unitlink")
+      let p = newApplicationProject(real / "app", "app")
+      let u = p.addUnit("util", root / "unitlink" / "lib" / "util.nim")
+      check u.nimPath == "../lib/util.nim"
+      check p.importPath(u, p.mainPath.parentDir) == "../lib/util"
 
 suite "renaming is all or nothing":
   test "a write that fails puts the moved files back":

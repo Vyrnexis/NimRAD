@@ -17,7 +17,7 @@ import ide/[mainform, session, project, builder, ideconfig, uniteditor, messages
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
 
-let root = getTempDir() / ("nimvclide-ide-" & $getCurrentProcessId())
+let root = expandFilename(getTempDir()) / ("nimvclide-ide-" & $getCurrentProcessId())
 
 removeDir root
 createDir root

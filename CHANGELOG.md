@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 - 2026-11-19
+
+- Unit paths are stored canonical like the project's own path, so a unit
+  named through a symlink (macOS: /var is /private/var) gets a working
+  relative import.
+
 ## 0.1.5 - 2026-11-19
 
 - macOS: the IDE builds again (the process-tree code took `environ` from
