@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A right click in the Messages window selects the row under the mouse before
+  the context menu opens, so Quick Fix acts on that message.
 - Run skips the compiler when nothing changed: it compares the files the
   compiler read (from the list it leaves in the nimcache), the project
   folder, the compiler arguments and the program, and builds at any doubt.

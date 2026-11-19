@@ -137,6 +137,11 @@ proc newMessagesPanel*(parent: Container, images: ImageList): MessagesPanel =
       p.cursor = k
       p.onJump(p.msgs[k].file, p.msgs[k].line, p.msgs[k].col)
 
+  # a right click selects the row under the mouse first, so the context menu
+  # (Quick Fix) acts on that message; off the rows it clears the selection
+  p.list.onMouseDown = proc(s: Control, b: MouseButton, sh: ShiftState, x, y: float32) =
+    if b == mbRight: p.list.itemIndex = p.list.itemAt(pointF(x, y))
+
   let pm = newPopupMenu(p.root)
   let fixItem = pm.addItem("&Quick Fix", proc(s: MenuItem) =
     let k = p.selectedMessage
