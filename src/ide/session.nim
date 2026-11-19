@@ -1,5 +1,6 @@
 ## A scripted IDE session driven through simulated input events, used by
-## `nimrad --shots` (screenshots) and by `tests/tide.nim` (no screenshots):
+## `scripts/docshots.nim` (screenshots) and by `tests/tide.nim` (no screenshots).
+## It is not part of the `nimrad` program.
 ##
 ## 1. a new application, 2. a Button and a Label dropped on the form (palette
 ## click, then a click on the form), 3. the Button selected so the inspector

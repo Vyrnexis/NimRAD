@@ -151,7 +151,6 @@ instead of the nimble package (see `config.nims`).
 
 ```sh
 export SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software
-./nimrad --shots build/shots         # a scripted session, one PNG per step
 nim c -r scripts/docshots.nim docs/images   # remake the pictures of the documentation
 scripts/test.sh                          # the test suite (add -d:release for a release run)
 ```

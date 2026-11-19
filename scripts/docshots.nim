@@ -4,7 +4,7 @@
 ##       nim c -r scripts/docshots.nim docs/images
 ##
 ## The IDE is driven headless through simulated mouse and keyboard events (the
-## same helpers as `nimrad --shots`); nothing opens a window.
+## helpers of `src/ide/session.nim`); nothing opens a window.
 
 import std/[os, strutils]
 import nimvcl
