@@ -1,7 +1,7 @@
 import std/[unittest, os, osproc, strutils, sequtils]
 import headless
 import nimvcl
-import nimvcl/dsl/props
+import nimvcl/dsl/[props, props_std]
 import nimvcl/controls/inspector
 import ide/[project, builder, uniteditor, codegen]
 
@@ -348,3 +348,87 @@ suite "unit editor":
     writeFile(r.proj.dir / "unit1.nim", nim)
     let e2 = newUnitEditor(r.proj, "unit1", r.host)
     check e2.code.text.contains("import nimvcl/controls/button")
+
+suite "renaming a handler in the Object Inspector":
+  test "the proc follows the new name; a handler another event uses is not renamed":
+    let r = rig("apphrename")
+    let b = r.dropButton()
+    r.host.click(b.center, 2)           # stub Button1Click
+    r.ed.showCode()
+    r.ed.code.text = r.ed.code.text.replace("  discard\n", "  self.Button1.caption = \"x\"\n")
+    r.ed.showDesigner()
+    r.ed.selectComponent(Component(b))
+    r.insp.tab = itEvents
+    check r.insp.setValue("onClick", pvEvent("OkClick"))
+    let code = r.ed.code.text
+    check "proc OkClick(self: Form1, sender: Control) =" in code
+    check "proc Button1Click" notin code
+    check code.count("proc OkClick") == 1
+    check "self.Button1.caption = \"x\"" in code            # the body came along
+    # a second button shares the handler; renaming the first one's leaves the shared proc
+    r.ed.beginCreate "Button"
+    r.host.click(pointF(r.ed.designedForm.formOrigin.x + 40, r.ed.designedForm.formOrigin.y + 120))
+    let b2 = r.ed.find("Button2")
+    r.ed.selectComponent(Component(b2))
+    check r.insp.setValue("onClick", pvEvent("OkClick"))
+    check r.ed.code.text.count("proc OkClick") == 1             # it exists: nothing is made
+    r.ed.selectComponent(Component(b))
+    check r.insp.setValue("onClick", pvEvent("Other"))
+    check "proc OkClick(self: Form1, sender: Control) =" in r.ed.code.text
+    check "proc Other(self: Form1, sender: Control) =" in r.ed.code.text
+    r.ed.save()
+    check r.proj.compiles()
+
+suite "a form with a component class of the project":
+  test "the unit imports the unit that defines it, and the program builds and runs":
+    let p = newApplicationProject(root / "custom", "custom")
+    let dir = p.dir
+    writeFile(dir / "badge.nim", """## badge
+import nimvcl
+import nimvcl/dsl/[props, props_std]
+
+type Badge* = ref object of Panel
+  fLevel: int
+proc level*(b: Badge): int = b.fLevel
+proc `level=`*(b: Badge, v: int) = b.fLevel = v
+proc newBadge*(parent: Container = nil): Badge =
+  new result
+  result.initPanel(parent)
+  if parent != nil: parent.insertControl result
+
+registerClass(Badge, parent = Panel):
+  category Data:
+    level: int
+""")
+    discard p.addUnit("badge", "badge.nim")
+    p.save()
+    writeFile(dir / "unit1.nfm", """object Form1: Form
+  width = 640
+  height = 480
+  caption = 'Form1'
+  object Badge1: Badge
+    left = 10
+    top = 10
+    width = 80
+    height = 30
+    level = 3
+  end
+end
+""")
+    let host = newHost()
+    let e = newUnitEditor(p, "unit1", host)
+    # the IDE does not know the class, so the designer cannot show the form ...
+    check e.loadError.len > 0 and e.designer == nil
+    # ... but the unit has what the compiler needs
+    check "import badge\n" in e.code.text
+    check "import nimvcl/controls/panel" notin e.code.text
+    e.save()
+    check "import badge\n" in readFile(dir / "unit1.nim")
+    check p.compiles()
+    let sm = p.smoke()
+    if sm.exitCode != 0: echo sm.output
+    check sm.exitCode == 0
+    # the object goes: the import goes with it
+    writeFile(dir / "unit1.nfm", "object Form1: Form\n  width = 640\n  height = 480\n  caption = 'Form1'\nend\n")
+    e.reloadFromDisk()
+    check "import badge" notin e.code.text

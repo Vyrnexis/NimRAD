@@ -379,3 +379,120 @@ suite "Revert to Inherited in the IDE":
     check errors.len == 0
     discard ancEd
     ide.showWindow()
+
+suite "an ancestor that is saved while its descendants are open":
+  let ide = newIdeForm(settingsFile = root / "settings-live.json")
+  ide.showWindow(1360, 860)
+  var errors: seq[string]
+  ide.showError = proc(text: string) = errors.add text
+  var a, d: UnitEditor
+
+  proc comp(ed: UnitEditor, name: string): Component =
+    for (c, _) in ed.componentTree:
+      if c.name == name: return c
+
+  proc setOn(ed: UnitEditor, name, prop: string, v: PropValue) =
+    discard ide.openUnit(ed.unitName)
+    ed.selectComponent(ed.comp(name))
+    check ide.inspector.setValue(prop, v)
+
+  proc nfm(unit: string): string = readFile(root / "live" / unit & ".nfm")
+
+  test "setup: an ancestor with a button and a label, and its open descendant":
+    check ide.newApplication(root / "live", "live")
+    a = ide.openUnit("unit1")
+    ide.dropComponent("Button")
+    ide.dropComponent("Label")
+    ide.saveAll()
+    d = ide.newInheritedForm("unit1")
+    check d != nil and d.unitName == "unit2"
+    check Button(d.comp("Button1")).caption == "Button1"
+
+  test "a clean descendant shows the new state of the ancestor and keeps its selection":
+    ide.saveAll()                                          # imports follow the classes: clean now
+    check not d.modified
+    discard ide.openUnit("unit2")
+    d.selectComponent(d.comp("Label1"))
+    a.setOn("Button1", "caption", pvString("Two"))
+    ide.saveActive()
+    check Button(d.comp("Button1")).caption == "Two"
+    check not d.modified
+    check d.selection.len == 1 and d.selection[0].name == "Label1"
+    check d.comp("Button1").inherited
+
+  test "unsaved changes of the descendant (form and code) survive; nothing is copied":
+    d.setOn("Button1", "left", pvFloat(222))
+    d.code.text = d.code.text & "\n# my note\n"
+    check d.designModified and d.modified
+    a.setOn("Button1", "caption", pvString("Three"))
+    a.setOn("Button1", "width", pvFloat(150))
+    ide.saveActive()                                       # the ancestor
+    let b = Button(d.comp("Button1"))
+    check b.caption == "Three" and b.width == 150          # the new inherited state
+    check b.left == 222                                    # the descendant's own change
+    check d.designModified
+    check d.code.text.endsWith("# my note\n")
+    check d.comp("Button1").inherited
+    discard ide.openUnit("unit2")
+    ide.saveActive()
+    let n2 = nfm("unit2")
+    check "left = 222" in n2
+    check "caption" notin n2.split("inherited Button1")[^1].split("end")[0]
+    check "width = 150" notin n2 and "Three" notin n2
+    check not d.modified
+
+  test "both open and modified: Save All writes each as differences and refreshes":
+    a.setOn("Button1", "caption", pvString("Four"))
+    d.setOn("Button1", "left", pvFloat(230))
+    ide.saveAll()
+    check "Four" in nfm("unit1")
+    check "left = 230" in nfm("unit2") and "Four" notin nfm("unit2")
+    check Button(d.comp("Button1")).caption == "Four" and Control(d.comp("Button1")).left == 230
+    check not a.modified and not d.modified
+
+  test "an override of something the ancestor no longer has is dropped, with a message":
+    d.setOn("Label1", "caption", pvString("Mine"))
+    check d.designModified
+    let pending = d.pendingDesign
+    check "inherited Label1" in pending
+    var text = nfm("unit1")
+    let at = text.find("object Label1: Label")
+    check at >= 0
+    let stop = text.find("  end\n", at) + "  end\n".len
+    writeFile(root / "live" / "unit1.nfm", text[0 ..< at] & text[stop .. ^1])
+    var said: seq[string]
+    let hooked = d.onMessage
+    d.onMessage = proc(e: UnitEditor, msg: string) =
+      said.add msg
+      hooked(e, msg)
+    check d.rebaseOnAncestor(pending)
+    check d.comp("Label1") == nil
+    check d.comp("Button1") != nil and d.loadError == ""
+    check d.designModified                        # the dropped override: save to forget it
+    check said.anyIt("no longer" in it)
+    d.save()
+    check "Label1" notin nfm("unit2")
+
+  test "no errors were reported":
+    check errors.len == 0
+    ide.showWindow()
+
+suite "an open descendant after its ancestor was renamed":
+  test "the editor follows the project's unit (the hint names the ancestor's form)":
+    let p = newApplicationProject(root / "rn", "rn")
+    let e1 = newUnitEditor(p, "unit1", host)
+    e1.beginCreate "Button"
+    host.click(pointF(e1.designedForm.formOrigin.x + 40, e1.designedForm.formOrigin.y + 40))
+    e1.dblClick(e1.find("Button1"))                  # the ancestor has a Button1Click
+    e1.save()
+    discard p.newInheritedFormUnit("unit1")
+    p.save()
+    let e2 = newUnitEditor(p, "unit2", host)
+    p.renameUnit("unit1", "base")
+    e2.reloadFromDisk()
+    e2.dblClick(e2.find("Button1"))
+    check "replaces Form1's Button1Click" in e2.code.text
+    e2.save()
+    check not fileExists(p.dir / "unit2.nim.tmp")      # saved through a temporary file
+    check readFile(p.dir / "unit2.nim") == e2.code.text
+    check e2.code.fileName == p.dir / "unit2.nim"

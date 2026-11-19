@@ -48,6 +48,8 @@ type
     fLastModified: bool
     fNames: Table[Component, string]
     fExtra: Component              ## selected through the tree, outside the designer
+    fOldHandler: tuple[target: Obj, event, name: string]
+      ## the handler an event had before the Object Inspector changes it
     fPasteCount: int
     fBusy: bool                    ## ignore designer callbacks while rebuilding
 
@@ -535,16 +537,31 @@ proc applyRename(e: UnitEditor, c: Component) =
   if t != nil: t.name = nw
   if c of Control: Control(c).invalidate()
 
+proc handlerUsed(e: UnitEditor, name: string, but: Component, butEvent: string): bool =
+  ## Whether an event other than `but.butEvent` is bound to the handler `name`.
+  var hit = false
+  e.walkNames(proc(c: Component) =
+    for (ev, h) in c.handlerNames:
+      if h == name and not (c == but and ev == butEvent): hit = true)
+  hit
+
 proc propertyChanged(e: UnitEditor, target: Obj, prop: string) =
   if not (target of Component): return
   let c = Component(target)
   if prop == "name":
     e.applyRename(c)
   elif isEvent(c.className, prop):
-    # a handler named by hand: make sure it exists in the code
+    # a handler named by hand: its proc follows the new name (as Delphi renames
+    # it) when nothing else uses the old one, else a stub is made
     let h = handlerNameOf(target, prop)
+    let old = if e.fOldHandler.target == target and e.fOldHandler.event == prop: e.fOldHandler.name
+              else: ""
+    e.fOldHandler = (nil, "", "")
     if h.len > 0 and not hasProc(e.codeOf, h):
-      discard e.createHandler(c, prop, h)
+      if old.len > 0 and old != h and hasProc(e.codeOf, old) and not e.handlerUsed(old, c, prop):
+        e.setCodeText(renameHandler(e.codeOf, old, h))
+      else:
+        discard e.createHandler(c, prop, h)
   if c == Component(e.fForm): e.syncGeometry()
   e.touchDesign()
   if e.fDesigner != nil: e.fDesigner.refresh()
@@ -756,6 +773,8 @@ proc bindInspector*(e: UnitEditor, insp: ObjectInspector) =
     if prop == "name" and t of Component and v.kind == pkString:
       message = e.nameProblem(Component(t), v.s)
       accept = message.len == 0
+    elif v.kind == pkEvent and t of Component:
+      e.fOldHandler = (t, prop, handlerNameOf(t, prop))
   insp.onPropertyChanged = proc(s: Control, t: Obj, prop: string) =
     e.propertyChanged(t, prop)
   insp.onCreateHandler = proc(s: Control, t: Obj, event: string): string =
@@ -979,9 +998,21 @@ proc save*(e: UnitEditor) =
     writeFileAtomic(e.project.nfmPathOf(e.fUnit), nfm)
     e.fDesignDirty = false
     if e.fUnit.isForm:
-      e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir, e.project.importAll))
+      e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir, e.project.importAll,
+                                e.project.userClassImports(e.unitName)))
   if e.fCode.modified or not fileExists(e.project.nimPathOf(e.fUnit)):
-    e.fCode.saveToFile(e.project.nimPathOf(e.fUnit))
+    # through a temporary file, so a failed write cannot cut the unit short
+    let path = e.project.nimPathOf(e.fUnit)
+    let tmp = path & ".tmp"
+    try:
+      e.fCode.saveToFile(tmp)
+      moveFile(tmp, path)
+    except CatchableError:
+      try: removeFile tmp
+      except OSError: discard
+      raise
+    finally:
+      e.fCode.fileName = path
   e.checkModified()
 
 proc loadCode(e: UnitEditor) =
@@ -991,15 +1022,39 @@ proc loadCode(e: UnitEditor) =
   e.fCode.highlighter = newNimHighlighter()
   e.fCode.fileName = path
 
+proc ensureScroll(e: UnitEditor): bool =
+  ## The scroll box the design surface sits in; made again when the form could
+  ## not be loaded before. True when it was made now.
+  if e.fScroll != nil: return false
+  let sb = newScrollBox(e.fView)
+  sb.align = alClient
+  sb.autoContentSize = true
+  sb.padding = spacing(0)
+  e.fScroll = sb
+  true
+
+proc dropScroll(e: UnitEditor) =
+  ## The form cannot be shown: no scroll box, the code view only.
+  if e.fScroll != nil: e.fScroll.free()
+  e.fScroll = nil
+
 proc syncLoadedImports(e: UnitEditor) =
   ## The imports of the unit follow the classes of the `.nfm` as it is on disk
   ## (it may have been edited outside the designer).
-  if e.fUnit.isForm and e.fDesigner != nil and fileExists(e.project.nfmPathOf(e.fUnit)):
+  ## A form the designer cannot show (a class of the user's that the IDE does
+  ## not know) gets its imports too.
+  if e.fUnit.isForm and e.fUnit.nfmPath.len > 0 and fileExists(e.project.nfmPathOf(e.fUnit)):
     e.setCodeText(syncFromNfm(e.codeOf, readFile(e.project.nfmPathOf(e.fUnit)), e.nfmDir,
-                              e.project.importAll))
+                              e.project.importAll, e.project.userClassImports(e.unitName)))
+
+proc refreshUnit(e: UnitEditor) =
+  ## `fUnit` is a copy: take what the project says now (a renamed ancestor).
+  let i = e.project.findUnit(e.unitName)
+  if i >= 0: e.fUnit = e.project.units[i]
 
 proc reloadFromDisk*(e: UnitEditor) =
   ## Re-reads the `.nim` and the `.nfm`, dropping every unsaved change.
+  e.refreshUnit()
   e.loadCode()
   if e.fUnit.isForm and fileExists(e.project.nfmPathOf(e.fUnit)):
     let sel = e.selection
@@ -1007,12 +1062,14 @@ proc reloadFromDisk*(e: UnitEditor) =
     if sel.len == 1: selName = sel[0].name
     let wasDesigner = e.designerVisible
     e.teardownDesign()
+    let madeScroll = e.ensureScroll()          # the form could not be loaded at first
     try:
       e.buildDesign(e.readNfm())
       e.loadError = ""
     except CatchableError as ex:
       e.loadError = ex.msg
       e.say "cannot load " & e.fUnit.nfmPath & ": " & ex.msg
+      if madeScroll: e.dropScroll()
     if e.fDesigner != nil:
       e.fDesigner.select(Control(e.fBody))
       e.fScroll.visible = wasDesigner
@@ -1025,6 +1082,66 @@ proc reloadFromDisk*(e: UnitEditor) =
   e.refreshInspector()
   e.checkModified()
   if e.onSelectionChanged != nil: e.onSelectionChanged(e)
+
+proc pendingDesign*(e: UnitEditor): string =
+  ## The `.nfm` text of the form's unsaved changes ("" when there are none), as
+  ## the difference from the ancestor file as it is on disk now.
+  if e.fDesigner != nil and e.fDesignDirty and e.fForm != nil: e.designNfm else: ""
+
+proc rebaseOnAncestor*(e: UnitEditor, pending = ""): bool {.discardable.} =
+  ## The ancestor's `.nfm` changed on disk: rebuilds the designed form on top of
+  ## it, so the inherited components show the new state. The code view (and its
+  ## unsaved text) is not touched, the selection and the visible view stay.
+  ##
+  ## `pending` is `pendingDesign` taken *before* the ancestor was written: the
+  ## unsaved changes of this form, as differences from the old ancestor. They
+  ## are laid over the new ancestor and stay unsaved. Without it the form is
+  ## read from its file. An override of something the new ancestor no longer
+  ## has is dropped, with a message, and the form is then marked modified.
+  if not e.fUnit.isForm or e.fUnit.nfmPath.len == 0 or e.fScroll == nil and e.loadError.len == 0:
+    return false
+  if pending.len == 0 and not fileExists(e.project.nfmPathOf(e.fUnit)): return false
+  var text = pending
+  if text.len == 0: text = e.readNfm()
+  var selName = ""
+  let sel = e.selection
+  if sel.len == 1: selName = sel[0].name
+  let wasDesigner = e.fScroll != nil and e.designerVisible
+  var dirty = pending.len > 0
+  e.teardownDesign()
+  let madeScroll = e.ensureScroll()
+  var built = false
+  try:
+    e.buildDesign(text)
+    built = true
+  except CatchableError:
+    try:
+      e.buildDesign(text, strict = false)
+      built = true
+      dirty = true
+      e.say "The ancestor form no longer has something this form changed; that change was dropped"
+    except CatchableError as ex:
+      e.loadError = ex.msg
+      e.say "cannot load " & e.fUnit.nfmPath & ": " & ex.msg
+      if madeScroll: e.dropScroll()
+  if built:
+    e.loadError = ""
+    var target: Component = nil
+    if selName.len > 0:
+      for (c, _) in e.componentTree:
+        if c.name == selName: target = c
+    if target != nil: e.selectComponent(target) else: e.fDesigner.select(Control(e.fBody))
+    e.fScroll.visible = wasDesigner
+    e.fCode.visible = not wasDesigner
+  else:
+    e.fCode.visible = true
+  e.fDesignDirty = dirty and built
+  e.fExtra = nil
+  e.syncLoadedImports()
+  e.refreshInspector()
+  e.checkModified()
+  if e.onSelectionChanged != nil: e.onSelectionChanged(e)
+  built
 
 # ------------------------------------------------------------------ creation
 
@@ -1053,18 +1170,12 @@ proc newUnitEditor*(project: Project, unitName: string, parent: Container): Unit
   # the designer
   if e.fUnit.isForm and e.fUnit.nfmPath.len > 0 and
      fileExists(project.nfmPathOf(e.fUnit)):
-    let sb = newScrollBox(view)
-    sb.align = alClient
-    sb.autoContentSize = true
-    sb.padding = spacing(0)
-    e.fScroll = sb
+    discard e.ensureScroll()
     try:
       e.buildDesign(e.readNfm())
     except CatchableError as ex:
       e.loadError = ex.msg
-      sb.visible = false
-      e.fScroll = nil
-      sb.free()
+      e.dropScroll()
     if e.fDesigner != nil:
       ed.visible = false
       e.fDesigner.select(Control(e.fBody))

@@ -3,7 +3,7 @@
 
 import nimvcl
 import std/[os, strutils, sequtils]
-import ./[project, messages, messagespanel, uniteditor, unitimports,
+import ./[fileio, project, messages, messagespanel, uniteditor, unitimports,
           symbols, quickfix, ideform]
 
 type FixOutcome* = enum
@@ -22,7 +22,7 @@ proc editUnitFile*(ide: IdeForm, file: string, change: proc(src: string): string
     let src = readFile(file)
     let res = change(src)
     if res == src: return false
-    writeFile(file, res)
+    writeFileAtomic(file, res)
     result = true
   except CatchableError: discard
 
@@ -42,8 +42,22 @@ proc componentsOf(ide: IdeForm, file: string): seq[string] =
     try: return componentNames(readFile(nfm), nfm.parentDir)
     except CatchableError: discard
 
+proc userClassFix(ide: IdeForm, m: Message): seq[QuickFix] =
+  ## `undeclared identifier: 'Badge'` where a unit of the project (or the
+  ## project's `classImports`) provides the class `Badge`: import that unit.
+  if m.kind != MessageKind.mkError or not m.hasLocation or
+     not m.text.startsWith("undeclared identifier"): return
+  let name = unknownName(m.text)
+  if name.len == 0: return
+  for (c, module) in ide.project.userClassImports(ide.unitOfFile(m.file)):
+    if c == name:
+      return @[QuickFix(kind: fkAddImport, ident: name, modules: @[module],
+                        title: "Add import " & module)]
+
 proc fixesOfMessage*(ide: IdeForm, m: Message): seq[QuickFix] =
   if ide.project == nil: return
+  result = ide.userClassFix(m)
+  if result.len > 0: return
   result = fixesFor(m, proc(): seq[string] = ide.componentsOf(m.file))
   if ide.project.importAll:             # everything is imported already
     result = result.filterIt(it.kind != fkAddImport)
@@ -119,9 +133,11 @@ proc findUnitImport*(ide: IdeForm): bool {.discardable.} =
   if word.len == 0:
     ide.say "Put the caret on an identifier first"
     return false
-  let mods = modulesFor(word)
+  var mods = modulesFor(word)
+  for (c, module) in ide.project.userClassImports(if ide.isMainEditor(ed): "" else: ed.unitName):
+    if c == word and module notin mods: mods.insert(module, 0)
   if mods.len == 0:
-    ide.say "No nimvcl module declares " & word
+    ide.say "No nimvcl module or unit of the project declares " & word
     return false
   let i =
     ide.pickItem("Add import for " & word, mods, 0)

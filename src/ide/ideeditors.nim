@@ -4,7 +4,7 @@
 
 import nimvcl
 import nimvcl/controls/inspector
-import std/[os, strutils]
+import std/[os, strutils, algorithm]
 import nimvcl/dsl/[props, props_std]
 import ./[project, builder, ideconfig, icons, actions, palette,
           projecttree, messagespanel, uniteditor, ideform]
@@ -228,11 +228,6 @@ proc bindActive*(ide: IdeForm) =
   ide.palette.reset()
   if ed != nil and ide.bound != ed:
     ed.bindInspector(ide.inspector)
-    let prev = ide.inspector.onPropertyChanged
-    ide.inspector.onPropertyChanged = proc(s: Control, t: Obj, prop: string) =
-      if prev != nil: prev(s, t, prop)
-      ide.refreshTree()
-      ide.updateTabs()
   elif ed == nil:
     ide.inspector.inspect(newSeq[Obj]())
   ide.bound = ed
@@ -273,6 +268,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aToggleView].enabled = ed != nil and ed.isForm
   a[aAddToProject].enabled = hasProject
   a[aAddFont].enabled = hasProject
+  a[aRemoveFont].enabled = hasProject and ide.project.fonts.len > 0
   a[aRemoveFromProject].enabled = ed != nil and not ide.isMainEditor(ed)
   a[aViewSource].enabled = hasProject
   a[aViewUnits].enabled = hasProject
@@ -368,7 +364,10 @@ proc hookEditor(ide: IdeForm, ed: UnitEditor) =
     ide.actionsDirty = true
     ide.updateTabs()
     ide.updateStatus()
-  ed.onDesignChanged = proc(e: UnitEditor) = ide.actionsDirty = true
+  ed.onDesignChanged = proc(e: UnitEditor) =
+    ide.actionsDirty = true
+    ide.treeDirty = true          # a changed name or caption shows in the Object TreeView
+    ide.updateTabs()
   ed.onStructureChanged = proc(e: UnitEditor) = ide.treeDirty = true
   ed.onMessage = proc(e: UnitEditor, msg: string) = ide.say msg
   ed.code.onCaretMove = proc(s: Control, line, col: int) = ide.updateStatus()
@@ -425,6 +424,22 @@ proc beforeMainEdit*(ide: IdeForm): UnitEditor =
 proc afterMainEdit*(ide: IdeForm, ed: UnitEditor) =
   if ed != nil: ed.reloadFromDisk()
 
+proc saveEditor*(ide: IdeForm, ed: UnitEditor) =
+  ## Saves one unit. When its form file is about to change, the open forms that
+  ## inherit from it are rebuilt on top of the new file afterwards (see
+  ## `UnitEditor.rebaseOnAncestor`); their own unsaved form changes are taken
+  ## before the file is written, so they are kept.
+  var kids: seq[UnitEditor]
+  var pending: seq[string]
+  if ed.isForm and ed.designModified and ide.project != nil:
+    for name in ide.project.descendantsOf(ed.unitName):
+      let k = ide.editorOf(name)
+      if k != nil and k.isForm and k != ed:
+        kids.add k
+        pending.add k.pendingDesign()
+  ed.save()
+  for i, k in kids: k.rebaseOnAncestor(pending[i])
+
 proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
   ## Closes a unit's tab; asks what to do with unsaved changes (false = the
   ## user cancelled).
@@ -434,7 +449,7 @@ proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
     let choice = ide.askSave(ed.unitName)
     case choice
     of scCancel: return false
-    of scSave: ed.save()
+    of scSave: ide.saveEditor(ed)
     of scDiscard: discard
   if ide.bound == ed:
     if ed.isForm: ed.designer.cancelCreate()
@@ -459,12 +474,26 @@ proc closeAllEditors*(ide: IdeForm): bool =
 proc saveActive*(ide: IdeForm) =
   let ed = ide.activeEditor
   if ed == nil: return
-  ed.save()
+  ide.saveEditor(ed)
   ide.updateTabs()
   ide.say "Saved " & ed.unitName
 
+proc depth(ide: IdeForm, ed: UnitEditor): int =
+  ## How many forms the unit's form inherits from, one after the other.
+  if ide.project == nil: return 0
+  var name = ed.unitName
+  while result < 16:
+    let i = ide.project.findUnit(name)
+    if i < 0 or ide.project.units[i].ancestor.len == 0: break
+    name = ide.project.units[i].ancestor
+    inc result
+
 proc saveAll*(ide: IdeForm) =
-  for e in ide.editors: e.save()
+  # descendants first: their form files hold differences from the ancestor file as
+  # it is on disk, so they are written before an ancestor changes it
+  var order = ide.editors
+  order.sort(proc(a, b: UnitEditor): int = cmp(ide.depth(b), ide.depth(a)))
+  for e in order: ide.saveEditor(e)
   if ide.project != nil: ide.project.save()
   ide.updateTabs()
   ide.say "All saved"

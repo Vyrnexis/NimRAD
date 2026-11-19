@@ -327,4 +327,52 @@ suite "import all":
     let r = runCapture(exePath(ide.project), @["--smoke"], ide.project.dir)
     check r.exitCode == 0
     check errors.len == 0
+
+suite "classes of the project":
+  test "an unknown class name is fixed with the import of the unit that provides it":
+    ide.project.nimFlags = @[]
+    let d = ide.project.dir
+    writeFile(d / "badge.nim", "type Badge* = ref object of RootObj\n")
+    discard ide.project.addUnit("badge", "badge.nim")
+    ide.project.save()
+    ide.project.importAll = false
+    let file = d / "unit1.nim"
+    let m = Message(kind: MessageKind.mkError, file: file, line: 9, col: 3,
+                    text: "undeclared identifier: 'Badge'")
+    let fx = ide.fixesOfMessage(m)
+    check fx.len == 1 and fx[0].kind == fkAddImport and fx[0].modules == @["badge"]
+    check fx[0].title == "Add import badge"
+    # a class nobody provides, and a nimvcl one, are as before
+    check ide.fixesOfMessage(Message(kind: MessageKind.mkError, file: file, line: 9, col: 3,
+          text: "undeclared identifier: 'NoSuchThing'")).len == 0
+    check ide.fixesOfMessage(Message(kind: MessageKind.mkError, file: file, line: 9, col: 3,
+          text: "undeclared identifier: 'newProgressBar'"))[0].modules ==
+          @["nimvcl/controls/progressbar"]
+    # the import goes above the IDE's block, once
+    check ide.addImportTo(file, "badge")
+    check not ide.addImportTo(file, "badge")
+    ide.saveAll()                            # the unit is open: the edit is in its editor
+    let src = readFile(file)
+    check src.find("import badge\n") in 0 ..< src.find("# nimrad: imports begin")
+
+  test "the fix is also offered when everything of nimvcl is imported":
+    ide.project.importAll = true
+    let fx = ide.fixesOfMessage(Message(kind: MessageKind.mkError, file: ide.project.dir / "unit1.nim",
+                                        line: 9, col: 3, text: "undeclared identifier: 'Badge'"))
+    check fx.len == 1 and fx[0].modules == @["badge"]
+    ide.project.importAll = false
+
+  test "Find Unit lists the units of the project that declare the word":
+    let ed = ide.openUnit("unit1")
+    ed.showCode()
+    ed.code.text = ed.code.text.replace("import badge\n", "") & "\nlet b = Badge()\n"
+    let line = ed.code.lineCount - 2
+    ed.code.caretPos = (line, "let b = Ba".len)
+    ide.activeControl = ed.code
+    picked = @[]
+    pickIndex = 0
+    check ide.findUnitImport()
+    check picked == @["badge"]
+    check "import badge" in ed.code.text
+    check errors.len == 0
     removeDir root
