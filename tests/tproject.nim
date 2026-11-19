@@ -164,6 +164,19 @@ suite "new application":
     check r.ok
     check p.smoke().exitCode == 0
 
+suite "paths":
+  test "a project opened through a symlink uses the real paths the compiler prints":
+    when defined(posix):
+      let p = newApplicationProject(root / "real", "real")
+      createSymlink(root / "real", root / "link")
+      let q = loadProject(root / "link" / "real.nimproj")
+      check q.filePath == expandFilename(root / "real") / "real.nimproj"
+      check q.unitOfFile(expandFilename(root / "real" / "unit1.nim")) == "unit1"
+      check q.unitOfFile(root / "link" / "unit1.nim") == "unit1"     # found through the link too
+      check q.unitOfFile(q.mainPath) == "real"
+      check q.unitOfFile(root / "real" / "nope.nim") == ""
+      discard p
+
 suite "units outside the program's folder":
   test "they are imported by a path relative to the program and still build":
     let app = root / "outside" / "app"

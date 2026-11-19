@@ -959,20 +959,10 @@ proc newInheritedForm*(ide: IdeForm, ancestor = ""): UnitEditor =
 
 # ------------------------------------------------------------------- jumping
 
-proc canonicalPath(path: string): string =
-  ## Symlinks resolved when the file exists: the compiler reports real paths
-  ## (macOS: /private/var/... for a project under /var/...).
-  try: result = expandFilename(path)
-  except OSError: result = normalizedPath(path)
-
 proc unitOfFile*(ide: IdeForm, file: string): string =
   ## The unit whose `.nim` is `file` ("" when it is not a unit of the project);
   ## the program file gives the project's name (what `openUnit` accepts for it).
-  if ide.project == nil: return ""
-  let f = canonicalPath(file)
-  for u in ide.project.units:
-    if canonicalPath(ide.project.nimPathOf(u)) == f: return u.name
-  if canonicalPath(ide.project.mainPath) == f: return ide.project.name   # the program file
+  if ide.project == nil: "" else: ide.project.unitOfFile(file)
 
 proc jumpTo*(ide: IdeForm, file: string, line, col: int): bool =
   ## Opens the unit of `file` in its code view with the caret at `line`,
@@ -1068,13 +1058,14 @@ proc componentsOf(ide: IdeForm, file: string): seq[string] =
   ## The names of the components of the form of the unit `file` (empty for the
   ## program file and for plain units).
   if ide.project == nil: return
-  let f = canonicalPath(file)
-  for u in ide.project.units:
-    if u.nfmPath.len > 0 and canonicalPath(ide.project.nimPathOf(u)) == f:
-      let nfm = ide.project.nfmPathOf(u)
-      if fileExists(nfm):
-        try: return componentNames(readFile(nfm), nfm.parentDir)
-        except CatchableError: discard
+  let k = ide.project.findUnit(ide.unitOfFile(file))
+  if k < 0: return
+  let u = ide.project.units[k]
+  if u.nfmPath.len == 0: return
+  let nfm = ide.project.nfmPathOf(u)
+  if fileExists(nfm):
+    try: return componentNames(readFile(nfm), nfm.parentDir)
+    except CatchableError: discard
 
 proc fixesOfMessage(ide: IdeForm, m: Message): seq[QuickFix] =
   if ide.project == nil: return

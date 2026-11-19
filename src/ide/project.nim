@@ -160,6 +160,19 @@ proc findUnit*(p: Project, name: string): int =
     if u.name == name: return i
   -1
 
+proc unitOfFile*(p: Project, file: string): string =
+  ## The unit whose `.nim` is `file` ("" when none is); the program file gives
+  ## the project's name (what the IDE opens it by). Paths are compared as text;
+  ## only a file that is not found that way is resolved through symlinks.
+  proc find(f: string): string =
+    for u in p.units:
+      if p.nimPathOf(u) == f: return u.name
+    if p.mainPath == f: return p.name
+  result = find(normalizedPath(file))
+  if result.len == 0:
+    try: result = find(expandFilename(file))
+    except OSError: discard
+
 # --------------------------------------------------------------- load / save
 
 proc str(j: JsonNode, key, default: string): string =
@@ -195,9 +208,18 @@ proc save*(p: Project) =
   except IOError: discard
   writeFileAtomic(p.filePath, text)
 
-proc loadProject*(path: string): Project =
-  ## Raises `ProjectError` when the file is missing or not a project.
+proc canonical(path: string): string =
+  ## The absolute path with symlinks resolved (the compiler reports real paths:
+  ## macOS puts a project under /var in /private/var). A path that does not
+  ## exist is only normalised.
   let abs = absolutePath(path)
+  try: expandFilename(abs) except OSError: normalizedPath(abs)
+
+proc loadProject*(path: string): Project =
+  ## Raises `ProjectError` when the file is missing or not a project. The
+  ## project's path is stored canonical, so the paths of the files in it agree
+  ## with the ones the compiler prints.
+  let abs = canonical(path)
   var j: JsonNode
   try:
     j = parseJson(readFile(abs))
@@ -646,8 +668,8 @@ proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =
   ## form unit (`unit1.nim` / `unit1.nfm`) and a `nim.cfg`, and saves the project.
   if not validName(name): raise newException(ProjectError, "bad project name " & name)
   if name == "unit1": raise newException(ProjectError, "project name clashes with unit1")
-  let d = absolutePath(dir)
-  createDir d
+  createDir absolutePath(dir)
+  let d = canonical(dir)
   result = Project(filePath: d / name & ProjectExt, name: name, mainFile: name & ".nim",
                    outputDir: "build", nimvclPath: nimvclPath)
   let src = result.nimvclSrc
