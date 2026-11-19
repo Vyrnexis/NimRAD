@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.4"
+version       = "0.1.5"
 author        = "Vyrnexis"
 description   = "A Delphi 7-style IDE for building nimvcl applications"
 license       = "MIT"

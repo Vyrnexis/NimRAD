@@ -29,6 +29,8 @@ when defined(windows):
     {.stdcall, dynlib: "kernel32", importc: "TerminateJobObject".}
   proc openProcess(access: DWORD, inherit: WINBOOL, pid: DWORD): Handle
     {.stdcall, dynlib: "kernel32", importc: "OpenProcess".}
+  proc terminateProcess(process: Handle, exitCode: cuint): WINBOOL
+    {.stdcall, dynlib: "kernel32", importc: "TerminateProcess".}
 
 proc resolveExe(exe: string): string =
   ## A bare name ("nim") is looked up in PATH; findExe also tries the
@@ -39,7 +41,12 @@ proc resolveExe(exe: string): string =
     if found.len > 0: result = found
 
 when defined(posix):
-  var cEnviron {.importc: "environ", header: "<unistd.h>".}: cstringArray
+  when defined(macosx):
+    # macOS declares no `environ` for programs linked as a whole; ask libSystem
+    proc nsGetEnviron(): ptr cstringArray {.importc: "_NSGetEnviron", header: "<crt_externs.h>".}
+    template cEnviron: cstringArray = nsGetEnviron()[]
+  else:
+    var cEnviron {.importc: "environ", header: "<unistd.h>".}: cstringArray
 
   proc startChild*(exe: string, args: seq[string], workDir: string): Child =
     ## Raises `OSError` when the program cannot be started.
@@ -110,6 +117,9 @@ else:
     let cmd = resolveExe(exe)
     result.process = startProcess(cmd, workDir, args, nil, {poUsePath, poStdErrToStdOut})
     result.pid = result.process.processID
+    # no input: close our end of the stdin pipe so a program that reads it sees
+    # the end of the file at once
+    result.process.inputStream.close()
     when defined(windows):
       let job = createJobObjectW(nil, nil)
       if job != 0:
@@ -132,4 +142,10 @@ else:
 
   proc killTree*(pid, job: int) =
     when defined(windows):
-      if job != 0: discard terminateJobObject(Handle(job), 1)
+      if job != 0 and terminateJobObject(Handle(job), 1) != 0: return
+      # no job (assignment failed): end at least the direct child
+      if pid <= 0: return
+      let h = openProcess(0x0001, 0, DWORD(pid))               # PROCESS_TERMINATE
+      if h != 0:
+        discard terminateProcess(h, 1)
+        discard closeHandle(h)

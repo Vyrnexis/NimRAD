@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5 - 2026-11-19
+
+- macOS: the IDE builds again (the process-tree code took `environ` from
+  `_NSGetEnviron`).
+- Windows: a program started by Run or a build sees the end of its input
+  instead of waiting forever; Stop ends the program even when it could not
+  be put into a job object.
+
 ## 0.1.4 - 2026-11-19
 
 Fixes from a full code review; requires nimvcl 0.1.4.

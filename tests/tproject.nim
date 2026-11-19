@@ -1,5 +1,6 @@
 import std/[unittest, os, osproc, strutils, json, sequtils]
 import headless
+when defined(posix): import std/posix
 import ide/[project, builder]
 
 let root = getTempDir() / ("nimvclide-proj-" & $getCurrentProcessId())
@@ -203,7 +204,10 @@ suite "units outside the program's folder":
 
 suite "renaming is all or nothing":
   test "a write that fails puts the moved files back":
-    when defined(posix):
+    # root writes into a read-only folder, so the failure can't be forced (CI containers)
+    if (when defined(posix): geteuid() == 0 else: true):
+      skip()
+    else:
       let app = root / "atomic" / "app"
       let p = newApplicationProject(app, "app")
       createDir app / "sub"
