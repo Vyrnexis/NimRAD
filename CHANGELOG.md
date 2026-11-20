@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A proc such as `proc makeForm(): Form1` or `proc f(a = 1): Form1` is no longer
+  taken for an event handler of Form1.
 - A file that cannot be written (read-only, disk full) is reported when saving,
   closing a tab or project, or closing the window, instead of raising; a failed
   save counts as Cancel, so nothing is lost.

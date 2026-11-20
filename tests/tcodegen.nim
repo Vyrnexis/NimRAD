@@ -203,3 +203,9 @@ suite "from imports":
     check renameImport("from unit1 import x\n", "unit1", "base") == "from base import x\n"
     check renameImport("from a/unit1 import x, unit1\n", "unit1", "base", "a") ==
           "from a/base import x, unit1\n"
+
+suite "proc header parse":
+  test "a colon outside the parameter list is not a first parameter":
+    let src = "proc makeForm(): Form1 =\n  discard\n\nproc f(a = 1): Form1 =\n  discard\n\n" &
+              "proc g(a: seq[int], b: Form1) =\n  discard\n\nproc h(self: Form1) =\n  discard\n"
+    check handlerNames(src, "Form1") == @["h"]

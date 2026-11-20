@@ -128,13 +128,29 @@ proc parseProcs(s: Src): seq[ProcInfo] =
       hdr.add " " & s.lines[j].strip()
     let lp = hdr.find('(')
     if lp >= 0:
-      let colon = hdr.find(':', lp)
+      # the first parameter's colon must lie inside the parameter list: before
+      # the matching `)`, outside nested brackets (`proc f(): T` has none)
+      var depth = 0
+      var colon = -1
+      for c in lp ..< hdr.len:
+        case hdr[c]
+        of '(', '[', '{': inc depth
+        of ')', ']', '}':
+          dec depth
+          if depth <= 0: break
+        of ':':
+          if depth == 1:
+            colon = c
+            break
+        else: discard
       if colon > lp:
-        info.firstParam = hdr[lp + 1 ..< colon].strip()
-        var ty = hdr[colon + 1 .. ^1].strip()
-        var e = 0
-        while e < ty.len and (isIdentChar(ty[e]) or ty[e] == '.'): inc e
-        info.firstType = ty[0 ..< e]
+        let nm = hdr[lp + 1 ..< colon].strip()
+        if nm.len > 0 and '=' notin nm:
+          info.firstParam = nm
+          var ty = hdr[colon + 1 .. ^1].strip()
+          var e = 0
+          while e < ty.len and (isIdentChar(ty[e]) or ty[e] == '.'): inc e
+          info.firstType = ty[0 ..< e]
     # extent: following lines that are blank, indented, a comment, or inside a literal
     var last = i
     var k = i + 1
