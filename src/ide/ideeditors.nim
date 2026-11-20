@@ -241,7 +241,7 @@ proc showPanel*(ide: IdeForm, p: DockPanel) =
   if p.state == dpHidden: p.show() else: p.activate()
 
 proc resetLayout*(ide: IdeForm) =
-  discard ide.site.loadLayout(ide.defaultLayout)
+  discard ide.site.loadLayoutEx(ide.defaultLayout)
   for p in ide.site.panels:
     if p.state == dpHidden and p notin [ide.pnlTodo, ide.pnlExplorer]: p.show()   # these stay closed until asked for
 
@@ -357,8 +357,6 @@ proc sync*(ide: IdeForm) =
 
 proc watchedState(ide: IdeForm): WatchedState =
   ## The few things the action states depend on that nobody tells us about.
-  for p in [ide.pnlProject, ide.pnlInspector, ide.pnlTree, ide.pnlMessages, ide.pnlTodo, ide.pnlExplorer]:
-    result.panels = result.panels * 2 + (if p.state != dpHidden: 1 else: 0)
   result.msgs = ide.messages.msgs.len
   result.units = if ide.project == nil: -1 else: ide.project.units.len
   result.state = buildState()

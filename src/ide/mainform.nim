@@ -125,9 +125,12 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide.refreshActions()
   ide.updateCaption()
 
-  if ide.settings.layout.len > 0 and not ide.site.loadLayout(ide.settings.layout):
+  let loaded = if ide.settings.layout.len > 0: ide.site.loadLayoutEx(ide.settings.layout)
+               else: (ok: true, reason: "")
+  if not loaded.ok:
     ide.resetLayout()
-    ide.say "The saved window layout could not be used; the default layout is shown (Reset Layout)"
+    ide.say "The saved window layout could not be used (" & loaded.reason &
+            "); the default layout is shown (Reset Layout)"
   elif ide.settings.layout.len > 0:
     # a layout saved before the To-Do List and the Code Explorer existed
     if "\"todo\"" notin ide.settings.layout: ide.pnlTodo.hide()

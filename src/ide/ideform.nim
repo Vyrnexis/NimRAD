@@ -54,7 +54,7 @@ type
     fontSize*, tabWidth*: int
     insertSpaces*, lineNumbers*: bool
 
-  WatchedState* = tuple[msgs, panels, units: int, state: BuildState, prop: string]
+  WatchedState* = tuple[msgs, units: int, state: BuildState, prop: string]
 
   BuildPhase* = enum
     ## One state instead of a handful of flags. The `...ForRun` phases start the
@@ -99,7 +99,7 @@ type
     treeDirty*: bool            ## the components of the bound form changed
     actionsDirty*: bool         ## something the action states depend on changed
     watched*: WatchedState
-      ## what changes without an event of ours (messages, dock panels, project)
+      ## what changes without an event of ours (messages, project)
     treeComps*: seq[Component]
     treeNodes*: seq[TreeNode]
     syncingTree*: bool

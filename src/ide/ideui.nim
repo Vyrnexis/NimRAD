@@ -353,3 +353,5 @@ proc buildDocking*(ide: IdeForm) =
   ide.pnlExplorer.hide()
   ide.pnlEditors.activate()
   ide.defaultLayout = site.saveLayout()
+  site.onPanelStateChanged = proc(s: DockSite, p: DockPanel) =
+    ide.actionsDirty = true      # the View menu's checks
