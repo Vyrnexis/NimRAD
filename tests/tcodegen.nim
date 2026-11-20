@@ -220,3 +220,21 @@ suite "style-insensitive names":
     check handlerNames(src, "Form1") == @["button1click"]
   test "component references match by style":
     check renameComponentRefs(src, "label1", "caption1", "Form1").contains("self.caption1.caption")
+
+suite "stub placement and line endings":
+  test "the caret of a stub with a hint is on its discard":
+    let r = ensureHandlerFor(unit, "Form1", "Button", "onClick", "exitClick", "Base")
+    check r.text.splitLines[r.line] == "  discard"
+  test "the import fallback goes after a multi-line import":
+    let src = "import a,\n  b\n\nvar x = 1\n"
+    let r = ensureHandler(src, "Form1", "f", "")
+    check r.text.startsWith("import a,\n  b\n\nproc f(")
+    let r2 = ensureHandler("import std/[os,\n  strutils]\nvar x = 1\n", "Form1", "f", "")
+    check r2.text.startsWith("import std/[os,\n  strutils]\n\nproc f(")
+  test "mixed line endings stay as they are; all-CRLF stays CRLF":
+    let mixed = "import a\r\nvar x = 1\nvar y = 2\r\n"
+    let r = ensureHandler(mixed, "Form1", "f", "")
+    check r.text.count("\r\n") == 2
+    let crlf = unit.replace("\n", "\r\n")
+    let c = ensureHandler(crlf, "Form1", "f", "").text
+    check c.count("\n") == c.count("\r\n")

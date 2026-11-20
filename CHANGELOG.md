@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A new handler stub of an inherited event puts the caret on its `discard`, not on
+  the hint comment; the fallback placement after the imports skips the lines of
+  a multi-line `import a,\n  b`; a unit with mixed line endings is no longer
+  rewritten as all-CRLF; reloading a unit from disk keeps the selected control.
 - A control import stays in a unit's managed import block while the unit's code
   still names the class (`Timer(...)`, `cast[Label](x)`), also after the last
   object of the class left the form.

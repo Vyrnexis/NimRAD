@@ -1103,7 +1103,11 @@ proc reloadFromDisk*(e: UnitEditor) =
       e.say "cannot load " & e.fUnit.nfmPath & ": " & ex.msg
       if madeScroll: e.dropScroll()
     if e.fDesigner != nil:
-      e.fDesigner.select(Control(e.fBody))
+      var target: Component = nil
+      if selName.len > 0:
+        for (c, _) in e.componentTree:
+          if c.name == selName: target = c
+      if target != nil: e.selectComponent(target) else: e.fDesigner.select(Control(e.fBody))
       e.fScroll.visible = wasDesigner
       e.fCode.visible = not wasDesigner
     else:

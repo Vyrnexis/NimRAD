@@ -52,10 +52,15 @@ type
     eol: string
 
 proc split(src: string): Src =
-  result.eol = if "\r\n" in src: "\r\n" else: "\n"
   result.lines = src.split('\n')
-  for l in result.lines.mitems:
-    if l.endsWith('\r'): l.setLen l.len - 1
+  # CRLF only when every line has it; in a file with mixed endings the `\r` of
+  # the lines that have one stays part of the line, so it is written back as is
+  let n = result.lines.len - 1                 # the piece after the last `\n` has no end
+  if n > 0 and result.lines[0 ..< n].allIt(it.endsWith('\r')):
+    result.eol = "\r\n"
+    for l in result.lines.mitems:
+      if l.endsWith('\r'): l.setLen l.len - 1
+  else: result.eol = "\n"
 
 proc join(s: Src): string = s.lines.join(s.eol)
 
@@ -90,11 +95,6 @@ type ProcInfo = object
   firstParam, firstType: string   ## "self", "Form1"
   first, last: int                ## line range; `last` excludes trailing blanks
   bodyLine: int                   ## first line after the header (== last+1 when none)
-
-proc identAt(l: string, i: int): string =
-  var j = i
-  while j < l.len and isIdentChar(l[j]): inc j
-  l[i ..< j]
 
 proc parseProcs(s: Src): seq[ProcInfo] =
   ## Top-level `proc`/`func`/`method` definitions (column 0). A definition goes on
@@ -213,6 +213,11 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
       let l = s.lines[i]
       if l.startsWith("import ") or l.startsWith("from ") or l.startsWith("export "):
         at = i
+        # a list that goes on in the next lines (`import a,\n  b`, `[a,\n b]`)
+        while at + 1 < s.codeLines:
+          let code = s.lines[at].split('#')[0].strip
+          if not (code.endsWith(",") or code.count('[') > code.count(']')): break
+          inc at
     # inside a `{.push ...}` region (the managed import block): go past its `{.pop.}`
     var pushed = false
     for i in 0 .. min(at, s.codeLines - 1):
@@ -237,7 +242,9 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
     at = -1
   for k, l in add: s.lines.insert(l, at + 1 + k)
   if s.lines[^1].len > 0: s.lines.add ""    # keep a final newline
-  result = StubResult(text: s.join, line: at + 1 + (if add[0].len == 0: 1 else: 0) + 1,
+  # the caret goes on the `discard`, after the hint comment
+  result = StubResult(text: s.join,
+                      line: at + 1 + (if add[0].len == 0: 1 else: 0) + 1 + (if hint.len > 0: 1 else: 0),
                       col: 2, inserted: true)
 
 proc ensureHandlerFor*(src, formType, className, eventName, handlerName: string,

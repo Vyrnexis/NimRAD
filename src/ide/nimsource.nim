@@ -150,7 +150,7 @@ proc classifyLines*(lines: openArray[string]): seq[LineClass] =
 
 # ------------------------------------------------------------------ classes
 
-proc identAt(code: string, i: int): string =
+proc identAt*(code: string, i: int): string =
   var j = i
   while j < code.len and (code[j] in IdentChars or ord(code[j]) >= 0x80): inc j
   code[i ..< j]
