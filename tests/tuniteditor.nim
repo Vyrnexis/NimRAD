@@ -508,3 +508,5 @@ end
     writeFile(dir / "unit1.nfm", "object Form1: Form\n  width = 640\n  height = 480\n  caption = 'Form1'\nend\n")
     e.reloadFromDisk()
     check "import badge" notin e.code.text
+
+removeDir root                           # the projects built here are large

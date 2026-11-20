@@ -137,6 +137,8 @@ suite "pictures in the designer":
     r.insp.tab = itEvents
     r.insp.selectProp("onShow")
     r.insp.dispatchDouble(r.insp.indexOfProp("onShow"))
+    # a line of the user's, or saving removes the handler that is still the stub
+    discard r.ed.code.insertAt((r.ed.code.caretLine, 2), "# mine\n  ")
     r.ed.save()
     writeFile(r.proj.dir / "unit1.nim", readFile(r.proj.dir / "unit1.nim").replace(
       "sender: Control) =",
@@ -304,3 +306,5 @@ suite "colours in the designer":
     r.ed.reloadFromDisk()
     check Panel(r.ed.find("Panel1")).color == hex"#336699"
     check Label(r.ed.find("Label1")).fontColor == hex"#aa0000"
+
+removeDir root                           # the projects built here are large

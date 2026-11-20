@@ -572,3 +572,5 @@ suite "an open descendant after its ancestor was renamed":
     check not fileExists(p.dir / "unit2.nim.tmp")      # saved through a temporary file
     check readFile(p.dir / "unit2.nim") == e2.code.text
     check e2.code.fileName == p.dir / "unit2.nim"
+
+removeDir root                           # the projects built here are large
