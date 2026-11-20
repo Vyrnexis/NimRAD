@@ -37,6 +37,25 @@ suite "settings":
     writeFile(path, """{"codeTemplates": "nope"}""")
     check loadSettings(path).codeTemplates.len == 0
 
+  test "sessions: round trip, newest first, capped, bad entries dropped":
+    var s = defaultSettings()
+    s.rememberSession("/p/a.nimproj", @["a", "u1"], "u1")
+    s.rememberSession("/p/b.nimproj", @["b"], "b")
+    s.rememberSession("/p/a.nimproj", @["a"], "a")
+    check s.sessions.len == 2 and s.sessions[0].project == "/p/a.nimproj"
+    check s.sessionOf("/p/a.nimproj") == ("/p/a.nimproj", @["a"], "a")
+    check s.sessionOf("/p/none.nimproj").units.len == 0
+    check saveSettings(s, path)
+    check loadSettings(path).sessions == s.sessions
+    s.rememberSession("/p/b.nimproj", @[], "")          # nothing open: forgotten
+    check s.sessions.len == 1
+    for i in 1 .. 30: s.rememberSession("/p/x" & $i & ".nimproj", @["u"], "u")
+    check s.sessions.len == MaxSessions and s.sessions[0].project == "/p/x30.nimproj"
+    writeFile(path, """{"sessions": [{"project": "/p", "units": ["a", 3], "active": 1}, {"project": "/q"}, 7, {"units": ["x"]}]}""")
+    check loadSettings(path).sessions == @[("/p", @["a"], "")]
+    writeFile(path, """{"sessions": "nope"}""")
+    check loadSettings(path).sessions.len == 0
+
   test "editor options: defaults, round trip, old files and bad values":
     let d = defaultSettings()
     check d.editorTabWidth == 2 and d.editorInsertSpaces and d.editorLineNumbers and d.editorFontFamily == ""

@@ -55,7 +55,7 @@ the same code. The few modal dialogs are hooks (`askSave`, `showError`,
 | `codegen` | Edits of a unit's source text: handler stubs, renames, imports. Line based, uses nimvcl's lexer to skip strings and comments |
 | `nimsource` | What the IDE needs to know about Nim source text in one place: valid identifiers, keywords, the modules a file imports (comments recognised with the lexer) |
 | `fileio` | Atomic writes (a temporary file, then a rename) |
-| `ideconfig` | `settings.json` in the user config folder, including the one-time move from `nimvcl-ide` |
+| `ideconfig` | `settings.json` in the user config folder, including the open units per project (`sessions`) and the one-time move from `nimvcl-ide` |
 | `quickfix`, `symbols`, `symbolindex`, `symbolscan` | Quick fix rules (pure), the symbol to module lookup, and the generated table of nimvcl symbols (`nimble genindex`; the test `tsymbolindex` fails when it is stale) |
 
 The designer and the Object Inspector are nimvcl's (`FormDesigner`,

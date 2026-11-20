@@ -145,6 +145,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
       canClose = false                   # a failed save counts as Cancel
       return
     ide.programReset()
+    ide.rememberOpenUnits()
     ide.rememberWindow()
     ide.saveLayout()
   Application.addIdleHook("ide-sync", proc() = ide.flush())

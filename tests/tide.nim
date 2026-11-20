@@ -1655,6 +1655,29 @@ suite "reopen and startup":
     check ide.project.filePath == projectFile
     check ide.editors.len == 1
 
+  test "the open units come back with the project":
+    let u0 = ide.project.units[0].name
+    check ide.closeAllEditors()
+    check ide.openMain() != nil
+    check ide.openUnit(u0) != nil
+    check ide.openMain() != nil                          # the active one is the program file
+    check ide.closeProject()
+    let s = ide.settings.sessionOf(projectFile)
+    check s.units == @["Renamed", u0]
+    check s.active == "Renamed"
+    check loadSettings(settingsFile).sessionOf(projectFile).units.len == 2
+    # a unit that is gone is skipped
+    ide.settings.rememberSession(projectFile, @["ghost", u0, "Renamed"], u0)
+    check ide.openProject(projectFile)
+    check errors.len == 0
+    check ide.editors.len == 2 and ide.editorIndex("ghost") < 0
+    check ide.activeEditor.unitName == u0
+    # nothing remembered: the first unit
+    check ide.closeProject()
+    ide.settings.rememberSession(projectFile, @[], "")
+    check ide.openProject(projectFile)
+    check ide.editors.len == 1 and ide.activeEditor.unitName == u0
+
   test "an empty list says (none)":
     let keep = ide.settings.recentProjects
     ide.settings.recentProjects = @[]

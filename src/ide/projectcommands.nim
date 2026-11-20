@@ -14,11 +14,35 @@ proc refuseWhileBusy(ide: IdeForm, what: string): bool =
   if result:
     ide.fail "Cannot " & what & " while a build or program is running; use Program Reset first."
 
+proc rememberOpenUnits*(ide: IdeForm) =
+  ## Keeps the open units of the project and the active one in the settings
+  ## (not in the `.nimproj`), for the next time it is opened.
+  if ide.project == nil: return
+  var units: seq[string]
+  for e in ide.editors: units.add e.unitName
+  let a = ide.activeEditor
+  ide.settings.rememberSession(ide.project.filePath, units, if a != nil: a.unitName else: "")
+  ide.saveSettings()
+
+proc restoreOpenUnits*(ide: IdeForm): bool {.discardable.} =
+  ## Opens the units that were open when the project was closed (the ones that
+  ## are gone are skipped) and activates the remembered one. False when nothing
+  ## was remembered or nothing could be opened.
+  let s = ide.settings.sessionOf(ide.project.filePath)
+  for name in s.units:
+    let i = ide.project.findUnit(name)
+    let path = if i >= 0: ide.project.nimPathOf(ide.project.units[i])
+               elif name == ide.project.name: ide.project.mainPath
+               else: ""
+    if path.len > 0 and fileExists(path) and ide.openUnit(name) != nil: result = true
+  if result and s.active.len > 0 and ide.editorIndex(s.active) >= 0: discard ide.openUnit(s.active)
+
 proc closeProject*(ide: IdeForm): bool =
   ## Closes the project and its editors (false: cancelled at the save prompt,
   ## or refused while a build or program is running).
   if ide.refuseWhileBusy("close the project"): return false
   if not ide.trySaveProject(): return false
+  ide.rememberOpenUnits()      # before the editors go
   if not ide.closeAllEditors(): return false
   if ide.project != nil:
     ide.project.unregisterFonts()
@@ -71,7 +95,7 @@ proc openProject*(ide: IdeForm, path: string): bool =
   ide.refreshProject()
   ide.rememberProject()
   ide.rebuildRecentMenu()
-  if p.units.len > 0: discard ide.openUnit(p.units[0].name)
+  if not ide.restoreOpenUnits() and p.units.len > 0: discard ide.openUnit(p.units[0].name)
   ide.say "Opened project " & p.name
   true
 

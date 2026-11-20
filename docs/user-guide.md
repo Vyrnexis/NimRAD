@@ -299,7 +299,7 @@ waiting for a keyboard.
 |---|---|
 | File > New Application | A new project with one form |
 | File > Open Project... (`Ctrl+F11`) | Opens a `.nimproj` file |
-| File > Reopen | The last ten projects. An entry whose project file is gone is removed when you click it |
+| File > Reopen | The last ten projects. An entry whose project file is gone is removed when you click it. A project opens with the units that were open when it was closed (or the IDE was left) and the same one active; the list is kept in `settings.json` for the last 20 projects, not in the `.nimproj` |
 | File > Save (`Ctrl+S`) / Save All (`Shift+Ctrl+S`) | Saves the unit / everything and the project |
 | File > Save As... | Renames the current unit: its `.nim` and `.nfm`, the `import` lines in the program and in the other units, and the `loadForm` file name all follow. The form type (`Form2`) keeps its name. On the program file it renames the project |
 | File > Save Project As... | Renames the project: `<name>.nimproj` and `<name>.nim` |

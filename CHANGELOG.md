@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Opening a project brings back the units that were open when it was closed (or the IDE was
+  left) and the active one; units that are gone are skipped. Kept in `settings.json`
+  (`sessions`, last 20 projects), not in the `.nimproj`.
 - Clickable runtime tracebacks: a Nim traceback in the output of the running program (frames and
   the `unhandled exception` line) is listed in Messages; double click or `F8` opens the file and
   line of a project unit. Messages is shown when the program ended with one.
