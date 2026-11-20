@@ -11,6 +11,7 @@ putEnv("SDL_RENDER_DRIVER", "software")
 let root = getTempDir() / ("nimrad-palette-" & $getCurrentProcessId())
 removeDir root
 createDir root
+addQuitProc(proc() {.noconv.} = removeDir root)   # also when a check fails or the run aborts
 
 Application.init()
 let ide = newIdeForm(settingsFile = root / "settings.json")
