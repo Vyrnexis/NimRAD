@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- View > To-Do List: a docked list (a tab of Messages, closed at first) of the `# TODO`, `# FIXME`,
+  `# NOTE`, `# HACK` and `# XXX` comments of the project's units: priority (`# TODO 1: ...`), text,
+  unit, line; owner and category (`(me)`, Delphi's `-oMe -cUI`) are read too. Unsaved text of open
+  units is scanned first; double click opens the place; refreshed on Refresh, when shown and after a save.
 - Opening a project brings back the units that were open when it was closed (or the IDE was
   left) and the active one; units that are gone are skipped. Kept in `settings.json`
   (`sessions`, last 20 projects), not in the `.nimproj`.

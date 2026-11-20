@@ -243,7 +243,7 @@ proc showPanel*(ide: IdeForm, p: DockPanel) =
 proc resetLayout*(ide: IdeForm) =
   discard ide.site.loadLayout(ide.defaultLayout)
   for p in ide.site.panels:
-    if p.state == dpHidden: p.show()
+    if p.state == dpHidden and p != ide.pnlTodo: p.show()   # the To-Do List stays closed until asked for
 
 proc saveLayout*(ide: IdeForm) =
   ## Stores the docking layout in the settings (and writes them).
@@ -339,6 +339,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aViewInspector].checked = ide.pnlInspector.state != dpHidden
   a[aViewTree].checked = ide.pnlTree.state != dpHidden
   a[aViewMessages].checked = ide.pnlMessages.state != dpHidden
+  a[aViewTodo].checked = ide.pnlTodo.state != dpHidden
   a[aTheme].checked = ide.isDark
 
 proc sync*(ide: IdeForm) =
@@ -356,7 +357,7 @@ proc sync*(ide: IdeForm) =
 
 proc watchedState(ide: IdeForm): WatchedState =
   ## The few things the action states depend on that nobody tells us about.
-  for p in [ide.pnlProject, ide.pnlInspector, ide.pnlTree, ide.pnlMessages]:
+  for p in [ide.pnlProject, ide.pnlInspector, ide.pnlTree, ide.pnlMessages, ide.pnlTodo]:
     result.panels = result.panels * 2 + (if p.state != dpHidden: 1 else: 0)
   result.msgs = ide.messages.msgs.len
   result.units = if ide.project == nil: -1 else: ide.project.units.len
@@ -486,6 +487,7 @@ proc saveEditor*(ide: IdeForm, ed: UnitEditor) =
         kids.add k
         pending.add k.pendingDesign()
   ed.save()
+  ide.todoDirty = true
   for i, k in kids: k.rebaseOnAncestor(pending[i])
 
 proc trySave*(ide: IdeForm, ed: UnitEditor): bool =
@@ -523,7 +525,7 @@ proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
     of scCancel: return false
     of scSave:
       if not ide.trySave(ed): return false     # a failed save counts as Cancel
-    of scDiscard: discard
+    of scDiscard: ide.todoDirty = true         # the unsaved text no longer counts
   if ide.bound == ed:
     if ed.isForm: ed.designer.cancelCreate()
     ed.unbindInspector()
@@ -581,6 +583,7 @@ proc saveAll*(ide: IdeForm): bool {.discardable.} =
   if result: ide.say "All saved"
 
 proc refreshProject*(ide: IdeForm) =
+  ide.todoDirty = true
   ide.projectTree.refresh(ide.project)
   ide.updateCaption()
   ide.updateTabs()

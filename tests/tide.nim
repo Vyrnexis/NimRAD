@@ -385,6 +385,57 @@ suite "layout":
     ide.setDark(false)
 
 
+suite "To-Do List":
+  test "hidden at first, View shows it with the marked comments, unsaved text first":
+    check ide.openProject(projectFile)
+    let u = ide.project.units[0].name
+    writeFile(ide.project.dir / u & ".nim", readFile(ide.project.dir / u & ".nim") &
+              "\n# TODO 2: from disk\nlet note = \"# TODO: in a string\"\n")
+    check ide.closeAllEditors()
+    let ed = ide.openUnit(u)
+    ide.resetLayout()
+    check ide.pnlTodo.state == dpHidden                 # closed in the default layout
+    ide.acts[aViewTodo].execute()
+    check ide.pnlTodo.state != dpHidden
+    ide.refreshActions()
+    check ide.acts[aViewTodo].checked
+    check ide.todo.entries.len == 1
+    check ide.todo.entries[0].item.priority == 2 and ide.todo.entries[0].item.text == "from disk"
+    check ide.todo.entries[0].unitName == u
+    check ide.todo.list.items.count == 1
+    check ide.todo.list.items[0].caption == "2"
+    ed.typeAtEnd "\n# FIXME: unsaved\n"
+    check ed.modified
+    ide.todo.refreshButton.click()
+    check ide.todo.entries.len == 2 and ide.todo.entries[1].item.marker == "FIXME"
+
+  test "a save refreshes the list at the next idle moment; a double click opens the place":
+    let ed = ide.activeEditor
+    ed.typeAtEnd "# NOTE saved\n"
+    check ide.todo.entries.len == 2
+    ide.saveActive()
+    check ide.todoDirty
+    ide.flushOutline()
+    check not ide.todoDirty and ide.todo.entries.len == 3
+    ed.code.caretPos = (0, 0)
+    ide.todo.list.onItemDblClick(ide.todo.list, 0, 0)
+    check ide.activeEditor == ed
+    check ide.todo.entries[0].item.line == ed.code.caretPos.line + 1
+    ide.todo.list.itemIndex = 2
+    ide.todo.list.onItemDblClick(ide.todo.list, 2, 0)
+    check ed.code.caretPos.line + 1 == ide.todo.entries[2].item.line
+
+  test "closing the window and reset layout keep it closed":
+    ide.acts[aViewTodo].execute()
+    check ide.pnlTodo.state == dpHidden
+    ide.todoDirty = true
+    ide.flushOutline()                                  # hidden: nothing is scanned
+    check ide.todoDirty
+    ide.acts[aViewTodo].execute()
+    ide.resetLayout()
+    check ide.pnlTodo.state == dpHidden
+    discard ide.closeProject()
+
 # ------------------------------------------------------------ the main file
 
 proc mainText(): string = readFile(ide.project.mainPath)

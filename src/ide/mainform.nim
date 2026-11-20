@@ -21,8 +21,8 @@ import nimvcl
 from sdl3 import getWindowFlags, maximizeWindow, WINDOW_MAXIMIZED, Rect,
   getDisplayForRect, getDisplayUsableBounds
 import ./[project, ideconfig, icons, actions, palette, uniteditor]
-import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, codecmds, ideui]
-export ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, ideui
+import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, codecmds, outlinecmds, ideui]
+export ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, outlinecmds, ideui
 
 proc rememberWindow*(ide: IdeForm) =
   ## Puts the window's position and size (and whether it is maximized) into the
@@ -128,6 +128,8 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   if ide.settings.layout.len > 0 and not ide.site.loadLayout(ide.settings.layout):
     ide.resetLayout()
     ide.say "The saved window layout could not be used; the default layout is shown (Reset Layout)"
+  elif ide.settings.layout.len > 0 and "\"todo\"" notin ide.settings.layout:
+    ide.pnlTodo.hide()                   # a layout saved before the To-Do List existed
 
   ide.onCloseQuery = proc(sender: Form, canClose: var bool) =
     # ask for every modified unit first (Cancel keeps the window open), then
@@ -149,6 +151,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
     ide.rememberWindow()
     ide.saveLayout()
   Application.addIdleHook("ide-sync", proc() = ide.flush())
+  Application.addIdleHook("ide-outline", proc() = ide.flushOutline())
   ide
 
 proc projectArg*(args: openArray[string]): string =

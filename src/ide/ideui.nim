@@ -5,9 +5,9 @@ import nimvcl/controls/inspector
 import std/[strutils, tables]
 import nimvcl/dsl/[props, props_std]
 import ./[bookmarks, project, messages, ideconfig, icons, actions, palette,
-          projecttree, messagespanel, uniteditor, editortabs, quickfix,
+          projecttree, messagespanel, todopanel, uniteditor, editortabs, quickfix,
           ideform, ideeditors, designcmds, projectcommands, buildcontroller,
-          quickfixes, findcmds, codecmds]
+          quickfixes, findcmds, codecmds, outlinecmds]
 
 proc setDark*(ide: IdeForm, dark: bool) =
   ide.settings.theme = if dark: "dark" else: "light"
@@ -126,6 +126,7 @@ proc connectActions*(ide: IdeForm) =
   on aViewInspector: ide.toggleDockPanel(ide.pnlInspector)
   on aViewTree: ide.toggleDockPanel(ide.pnlTree)
   on aViewMessages: ide.toggleDockPanel(ide.pnlMessages)
+  on aViewTodo: ide.toggleTodo()
   on aToggleView: ide.toggleView()
   on aTheme:
     ide.setDark(not ide.isDark)
@@ -223,7 +224,7 @@ proc buildMenu*(ide: IdeForm) =
     toggles.addAct a[ActId(ord(aToggleBookmark0) + i)]
     gotos.addAct a[ActId(ord(aGotoBookmark0) + i)]
   let view = m.addItem("&View")
-  for id in [aViewProjectMgr, aViewInspector, aViewTree, aViewMessages]: view.addAct a[id]
+  for id in [aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aViewTodo]: view.addAct a[id]
   view.addSeparator()
   view.addAct a[aToggleView]
   view.addSeparator()
@@ -324,6 +325,10 @@ proc buildDocking*(ide: IdeForm) =
   ide.messages.fixProvider = proc(m: Message): seq[QuickFix] = ide.fixesOfMessage(m)
   ide.messages.onQuickFix = proc(k: int) = discard ide.applyQuickFix(k)
 
+  ide.todo = newTodoPanel(nil)
+  ide.todo.onJump = proc(file: string, line: int) = discard ide.jumpTo(file, line, 1)
+  ide.todo.onRefresh = proc() = ide.refreshTodos()
+
   ide.pnlTree = mk("tree", "Object TreeView", ide.objTree, icTreeIc)
   ide.pnlInspector = mk("inspector", "Object Inspector", ide.inspector, icInspectorIc)
   ide.pnlEditors = mk("editors", "Editor", ide.pages, icUnit, closable = false)
@@ -334,5 +339,9 @@ proc buildDocking*(ide: IdeForm) =
   site.dock(ide.pnlInspector, ide.pnlTree, dsBottom, 0.62)
   site.dock(ide.pnlProject, nil, dsRight, 0.17)
   site.dock(ide.pnlMessages, ide.pnlEditors, dsBottom, 0.21)
+  # the To-Do List is a tab of Messages, closed until View asks for it
+  ide.pnlTodo = mk("todo", "To-Do List", ide.todo.root, icHint)
+  site.dock(ide.pnlTodo, ide.pnlMessages)
+  ide.pnlTodo.hide()
   ide.pnlEditors.activate()
   ide.defaultLayout = site.saveLayout()

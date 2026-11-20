@@ -42,6 +42,7 @@ title bar always reads `NimRAD - <project name>`.
 | Editor | centre | One tab per open unit. A tab shows `*` after the name while the unit has unsaved changes. Every tab has a close button (the cross); a middle click on a tab closes it too. Both ask before they drop unsaved changes |
 | Project Manager | right | The project and its units (form units have a window icon). Double click opens a unit; double click on the project node opens the program file |
 | Messages | bottom | `Messages` lists compiler errors, warnings and hints; `Output` keeps the raw compiler text and, live, what the running program writes |
+| To-Do List | bottom, a tab of Messages, closed at first | **View > To-Do List**: the `# TODO`, `# FIXME`, `# NOTE`, `# HACK` and `# XXX` comments of the program file and the units, with priority, text, unit and line. A priority goes after the marker (`# TODO 1: soon`; 1 is the highest), an owner in brackets (`# FIXME(me): ...`); Delphi's `#[ TODO -oMe -cUI : text ]#` works too. Only real comments count, not text in strings. Units with unsaved changes are read from the editor. Double click (or Enter) opens the place; the list is refreshed by **Refresh**, when the window is shown and after a save |
 | Status bar | bottom | State (`Ready`, `Compiling...`, `Running`), lines and time of the last build, caret position, `Modified` |
 
 Panels dock like in Delphi 10 or Visual Studio: drag a tab to another side,
