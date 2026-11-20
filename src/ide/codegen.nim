@@ -11,7 +11,7 @@
 ##
 ## Line and column numbers are 0-based (as in `CodeEdit`).
 
-import std/[strutils, algorithm]
+import std/[strutils, algorithm, sequtils]
 import nimvcl/controls/nimlexer
 import nimvcl/dsl/[props, props_std]
 import nimvcl
@@ -170,14 +170,14 @@ proc parseProcs(s: Src): seq[ProcInfo] =
 
 proc findProc(procs: seq[ProcInfo], name: string): int =
   for i, p in procs:
-    if p.name == name: return i
+    if sameIdent(p.name, name): return i
   -1
 
 proc handlerNames*(src, formType: string): seq[string] =
   ## Names of the top-level procs whose first parameter has type `formType`,
   ## in source order.
   for p in parseProcs(split(src)):
-    if p.firstType == formType: result.add p.name
+    if sameIdent(p.firstType, formType): result.add p.name
 
 proc hasProc*(src, name: string): bool =
   parseProcs(split(src)).findProc(name) >= 0
@@ -204,7 +204,7 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
                       col: firstBodyCol(s, procs[ex]), inserted: false)
   var at = -1                       # insert after this line
   for p in procs:
-    if p.firstType == formType: at = p.last
+    if sameIdent(p.firstType, formType): at = p.last
   if at < 0:
     for i in 0 ..< s.codeLines:
       if s.lines[i].startsWith("loadForm"): at = i
@@ -269,7 +269,7 @@ proc emptyHandlers*(src, formType: string): seq[string] =
   ## event in the .nfm before `removeEmptyHandler`, or the form no longer compiles.
   let s = split(src)
   for p in parseProcs(s):
-    if p.firstType == formType and isEmptyBody(s, p): result.add p.name
+    if sameIdent(p.firstType, formType) and isEmptyBody(s, p): result.add p.name
 
 proc removeEmptyHandler*(src, handlerName: string): string =
   ## Deletes the proc when its body is empty (only `discard` or blank lines),
@@ -300,14 +300,14 @@ proc applyEdits(s: var Src, edits: seq[tuple[line, start, len: int, repl: string
 proc renameHandler*(src, oldName, newName: string): string =
   ## Renames the proc and every identifier use of it (calls, other references).
   ## Member accesses (`x.oldName`) are left alone. This works on tokens, not on
-  ## scopes: a local variable or a parameter with the same name is renamed too,
-  ## and Nim's style-insensitive spellings (`oldname`) do not match. That is
+  ## scopes: a local variable or a parameter with the same name is renamed too.
+  ## Spellings that differ only in style (`oldname`) match, as in Nim. That is
   ## right for the generated handler names it is meant for; it is not a general
   ## rename.
   var s = split(src)
   var edits: seq[tuple[line, start, len: int, repl: string]]
   for t in tokenize(s):
-    if t.kind == tkIdent and s.text(t) == oldName and
+    if t.kind == tkIdent and sameIdent(s.text(t), oldName) and
        not (t.start > 0 and s.lines[t.line][t.start - 1] == '.'):
       edits.add (t.line, t.start, t.len, newName)
   s.applyEdits edits
@@ -316,7 +316,7 @@ proc renameHandler*(src, oldName, newName: string): string =
 proc receivers(s: Src, formType: string): seq[string] =
   result.add "self"
   for p in parseProcs(s):
-    if p.firstType == formType and p.firstParam.len > 0 and p.firstParam notin result:
+    if sameIdent(p.firstType, formType) and p.firstParam.len > 0 and not result.anyIt(sameIdent(it, p.firstParam)):
       result.add p.firstParam
 
 proc renameComponentRefs*(src, oldName, newName: string, formType = ""): string =
@@ -329,14 +329,14 @@ proc renameComponentRefs*(src, oldName, newName: string, formType = ""): string 
   let recv = if formType.len > 0: receivers(s, formType) else: @[]
   var edits: seq[tuple[line, start, len: int, repl: string]]
   for t in tokenize(s):
-    if t.kind != tkIdent or s.text(t) != oldName or t.start == 0: continue
+    if t.kind != tkIdent or not sameIdent(s.text(t), oldName) or t.start == 0: continue
     let l = s.lines[t.line]
     if l[t.start - 1] != '.': continue
     var e = t.start - 1                       # end of the receiver
     var b = e
     while b > 0 and isIdentChar(l[b - 1]): dec b
     if b == e or (b > 0 and l[b - 1] == '.'): continue   # chained: a.b.old is not ours
-    if formType.len > 0 and l[b ..< e] notin recv: continue
+    if formType.len > 0 and not recv.anyIt(sameIdent(it, l[b ..< e])): continue
     edits.add (t.line, t.start, t.len, newName)
   s.applyEdits edits
   s.join

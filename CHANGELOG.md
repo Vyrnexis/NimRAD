@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Handler and component names are compared the way Nim does (case after the first
+  letter and underscores ignored): `button1click` is the handler `button1Click`
+  and no second stub is added.
 - A proc such as `proc makeForm(): Form1` or `proc f(a = 1): Form1` is no longer
   taken for an event handler of Form1.
 - A file that cannot be written (read-only, disk full) is reported when saving,

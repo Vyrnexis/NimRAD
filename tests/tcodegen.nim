@@ -209,3 +209,14 @@ suite "proc header parse":
     let src = "proc makeForm(): Form1 =\n  discard\n\nproc f(a = 1): Form1 =\n  discard\n\n" &
               "proc g(a: seq[int], b: Form1) =\n  discard\n\nproc h(self: Form1) =\n  discard\n"
     check handlerNames(src, "Form1") == @["h"]
+
+suite "style-insensitive names":
+  const src = "proc button1click(self: Form_1, sender: Control) =\n  self.label_1.caption = \"x\"\n"
+  test "an existing proc is found under another style":
+    check hasProc(src, "button1Click")
+    check not ensureHandler(src, "Form1", "button1Click", "sender: Control").inserted
+    check not hasProc(src, "Button1click")          # the first letter counts
+  test "handlers of a form type spelled in another style":
+    check handlerNames(src, "Form1") == @["button1click"]
+  test "component references match by style":
+    check renameComponentRefs(src, "label1", "caption1", "Form1").contains("self.caption1.caption")

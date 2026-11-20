@@ -92,14 +92,6 @@ method paint(p: DesignBody, c: Canvas) =
 
 # ------------------------------------------------------------------- helpers
 
-proc styleKey(s: string): string =
-  ## Nim identifier equality: the first letter counts, the rest ignores case
-  ## and underscores.
-  if s.len == 0: return ""
-  result = $s[0]
-  for ch in s[1 .. ^1]:
-    if ch != '_': result.add ch.toLowerAscii
-
 proc isControlClass(ci: ClassInfo): bool =
   var c = ci
   while c != nil:
