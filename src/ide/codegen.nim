@@ -311,10 +311,12 @@ proc removeEmptyHandler*(src, handlerName: string): string =
 
 # ---------------------------------------------------------------- renames
 
-proc applyEdits(s: var Src, edits: seq[tuple[line, start, len: int, repl: string]]) =
+type Edit = tuple[line, start, len: int, repl: string]   ## one replacement in a line
+
+proc applyEdits(s: var Src, edits: seq[Edit]) =
   ## Applies replacements, last first so positions stay valid.
   var e = edits
-  e.sort(proc(a, b: tuple[line, start, len: int, repl: string]): int =
+  e.sort(proc(a, b: Edit): int =
     if a.line != b.line: cmp(b.line, a.line) else: cmp(b.start, a.start))
   for x in e:
     s.lines[x.line] = s.lines[x.line][0 ..< x.start] & x.repl & s.lines[x.line][x.start + x.len .. ^1]
@@ -327,7 +329,7 @@ proc renameHandler*(src, oldName, newName: string): string =
   ## right for the generated handler names it is meant for; it is not a general
   ## rename.
   var s = split(src)
-  var edits: seq[tuple[line, start, len: int, repl: string]]
+  var edits: seq[Edit]
   for t in tokenize(s):
     if t.kind == tkIdent and sameIdent(s.text(t), oldName) and
        not (t.start > 0 and s.lines[t.line][t.start - 1] == '.'):
@@ -349,7 +351,7 @@ proc renameComponentRefs*(src, oldName, newName: string, formType = ""): string 
   ## name (`Form1(x).oldName`) or an alias (`let f = self; f.oldName`) is not found.
   var s = split(src)
   let recv = if formType.len > 0: receivers(s, formType) else: @[]
-  var edits: seq[tuple[line, start, len: int, repl: string]]
+  var edits: seq[Edit]
   for t in tokenize(s):
     if t.kind != tkIdent or not sameIdent(s.text(t), oldName) or t.start == 0: continue
     let l = s.lines[t.line]
@@ -372,7 +374,7 @@ proc renameImport*(src, oldUnit, newUnit: string, dir = ""): string =
   ## `dir` is the folder the unit is imported from when it is not the folder of
   ## the file (`sub`, `../x`): `import sub/oldUnit` is then the import of the unit.
   var s = split(src)
-  var edits: seq[tuple[line, start, len: int, repl: string]]
+  var edits: seq[Edit]
   var inImport = false
   var depth = 0
   var afterFrom = false          # in `from <module>`, before its `import`

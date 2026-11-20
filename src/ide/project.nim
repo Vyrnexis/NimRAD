@@ -165,7 +165,7 @@ proc relativeTo(p: Project, path: string): string =
   ## `path` as stored in the project: relative to its folder, both sides
   ## canonical (a file named through a symlink still gets the right path).
   let abs = canonical(if path.isAbsolute: path else: p.dir / path)
-  unixPath(relativePath(abs, p.dir))
+  relPosix(abs, p.dir)
 
 proc detectNimvclPath*(): string =
   ## The nimvcl `src` folder, or "" when none is found (see `nimvclpath`).
@@ -439,7 +439,7 @@ proc fontsBlockLines*(p: Project): seq[string] =
         else: 0
       let cn = "projectFont" & $n & ["Regular", "Bold", "Italic", "BoldItalic"][i]
       result.add "const " & cn & " = staticRead(" &
-                 escape(unixPath(relativePath(p.resolve(g.file), mainDir))) & ")"
+                 escape(relPosix(p.resolve(g.file), mainDir)) & ")"
       args[i] = cn
     if args[0].len == 0:
       for a in args:
@@ -526,7 +526,7 @@ proc editMain(p: Project, change: proc(src: string): string): bool =
 proc importPath*(p: Project, u: ProjectUnit, fromDir: string): string =
   ## What `import` says to reach the unit from a file in `fromDir`: its name when
   ## it is in that folder, else the path relative to it (`sub/foo`, `../x/foo`).
-  unixPath(relativePath(p.nimPathOf(u).changeFileExt(""), fromDir))
+  relPosix(p.nimPathOf(u).changeFileExt(""), fromDir)
 
 proc classesOf(p: Project, u: ProjectUnit): seq[string] =
   ## The classes the unit declares or registers (cached until the file changes).
@@ -663,7 +663,7 @@ proc renameUnit*(p: Project, oldName, newName: string) =
     if not fileExists(f): continue
     let src = readFile(f)
     # imported as `sub/old` from a file in another folder
-    let via = unixPath(relativePath(oldNim.parentDir, f.parentDir))
+    let via = relPosix(oldNim.parentDir, f.parentDir)
     var res = renameImport(src, oldName, newName, if via == ".": "" else: via)
     if f == oldNim and oldNfm.len > 0:
       res = renameLoadFormPath(res, oldNfm.extractFilename, newNfm.extractFilename)
@@ -679,7 +679,7 @@ proc renameUnit*(p: Project, oldName, newName: string) =
       if kidNfm.len > 0 and fileExists(kidNfm):
         let root = parseNfm(readFile(kidNfm), kidNfm)
         if root.inherited:
-          root.ancestor = unixPath(relativePath(newNfm, kidNfm.parentDir))
+          root.ancestor = relPosix(newNfm, kidNfm.parentDir)
           rewrites.add((kidNfm, writeNfm(root)))
   var undo: Undo
   try:
@@ -807,7 +807,7 @@ proc newInheritedFormUnit*(p: Project, ancestorUnit: string, name = ""): Project
   if not fileExists(p.nfmPathOf(anc)):
     raise newException(ProjectError, "the form file of " & ancestorUnit & " is missing")
   let (unit, form) = p.unitAndForm(name)
-  let rel = unixPath(relativePath(p.nfmPathOf(anc), p.dir))
+  let rel = relPosix(p.nfmPathOf(anc), p.dir)
   var undo: Undo
   try:
     undo.writeTracked(p.dir / unit & ".nim",
@@ -840,7 +840,7 @@ proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =
     result = Project(filePath: d / name & ProjectExt, name: name,
                      mainFile: name & ".nim", outputDir: "build", nimvclPath: nimvclPath)
     let src = result.nimvclSrc
-    let cfgPath = if src.len == 0: "../nimvcl/src" else: unixPath(relativePath(src, d))
+    let cfgPath = if src.len == 0: "../nimvcl/src" else: relPosix(src, d)
     let u = result.newFormUnit()
     # the unit's files; the check above says they were not there
     undo.removeTracked d / u.name & ".nim"

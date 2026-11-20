@@ -63,6 +63,13 @@ proc showProjectOptions*(ide: IdeForm) =
                                       defines: defs.text, title: title.text, version: version.text,
                                       autoImports: autoImp.checked, importAll: impAll.checked)
 
+template withDesigner(ide: IdeForm, d, body: untyped) =
+  ## Runs `body` with `d` the designer of the active editor, when that is a form.
+  let ed = ide.activeEditor
+  if ed != nil and ed.isForm:
+    let d = ed.designer
+    body
+
 proc connectActions*(ide: IdeForm) =
   let a = ide.acts
   template on(id: ActId, body: untyped) =
@@ -130,23 +137,17 @@ proc connectActions*(ide: IdeForm) =
     ide.palette.pick("")
   on aFindComponent: ide.palette.focusFilter()
   on aBringToFront:
-    let ed = ide.activeEditor
-    if ed != nil and ed.isForm: ed.designer.bringToFront()
+    ide.withDesigner(d): d.bringToFront()
   on aSendToBack:
-    let ed = ide.activeEditor
-    if ed != nil and ed.isForm: ed.designer.sendToBack()
+    ide.withDesigner(d): d.sendToBack()
   on aAlignLefts:
-    let ed = ide.activeEditor
-    if ed != nil and ed.isForm: ed.designer.alignSelection(aeLefts)
+    ide.withDesigner(d): d.alignSelection(aeLefts)
   on aAlignTops:
-    let ed = ide.activeEditor
-    if ed != nil and ed.isForm: ed.designer.alignSelection(aeTops)
+    ide.withDesigner(d): d.alignSelection(aeTops)
   on aCenterH:
-    let ed = ide.activeEditor
-    if ed != nil and ed.isForm: ed.designer.centerInParent(true, false)
+    ide.withDesigner(d): d.centerInParent(true, false)
   on aCenterV:
-    let ed = ide.activeEditor
-    if ed != nil and ed.isForm: ed.designer.centerInParent(false, true)
+    ide.withDesigner(d): d.centerInParent(false, true)
   on aEditorOptions: ide.editorOptions()
   on aAbout:
     messageDlg(AppName & " " & AppVersion & "\n\nA Delphi-style IDE for building windowed\n" &

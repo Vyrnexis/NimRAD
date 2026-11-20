@@ -17,6 +17,7 @@
 ## symbols that no other module declares.
 
 import std/[strutils, algorithm, os, sets, sequtils]
+import ./fileio
 
 const
   SecondaryModules* = ["nimvcl/dsl/props", "nimvcl/dsl/props_std",
@@ -139,7 +140,7 @@ proc scanSource*(text: string): seq[string] =
     inc i
 
 proc moduleName(srcDir, file: string): string =
-  "nimvcl/" & relativePath(file, srcDir / "nimvcl").changeFileExt("").replace('\\', '/')
+  "nimvcl/" & relPosix(file, srcDir / "nimvcl").changeFileExt("")
 
 proc scanTree*(srcDir: string): seq[(string, seq[string])] =
   ## (module, sorted unique names) for every module of `srcDir/nimvcl`, sorted
