@@ -12,6 +12,9 @@
 - New Application, Open Project and closing the project are refused (and
   disabled) while the compiler or the program runs, so the build's messages
   and fixes no longer reach another project. Use Program Reset first.
+- An unexpected error while running the compiler or the program no longer
+  leaves the IDE busy for good: the job always ends, the error is listed as
+  output and the child process is always waited for.
 - A form file that does not parse no longer makes the unit lose its control
   imports.
 - A unit that cannot be written stays marked as modified.

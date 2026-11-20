@@ -93,35 +93,40 @@ proc streamProcess(exe: string, args: seq[string], workDir: string,
   var child: Child
   try:
     child = startChild(exe, args, workDir)
-  except OSError as e:
+  except CatchableError as e:
     emit @["cannot start " & exe & ": " & e.msg]
     return -1
   if ctl != nil:
     ctl.job.store child.job
     ctl.pid.store child.pid
     if ctl.stop.load: killTree ctl           # stop requested before the pid was known
-  var buf = newString(16384)
-  var acc = ""
-  while true:
-    let n = child.readSome(buf)
-    if n <= 0: break
-    acc.add buf[0 ..< n]
-    var batch: seq[string]
-    var start = 0
+  try:
+    var buf = newString(16384)
+    var acc = ""
     while true:
-      let nl = acc.find('\n', start)
-      if nl < 0: break
-      var line = acc[start ..< nl]
-      if line.endsWith('\r'): line.setLen line.len - 1
-      batch.add line
-      start = nl + 1
-    if start > 0: acc = acc[start .. ^1]
-    if batch.len > 0: emit batch
-  if acc.len > 0: emit @[acc]
-  result = child.waitChild()
-  if ctl != nil:
-    ctl.pid.store 0
-    ctl.job.store 0
+      let n = child.readSome(buf)
+      if n <= 0: break
+      acc.add buf[0 ..< n]
+      var batch: seq[string]
+      var start = 0
+      while true:
+        let nl = acc.find('\n', start)
+        if nl < 0: break
+        var line = acc[start ..< nl]
+        if line.endsWith('\r'): line.setLen line.len - 1
+        batch.add line
+        start = nl + 1
+      if start > 0: acc = acc[start .. ^1]
+      if batch.len > 0: emit batch
+    if acc.len > 0: emit @[acc]
+  except CatchableError:
+    killTree(child.pid, child.job)       # nobody reads its output any more
+    raise
+  finally:
+    result = child.waitChild()           # always: the child is never left unwaited
+    if ctl != nil:
+      ctl.pid.store 0
+      ctl.job.store 0
 
 # --------------------------------------------------------------- sync variants
 
@@ -225,15 +230,21 @@ proc deliverDone(m: DoneMsg) =
 proc worker(a: JobArgs) {.thread.} =
   let kind = a.kind
   var code = -1
-  {.cast(gcsafe).}:
-    code = streamProcess(a.exe, a.args, a.dir,
-      proc(ls: seq[string]) {.gcsafe.} =
-        # let the UI catch up instead of piling batches into its queue
-        while backlog.load >= MaxBacklog and not ctls[kind].stop.load: sleep 2
-        discard backlog.fetchAdd 1
-        runOnUi(LinesMsg(kind: kind, lines: ls), deliverLines),
-      addr ctls[kind])
-  runOnUi(DoneMsg(kind: kind, code: code, exe: a.outExe), deliverDone)
+  let emit = proc(ls: seq[string]) {.gcsafe.} =
+    # let the UI catch up instead of piling batches into its queue
+    while backlog.load >= MaxBacklog and not ctls[kind].stop.load: sleep 2
+    discard backlog.fetchAdd 1
+    runOnUi(LinesMsg(kind: kind, lines: ls), deliverLines)
+  try:
+    {.cast(gcsafe).}:
+      code = streamProcess(a.exe, a.args, a.dir, emit, addr ctls[kind])
+  except CatchableError as e:
+    code = -1
+    try: emit @["internal error: " & e.msg]
+    except CatchableError: discard
+  finally:
+    # the IDE leaves its busy state only through this message: it is always sent
+    runOnUi(DoneMsg(kind: kind, code: code, exe: a.outExe), deliverDone)
 
 proc startJob(kind: JobKind, a: JobArgs, onLines: LinesProc) =
   if threadUsed[kind]:

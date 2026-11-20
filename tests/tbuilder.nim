@@ -193,6 +193,16 @@ suite "async":
     stopProject()
     check pumpUntil(proc(): bool = exitCalls > 0, 20)
 
+  test "a failing line callback ends the child instead of leaving it running":
+    reset()
+    let p = mkProject("slowcb", slowSrc)
+    check p.compileProjectSync().ok
+    let t0 = epochTime()
+    expect ValueError:
+      discard runCapture(p.exePath, @[], p.dir, proc(l: string) = raise newException(ValueError, "boom"))
+    check epochTime() - t0 < 20            # the program sleeps much longer: it was killed and waited for
+    check buildState() == bsIdle
+
   test "stopping a program also stops the helpers it started":
     when defined(posix):
       reset()
