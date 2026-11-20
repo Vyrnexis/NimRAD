@@ -909,18 +909,33 @@ proc copySelection*(e: UnitEditor): bool {.discardable.} =
 
 proc deleteSelection*(e: UnitEditor): bool {.discardable.} =
   ## Deletes the selection; the handlers stay in the code. Components that come
-  ## from the ancestor of an inherited form are never deleted.
+  ## from the ancestor of an inherited form are never deleted, and neither are
+  ## components (children included) that descendant forms use.
   if e.fDesigner == nil: return false
+  proc collect(o: Obj, into: var seq[Component]) =
+    for k in kidsOf(o):
+      if k of Component:
+        into.add Component(k)
+        collect(k, into)
+  proc subtree(c: Component): seq[Component] =
+    ## `c` and every component below it.
+    result.add c
+    collect(Obj(c), result)
   for c in e.fDesigner.selection:
     if c.inherited or (c of NonVisualTile and NonVisualTile(c).component != nil and
                        NonVisualTile(c).component.inherited):
       e.say "`" & c.name & "` comes from the ancestor form and cannot be deleted"
       return false
+    for k in subtree(c):
+      if k != c and k.inherited:
+        e.say "`" & k.name & "` comes from the ancestor form and cannot be deleted"
+        return false
   for c in e.fDesigner.selection:
-    let problem = e.descendantProblem(c.name)
-    if problem.len > 0:
-      e.say problem
-      return false
+    for k in subtree(c):
+      let problem = e.descendantProblem(k.name)
+      if problem.len > 0:
+        e.say problem
+        return false
   e.fDesigner.deleteSelection()
 
 proc cutSelection*(e: UnitEditor): bool {.discardable.} =

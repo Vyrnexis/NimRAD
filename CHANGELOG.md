@@ -5,6 +5,8 @@
 - A form file that does not parse no longer makes the unit lose its control
   imports.
 - A unit that cannot be written stays marked as modified.
+- Deleting a control that has children no longer breaks forms inheriting from
+  this one: the check covers every control below the selected ones.
 
 ## 0.2.1 - 2026-11-20
 
