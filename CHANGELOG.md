@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stop (Program Reset) asks the program and the processes it started to end first
+  (SIGTERM on Linux and macOS) and kills what is still running after 0.3 s.
 - Saving keeps the permissions of the file (an executable script stays executable) and
   writes through a symbolic link instead of replacing it.
 - The window comes back where it was (position, size, maximized). A saved docking layout

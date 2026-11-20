@@ -67,6 +67,13 @@ echo "ready"
 stdout.flushFile
 sleep(60000)
 """
+const stubbornSrc = """
+import std/[os, posix]
+signal(SIGTERM, SIG_IGN)
+echo "ready"
+stdout.flushFile
+sleep(60000)
+"""
 const floodSrc = "var i = 0\nwhile true:\n  inc i\n  echo \"flood line \", i\n"
 const stdinSrc = "echo \"stdin: \", readAll(stdin).len\n"
 const argsSrc = "import std/os\nfor a in commandLineParams(): echo \"arg:\" & a\nquit 3\n"
@@ -214,6 +221,19 @@ suite "async":
       stopProject()
       check pumpUntil(proc(): bool = exitCalls > 0, 20)
       check epochTime() - t0 < 10          # not when the helper ends after 60 s
+      check wasCancelled()
+
+  test "a program that ignores SIGTERM is killed after the grace period":
+    when defined(posix):
+      reset()
+      let p = mkProject("stubborn", stubbornSrc)
+      check p.compileProjectSync().ok
+      check runProject(p, addLine, onExit)
+      check pumpUntil(proc(): bool = lines.len >= 1, 20)
+      let t0 = epochTime()
+      stopProject()
+      check pumpUntil(proc(): bool = exitCalls > 0, 20)
+      check epochTime() - t0 < 10
       check wasCancelled()
 
   test "a program that floods the output can be stopped":

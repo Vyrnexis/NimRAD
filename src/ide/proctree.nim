@@ -7,7 +7,7 @@
 ## because nobody keeps the write end open any more.
 
 import std/os
-when defined(posix): import std/posix
+when defined(posix): import std/[posix, locks]
 else: import std/[osproc, streams]
 when defined(windows): import std/winlean
 
@@ -135,10 +135,35 @@ when defined(posix):
       if errno != EINTR: return -1
     if WIFSIGNALED(status): 128 + int(WTERMSIG(status)) else: int(WEXITSTATUS(status))
 
+  const KillGraceMs = 300
+
+  var
+    escalatorLock: Lock
+    escalator: ptr Thread[int]      ## the watchdog of the last `killTree`, joined by the next one
+  initLock escalatorLock
+
+  proc escalate(pid: int) {.thread.} =
+    ## After the grace period: SIGKILL for what ignored the SIGTERM. A child that
+    ## is not reaped yet (`waitChild`) still owns its pid and its group, so the
+    ## signal cannot reach another process.
+    sleep KillGraceMs
+    var info: SigInfo
+    if waitid(cPPID, Id(pid), info, cWEXITED or WNOHANG or cWNOWAIT) == 0:
+      discard kill(Pid(-pid), SIGKILL)
+      discard kill(Pid(pid), SIGKILL)
+
   proc killTree*(pid, job: int) =
+    ## SIGTERM to the group, SIGKILL after a short grace period when something
+    ## is still there. Does not wait: the UI thread may call it.
     if pid <= 0: return
-    discard kill(Pid(-pid), SIGKILL)
-    discard kill(Pid(pid), SIGKILL)
+    discard kill(Pid(-pid), SIGTERM)
+    discard kill(Pid(pid), SIGTERM)
+    withLock escalatorLock:
+      if escalator != nil:
+        joinThread escalator[]
+        deallocShared escalator
+      escalator = createShared(Thread[int])
+      createThread(escalator[], escalate, pid)
 else:
   proc startChild*(exe: string, args: seq[string], workDir: string): Child =
     let cmd = resolveExe(exe)
