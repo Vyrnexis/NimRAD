@@ -7,8 +7,17 @@ import std/[os, strutils, sequtils]
 import ./[cmdargs, project, ideconfig, messagespanel, uniteditor, mainfile,
           ideform, ideeditors]
 
+proc refuseWhileBusy(ide: IdeForm, what: string): bool =
+  ## True (after saying so) while the compiler or the program runs: the build
+  ## belongs to the current project, so it must end first (Run > Program Reset).
+  result = ide.busy
+  if result:
+    ide.fail "Cannot " & what & " while a build or program is running; use Program Reset first."
+
 proc closeProject*(ide: IdeForm): bool =
-  ## Closes the project and its editors (false: cancelled at the save prompt).
+  ## Closes the project and its editors (false: cancelled at the save prompt,
+  ## or refused while a build or program is running).
+  if ide.refuseWhileBusy("close the project"): return false
   if not ide.trySaveProject(): return false
   if not ide.closeAllEditors(): return false
   if ide.project != nil:
@@ -39,7 +48,9 @@ proc rebuildRecentMenu*(ide: IdeForm) =
                            openHandler(ide, path))
 
 proc openProject*(ide: IdeForm, path: string): bool =
-  ## Opens a `.nimproj` (the current project is closed first).
+  ## Opens a `.nimproj` (the current project is closed first). Refused while a
+  ## build or program is running.
+  if ide.refuseWhileBusy("open a project"): return false
   var p: Project
   try:
     p = loadProject(path)
@@ -69,7 +80,8 @@ proc nextProjectName(dir: string): string =
 
 proc newApplication*(ide: IdeForm, dir = "", name = ""): bool =
   ## File > New Application: a project with one form. Without `dir` it goes to
-  ## `~/nimvcl-projects/ProjectN`.
+  ## `~/nimvcl-projects/ProjectN`. Refused while a build or program is running.
+  if ide.refuseWhileBusy("create a project"): return false
   if not ide.closeProject(): return false
   var d = dir
   var n = name

@@ -885,8 +885,20 @@ suite "running":
     check ide.run()
     check waitFor(proc(): bool = "hanging" in ide.messages.output.text, 60)
     check ide.caption.endsWith("[Running]")
+    # the running program belongs to this project: it cannot be replaced meanwhile
+    let proj = ide.project
+    errors.setLen 0
+    ide.refreshActions()
+    check not ide.acts[aOpenProject].enabled and not ide.acts[aNewApp].enabled
+    check not ide.openProject(projectFile)
+    check not ide.newApplication(root / "busy", "busy")
+    check not ide.closeProject()
+    check errors.len == 3 and "Program Reset" in errors[0]
+    check ide.project == proj and not dirExists(root / "busy")
     ide.programReset()
     check ide.waitIdle(30)
+    ide.refreshActions()
+    check ide.acts[aOpenProject].enabled and ide.acts[aNewApp].enabled
     let m = ide.messages
     check m.list.items[m.list.items.count - 1].caption.startsWith("Program stopped with exit code")
     check not ide.caption.endsWith("[Running]")

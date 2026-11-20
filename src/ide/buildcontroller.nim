@@ -82,7 +82,13 @@ proc startBuild(ide: IdeForm, phase: BuildPhase, notes: seq[string] = @[]): bool
   ide.say "Compiling " & ide.project.name
   ide.buildStart = epochTime()
   let onLines = proc(lines: seq[string]) = ide.messages.feedLines(lines)
-  let onDone = proc(ok: bool, exe: string) = ide.compileDone(ok)
+  let built = ide.project
+  let onDone = proc(ok: bool, exe: string) =
+    if ide.project != built:               # another project is open now: this result is not its
+      ide.buildPhase = bpIdle
+      ide.setPart(spState, "Ready")
+      ide.refreshActions()
+    else: ide.compileDone(ok)
   if not compileProject(ide.project, onLines, onDone, ide.buildOptions):
     ide.setPart(spState, "Ready")
     return false

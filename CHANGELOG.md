@@ -9,6 +9,9 @@
   another are written before it), and asks about all of them first.
 - Remove from Project on a form that others inherit from says so and keeps its
   tab open; a failure while removing is reported instead of raising.
+- New Application, Open Project and closing the project are refused (and
+  disabled) while the compiler or the program runs, so the build's messages
+  and fixes no longer reach another project. Use Program Reset first.
 - A form file that does not parse no longer makes the unit lose its control
   imports.
 - A unit that cannot be written stays marked as modified.

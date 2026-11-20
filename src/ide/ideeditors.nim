@@ -246,6 +246,7 @@ proc refreshActions*(ide: IdeForm) =
   let hasProject = ide.project != nil
   let designer = ide.routeToDesigner
   let hasSel = designer and ed.designer.selection.len > 0
+  for id in [aNewApp, aOpenProject]: a[id].enabled = not busy     # the build belongs to this project
   a[aNewForm].enabled = hasProject
   a[aNewInheritedForm].enabled = hasProject and ide.project.formUnits.len > 0
   a[aSave].enabled = ed != nil
