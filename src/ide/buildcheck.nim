@@ -27,7 +27,7 @@
 ## as a change by the next check; files of the compiler's list that were
 ## modified since the build started are checked by hash only.
 
-import std/[os, json, times, sha1, strutils, sequtils, algorithm]
+import std/[os, json, times, sha1, strutils, sequtils, algorithm, tables]
 import ./project
 
 const
@@ -112,38 +112,24 @@ proc projectFiles(p: Project, args: seq[string], tooMany: var bool): seq[string]
       tooMany = true
       return
   let exe = p.exePath
-  for f in walkDirRec(p.dir, yieldFilter = {pcFile, pcLinkToFile}, followFilter = {pcDir},
-                      skipSpecial = true):
-    # the `.nimproj` is not an input: what in it matters is in the arguments (and
-    # the files it makes the IDE write), and Run > Parameters change it
-    if f == exe or f == p.filePath: continue
-    let rel = relativePath(f, p.dir)
-    var hidden = false
-    for part in rel.parentDir.split({DirSep, AltSep}):
-      if part.len > 1 and part[0] == '.': hidden = true
-    if hidden: continue
-    if skip.anyIt(f.startsWith(it & DirSep)): continue
-    if f.extractFilename.endsWith(".tmp"): continue
-    result.add f
-    if result.len > MaxProjectFiles:
-      tooMany = true
-      return
-
-proc takeSnapshot*(p: Project, args: seq[string], nimExe: string): Snapshot =
-  ## Call just before the compiler starts.
-  result = Snapshot(args: args, nimExe: nimExe, started: getTime())
-  var hashed = 0'i64
-  for f in p.projectFiles(args, result.tooMany):
-    var h = ""
-    try:
-      let size = getFileSize(f)
-      if size <= MaxHashSize and hashed + size <= MaxHashTotal:
-        h = $secureHashFile(f)
-        hashed += size
-    except CatchableError: discard
-    result.files.add stampOf(f, h)
-
-# ------------------------------------------------------------------- the stamp
+  # the walk does not enter hidden folders (.git), nimcache or the output folder
+  proc walk(dir: string, tooMany: var bool): seq[string] =
+    for kind, f in walkDir(dir, skipSpecial = true):
+      case kind
+      of pcDir:
+        let name = f.extractFilename
+        if (name.len > 1 and name[0] == '.') or f in skip: continue
+        result.add walk(f, tooMany)
+      of pcFile, pcLinkToFile:
+        # the `.nimproj` is not an input: what in it matters is in the arguments
+        # (and the files it makes the IDE write), and Run > Parameters change it
+        if f == exe or f == p.filePath or f.extractFilename.endsWith(".tmp"): continue
+        result.add f
+      else: discard
+      if tooMany or result.len > MaxProjectFiles:
+        tooMany = true
+        return
+  result = walk(p.dir, tooMany)
 
 func toJson(f: FileStamp): JsonNode =
   %*{"path": f.path, "size": f.size, "mtime": f.mtime, "hash": f.hash}
@@ -151,6 +137,38 @@ func toJson(f: FileStamp): JsonNode =
 func fileStamp(j: JsonNode): FileStamp =
   FileStamp(path: j["path"].getStr, size: j["size"].getBiggestInt, mtime: j["mtime"].getBiggestInt,
             hash: j["hash"].getStr)
+
+proc takeSnapshot*(p: Project, args: seq[string], nimExe: string): Snapshot =
+  ## Call just before the compiler starts.
+  result = Snapshot(args: args, nimExe: nimExe, started: getTime())
+  # a file whose size and time are those of the last stamp keeps its hash (the
+  # stamp is older than the file's time by a margin, so it was not caught mid-edit)
+  var prev = initTable[string, FileStamp]()
+  var margin = fromUnix(0)
+  let sp = p.stampPath(args)
+  try:
+    if sp.len > 0 and fileExists(sp):
+      margin = getLastModificationTime(sp) - initDuration(seconds = 2)
+      for f in parseFile(sp)["files"]:
+        let st = f.fileStamp
+        if st.hash.len > 0 and st.mtime >= 0: prev[st.path] = st
+  except CatchableError: prev.clear()
+  var hashed = 0'i64
+  for f in p.projectFiles(args, result.tooMany):
+    var st = stampOf(f)
+    try:
+      if st.size >= 0 and st.size <= MaxHashSize:
+        let old = prev.getOrDefault(f)
+        if old.hash.len > 0 and old.size == st.size and old.mtime == st.mtime and
+           st.mtime < nanos(margin):
+          st.hash = old.hash
+        elif hashed + st.size <= MaxHashTotal:
+          st.hash = $secureHashFile(f)
+          hashed += st.size
+    except CatchableError: discard
+    result.files.add st
+
+# ------------------------------------------------------------------- the stamp
 
 proc recordBuild*(p: Project, snap: Snapshot): bool {.discardable.} =
   ## After a successful build: writes the stamp. False (and no stamp) when the

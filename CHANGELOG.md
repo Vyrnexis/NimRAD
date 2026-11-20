@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Run and Compile no longer walk `.git`, nimcache or the output folder when checking
+  whether the program is up to date, and files unchanged since the last build are
+  not hashed again, so the pause on large project folders is gone.
 - Run no longer skips the build wrongly: an output folder that is (or contains) the
   project folder, or `-o`/`--out`/`--outdir` among the project's flags, always
   builds, and a module replaced during the build (even keeping an older time)

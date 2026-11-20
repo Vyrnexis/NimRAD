@@ -116,6 +116,29 @@ suite "up to date":
     check build()
     check current()
 
+  test "hidden folders, nimcache and the output folder are not tracked":
+    createDir dir / ".git"
+    writeFile dir / ".git" / "HEAD", "ref\n"
+    check build()
+    writeFile dir / ".git" / "HEAD", "ref2\n"
+    writeFile dir / "build" / "junk.txt", "x"
+    check current()
+    removeFile dir / "build" / "junk.txt"
+    removeDir dir / ".git"
+
+  test "an unchanged file keeps its hash, a touched one is still told apart":
+    check build()                       # snapshot reuses the hashes of the last stamp
+    check current()
+    let f = dir / "unit1.nim"
+    let text = readFile f
+    writeFile f, text.replace("2", "7")      # same size, new time
+    check not current()
+    check build()
+    check current()
+    writeFile f, text
+    check not current()
+    check build()
+
   test "an output folder that holds the project always builds":
     let d2 = root / "flat"
     createDir d2
