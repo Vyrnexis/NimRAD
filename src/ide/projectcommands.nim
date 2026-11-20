@@ -82,6 +82,7 @@ proc newApplication*(ide: IdeForm, dir = "", name = ""): bool =
   ## File > New Application: a project with one form. Without `dir` it goes to
   ## `~/nimvcl-projects/ProjectN`. Refused while a build or program is running.
   if ide.refuseWhileBusy("create a project"): return false
+  let previous = if ide.project != nil: ide.project.filePath else: ""
   if not ide.closeProject(): return false
   var d = dir
   var n = name
@@ -91,8 +92,9 @@ proc newApplication*(ide: IdeForm, dir = "", name = ""): bool =
   elif n.len == 0:
     n = d.extractFilename
   try:
-    ide.project = newApplicationProject(d, n)
+    ide.project = newApplicationProject(d, n)   # removes what it made when it fails
   except CatchableError as e:
+    if previous.len > 0: discard ide.openProject(previous)   # the old project stays open
     ide.fail "Cannot create the project: " & e.msg
     return false
   ide.messages.clear()
@@ -180,10 +182,12 @@ proc removeFont*(ide: IdeForm, file = ""): bool =
     if i < 0 or i >= ide.project.fonts.len: return false
     target = ide.project.fonts[i].file
   let mainEd = ide.beforeMainEdit()
+  let fontsBefore = ide.project.fonts
   try:
-    let f = ide.project.removeFont(target)
+    let f = ide.project.removeFont(target, deleteFile = false)
     ide.project.save()
     ide.project.syncFontsBlock()
+    ide.project.deleteFontFile f     # last: a failure above leaves the file where it is
     unregisterFontFamily(f.family)
     ide.project.registerFonts()      # other faces of the family stay
     ide.afterMainEdit(mainEd)
@@ -191,6 +195,11 @@ proc removeFont*(ide: IdeForm, file = ""): bool =
     ide.say "Removed font " & f.family & " (" & f.style & ")"
     result = true
   except CatchableError as e:
+    ide.project.fonts = fontsBefore
+    try:                              # the files agree with the project again
+      ide.project.save()
+      ide.project.syncFontsBlock()
+    except CatchableError: discard
     ide.fail "Cannot remove " & target & ": " & e.msg
 
 proc removeFromProject*(ide: IdeForm, unitName: string): bool =
@@ -256,7 +265,13 @@ proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
   if modeChanged:
     if not ide.saveAll(): return       # unsaved edits go to disk before the files are rewritten
     p.importAll = o.importAll
-    let changed = p.rewriteImports()
+    var changed: seq[string]
+    try:
+      changed = p.rewriteImports()      # all or nothing
+    except CatchableError as e:
+      p.importAll = not o.importAll
+      ide.fail "Cannot change the import mode: " & e.msg
+      return
     for e in ide.editors: e.reloadFromDisk()
     ide.say(if p.importAll: "All units import nimvcl (" & $changed.len & " files changed)"
             else: "Units import the prelude and their controls (" & $changed.len & " files changed)")

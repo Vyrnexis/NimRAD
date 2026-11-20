@@ -176,7 +176,9 @@ suite "removing a font":
     discard p.removeFont("elsewhere.ttf")
     check fileExists(p.dir / "elsewhere.ttf")
     expect ProjectError: discard p.removeFont("elsewhere.ttf")
-    discard p.removeFont("fonts/NotoSansMono-Regular.ttf")     # the last one
+    let last = p.removeFont("fonts/NotoSansMono-Regular.ttf", deleteFile = false)   # the last one
+    check fileExists(p.dir / "fonts" / "NotoSansMono-Regular.ttf")    # the caller deletes it
+    p.deleteFontFile last
     check not fileExists(p.dir / "fonts" / "NotoSansMono-Regular.ttf")
     check p.fonts.len == 0
 

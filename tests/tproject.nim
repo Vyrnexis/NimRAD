@@ -305,6 +305,18 @@ suite "units and forms: names and invariants":
     expect ProjectError: discard newApplicationProject(root / "cfg", "other")
     check readFile(root / "cfg" / "nim.cfg") == "-d:mine\n"
 
+  test "a new application that fails half way leaves nothing behind, so a retry works":
+    let app = root / "halfway" / "app"
+    createDir app / "nim.cfg"                          # written last: a folder in the way makes it fail
+    expect CatchableError: discard newApplicationProject(app, "app")
+    for f in ["app.nimproj", "app.nim", "unit1.nim", "unit1.nfm"]:
+      check not fileExists(app / f)
+    removeDir app / "nim.cfg"
+    check newApplicationProject(app, "app").units.len == 1
+    let made = root / "halfway" / "made"               # a bad name is refused before the folder is made
+    expect ProjectError: discard newApplicationProject(made, "bad name")
+    check not dirExists made
+
   test "the unit of the main form cannot be removed from the model either":
     let p = newApplicationProject(root / "mainform", "mainform")
     expect ProjectError: p.removeUnit("unit1")

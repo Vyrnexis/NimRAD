@@ -477,20 +477,12 @@ proc addFontFile*(p: Project, path: string): ProjectFont =
   p.fonts = p.fonts.filterIt(it.file != rel)
   p.fonts.add result
 
-proc removeFont*(p: Project, file: string): ProjectFont =
-  ## Takes the font (named by its `file`, as in `p.fonts`) out of the project and
-  ## deletes its file from `<project>/fonts/` (a file elsewhere is left alone, and
-  ## so is one another entry still uses); the folder goes when it is empty.
-  ## Saving the project and updating the main file (`syncFontsBlock`) is up to the caller.
-  let key = unixPath(file)
-  var i = -1
-  for k, f in p.fonts:
-    if f.file == key: i = k
-  if i < 0: raise newException(ProjectError, "no font " & file & " in the project")
-  result = p.fonts[i]
-  p.fonts.delete i
-  if p.fonts.anyIt(it.file == result.file): return
-  let path = p.resolve(result.file)
+proc deleteFontFile*(p: Project, f: ProjectFont) =
+  ## Deletes the file of a font that was taken out of the project, from
+  ## `<project>/fonts/` (a file elsewhere is left alone, and so is one another
+  ## entry still uses); the folder goes when it is empty.
+  if p.fonts.anyIt(it.file == f.file): return
+  let path = p.resolve(f.file)
   let folder = p.dir / "fonts"
   if path.parentDir == normalizedPath(folder) and fileExists(path):
     removeFile path
@@ -499,6 +491,20 @@ proc removeFont*(p: Project, file: string): ProjectFont =
       for _ in walkDir(folder): left = true
       if not left: removeDir folder
     except OSError: discard
+
+proc removeFont*(p: Project, file: string, deleteFile = true): ProjectFont =
+  ## Takes the font (named by its `file`, as in `p.fonts`) out of the project and
+  ## deletes its file (see `deleteFontFile`); with `deleteFile` false the file
+  ## stays for the caller to delete once the project and the main file are saved.
+  ## Saving the project and updating the main file (`syncFontsBlock`) is up to the caller.
+  let key = unixPath(file)
+  var i = -1
+  for k, f in p.fonts:
+    if f.file == key: i = k
+  if i < 0: raise newException(ProjectError, "no font " & file & " in the project")
+  result = p.fonts[i]
+  p.fonts.delete i
+  if deleteFile: p.deleteFontFile result
 
 # ------------------------------------------------------------------ main file
 
@@ -598,14 +604,15 @@ proc sourceFiles(p: Project): seq[string] =
   result.add p.mainPath
   for u in p.units: result.add p.nimPathOf(u)
 
-type Undo = seq[proc() {.closure.}]
+type Undo* = seq[proc() {.closure.}]
+  ## What puts back the steps of a multi-file operation already done (run last to first).
 
-proc rollback(undo: Undo) =
+proc rollback*(undo: Undo) =
   for i in countdown(undo.high, 0):
     try: undo[i]()
     except CatchableError: discard
 
-proc writeTracked(undo: var Undo, path, content: string) =
+proc writeTracked*(undo: var Undo, path, content: string) =
   ## Writes the file; `undo` can put the old content back.
   let existed = fileExists(path)
   let old = if existed: readFile(path) else: ""
@@ -613,9 +620,21 @@ proc writeTracked(undo: var Undo, path, content: string) =
   undo.add proc() =
     if existed: writeFileAtomic(path, old) else: removeFile path
 
-proc moveTracked(undo: var Undo, src, dst: string) =
+proc moveTracked*(undo: var Undo, src, dst: string) =
   moveFile(src, dst)
   undo.add proc() = moveFile(dst, src)
+
+proc removeTracked*(undo: var Undo, path: string) =
+  ## Registers the removal of a file this operation made (without having tracked its write).
+  undo.add proc() = removeFile path
+
+proc mkdirTracked*(undo: var Undo, dir: string) =
+  ## Creates `dir` if it is not there; `undo` removes it again when it is empty.
+  if dirExists(dir): return
+  createDir dir
+  undo.add proc() =
+    for _ in walkDir(dir): return
+    removeDir dir
 
 proc renameUnit*(p: Project, oldName, newName: string) =
   ## Renames the unit and its files (same folder), then updates the `import` in
@@ -719,10 +738,10 @@ proc importModeOf(p: Project, src: string): string =
   ## A freshly generated file in the project's import mode (see `importAll`).
   if p.importAll: setImportAll(src, true) else: src
 
-proc writeUnitFiles(p: Project, unit, form: string) =
+proc writeUnitFiles(p: Project, undo: var Undo, unit, form: string) =
   let vars = {"unit": unit, "form": form}
-  writeFile(p.dir / unit & ".nim", p.importModeOf expand(tmplUnit, vars))
-  writeFile(p.dir / unit & ".nfm", expand(tmplNfm, vars))
+  undo.writeTracked(p.dir / unit & ".nim", p.importModeOf expand(tmplUnit, vars))
+  undo.writeTracked(p.dir / unit & ".nfm", expand(tmplNfm, vars))
 
 proc unitAndForm(p: Project, name: string): tuple[unit, form: string] =
   ## The unit and form type names of a new form: the next `unitN` / `FormN`, or
@@ -755,9 +774,15 @@ proc newFormUnit*(p: Project, name = ""): ProjectUnit =
   ## chooses another unit name (the form type is then its capitalised form).
   ## The main file imports it and creates the form (`addToMain`).
   let (unit, form) = p.unitAndForm(name)
-  p.writeUnitFiles(unit, form)
-  result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form)
-  p.addToMain(result)
+  var undo: Undo
+  try:
+    p.writeUnitFiles(undo, unit, form)
+    result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form)
+    p.addToMain(result)
+  except CatchableError:
+    p.units.keepItIf(it.name != unit)
+    rollback undo
+    raise
 
 proc formUnits*(p: Project): seq[ProjectUnit] =
   ## The form units (what File > New Inherited Form offers as ancestors).
@@ -778,40 +803,67 @@ proc newInheritedFormUnit*(p: Project, ancestorUnit: string, name = ""): Project
     raise newException(ProjectError, "the form file of " & ancestorUnit & " is missing")
   let (unit, form) = p.unitAndForm(name)
   let rel = unixPath(relativePath(p.nfmPathOf(anc), p.dir))
-  writeFile(p.dir / unit & ".nim",
-            p.importModeOf expand(tmplInhNim, {"unit": unit, "form": form, "ancestor": anc.name,
-                                               "ancestorImport": p.importPath(anc, p.dir),
-                                               "ancestorForm": anc.formType}))
-  writeFile(p.dir / unit & ".nfm",
-            expand(tmplInhNfm, {"form": form, "ancestorNfm": rel}))
-  result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form, anc.name)
-  p.addToMain(result)
+  var undo: Undo
+  try:
+    undo.writeTracked(p.dir / unit & ".nim",
+              p.importModeOf expand(tmplInhNim, {"unit": unit, "form": form, "ancestor": anc.name,
+                                                 "ancestorImport": p.importPath(anc, p.dir),
+                                                 "ancestorForm": anc.formType}))
+    undo.writeTracked(p.dir / unit & ".nfm",
+              expand(tmplInhNfm, {"form": form, "ancestorNfm": rel}))
+    result = p.addUnit(unit, unit & ".nim", unit & ".nfm", true, form, anc.name)
+    p.addToMain(result)
+  except CatchableError:
+    p.units.keepItIf(it.name != unit)
+    rollback undo
+    raise
 
 proc newApplicationProject*(dir, name: string, nimvclPath = ""): Project =
   ## Creates `dir` (if needed) with `<name>.nimproj`, `<name>.nim`, a first
   ## form unit (`unit1.nim` / `unit1.nfm`) and a `nim.cfg`, and saves the project.
+  ## All or nothing: after a failure the files (and the folder, when it was
+  ## created here) are gone again, so the same call can be repeated.
   if not validName(name): raise newException(ProjectError, "bad project name " & name)
   if name == "unit1": raise newException(ProjectError, "project name clashes with unit1")
-  createDir absolutePath(dir)
-  let d = canonical(dir)
   for f in [name & ProjectExt, name & ".nim", "nim.cfg", "unit1.nim", "unit1.nfm"]:
-    if fileExists(d / f):
-      raise newException(ProjectError, d / f & " already exists; choose an empty folder")
-  result = Project(filePath: d / name & ProjectExt, name: name, mainFile: name & ".nim",
-                   outputDir: "build", nimvclPath: nimvclPath)
-  let src = result.nimvclSrc
-  let cfgPath = if src.len == 0: "../nimvcl/src" else: unixPath(relativePath(src, d))
-  let u = result.newFormUnit()
-  writeFile(d / result.mainFile,
-            expand(tmplMain, {"name": name, "unit": u.name, "form": u.formType}))
-  writeFile(d / "nim.cfg", expand(tmplCfg, {"nimvclPath": cfgPath, "sdlLink": sdlCfgBlock()}))
-  result.save()
+    if fileExists(canonical(dir) / f):
+      raise newException(ProjectError, canonical(dir) / f & " already exists; choose an empty folder")
+  var undo: Undo
+  try:
+    undo.mkdirTracked absolutePath(dir)
+    let d = canonical(dir)
+    result = Project(filePath: d / name & ProjectExt, name: name,
+                     mainFile: name & ".nim", outputDir: "build", nimvclPath: nimvclPath)
+    let src = result.nimvclSrc
+    let cfgPath = if src.len == 0: "../nimvcl/src" else: unixPath(relativePath(src, d))
+    let u = result.newFormUnit()
+    # the unit's files; the check above says they were not there
+    undo.removeTracked d / u.name & ".nim"
+    undo.removeTracked d / u.name & ".nfm"
+    undo.writeTracked(d / result.mainFile,
+                      expand(tmplMain, {"name": name, "unit": u.name, "form": u.formType}))
+    undo.writeTracked(d / "nim.cfg", expand(tmplCfg, {"nimvclPath": cfgPath, "sdlLink": sdlCfgBlock()}))
+    undo.writeTracked(result.filePath, result.toJson.pretty & "\n")
+  except CatchableError:
+    rollback undo
+    raise
+
+proc rewriteImportsTracked(p: Project, undo: var Undo): seq[string]
 
 proc rewriteImports*(p: Project): seq[string] =
   ## Puts the program and every unit in the import mode of the project
   ## (`importAll`): `import nimvcl` or the prelude with the control imports of
   ## the form. Units and programs that never had the IDE's lines are left alone.
   ## Returns the files that changed; save open editors first and reload them after.
+  ## All or nothing: when a file cannot be written the ones already rewritten are put back.
+  var undo: Undo
+  try:
+    result = p.rewriteImportsTracked(undo)
+  except CatchableError:
+    rollback undo
+    raise
+
+proc rewriteImportsTracked(p: Project, undo: var Undo): seq[string] =
   for f in p.sourceFiles:
     if not fileExists(f): continue
     let src = readFile(f)
@@ -821,5 +873,5 @@ proc rewriteImports*(p: Project): seq[string] =
         res = syncFromNfm(res, readFile(p.nfmPathOf(u)), p.nfmPathOf(u).parentDir, p.importAll,
                           p.userClassImports(u.name))
     if res != src:
-      writeFileAtomic(f, res)
+      undo.writeTracked(f, res)
       result.add f

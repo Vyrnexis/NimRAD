@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- File > New Application that fails half way removes the files it made (so trying again
+  works) and reopens the project that was open; changing the import mode in Project >
+  Options puts the files back when one cannot be written; Remove Font deletes the font
+  file only after the project and the main file were saved.
 - New Form refuses a unit name whose form type would hide a nimvcl class (`button`
   gives `Button`).
 - Add Font File refuses a second file with the same family and style (the program would
