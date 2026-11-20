@@ -1464,6 +1464,7 @@ suite "Code insight":
   test "the actions: shortcuts":
     check ide.acts[aCodeComplete].shortcut == shortcut("Ctrl+Space")
     check ide.acts[aCodeComplete].shortcut != noShortcut
+    check ide.acts[aCodeTemplate].shortcut == shortcut("Ctrl+J")
 
   test "completion: one candidate is inserted, several are listed and narrowed by typing":
     check ide.closeAllEditors()
@@ -1539,6 +1540,45 @@ suite "Code insight":
     check "onClick   event" in pickerRows()
     check "caption   string" in pickerRows()
     ide.pressKey(keyEscape)
+
+  test "templates: a name expands with the indent of the line, one undo step":
+    let ed = ide.activeEditor
+    ed.toEnd
+    ide.typeText "\nproc zzT() =\n  ife"
+    ctrl('j'.key)
+    check ed.code.lineAt(ed.code.lineCount - 4) == "  if :"
+    check ed.code.lineAt(ed.code.lineCount - 3) == "    discard"
+    check ed.code.lineAt(ed.code.lineCount - 2) == "  else:"
+    check ed.lastLine == "    discard"
+    check ed.code.caretPos == (ed.code.lineCount - 4, 5)
+    check ed.code.undo()
+    check ed.lastLine == "  ife"
+    ed.toEnd
+    ide.typeText "\n  tr"
+    ctrl('j'.key)                                         # try, tryf
+    check codepicker.isOpen()
+    check pickerRows().len == 2
+    check pickerRows()[0].startsWith("try   ")
+    ide.pressKey(keyDown)
+    ide.pressKey(keyEnter)
+    check ed.lastLine == "    discard"
+    check ed.code.lineAt(ed.code.lineCount - 2) == "  finally:"
+
+  test "templates: a word that is no prefix lists all; the settings add templates":
+    let ed = ide.activeEditor
+    ed.toEnd
+    ide.typeText "\nqqq"
+    ctrl('j'.key)
+    check codepicker.isOpen()
+    check pickerRows().len >= 15
+    ide.pressKey(keyEscape)
+    ide.settings.codeTemplates = @[("zzlog", "log line", "echo \"|\"")]
+    ed.toEnd
+    ide.typeText "\nzzlog"
+    ctrl('j'.key)
+    check ed.lastLine == "echo \"\""
+    check ed.code.caretPos.col == 6
+    ide.settings.codeTemplates = @[]
     check ide.closeAllEditors()
 
 suite "reopen and startup":

@@ -308,7 +308,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aRevertProp].enabled = designer and ide.canRevertProperty      # the Inspector's selected row differs
   a[aRevertComponent].enabled = designer and ide.canRevertComponent
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
-  for id in [aCodeComplete]: a[id].enabled = ed != nil and not designer
+  for id in [aCodeComplete, aCodeTemplate]: a[id].enabled = ed != nil and not designer
   a[aFindUnit].enabled = ed != nil
   a[aFindInFiles].enabled = hasProject
   for i in 0 ..< BookmarkSlots:

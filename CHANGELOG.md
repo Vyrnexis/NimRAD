@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Edit > Insert Template (`Ctrl+J`): code templates (`proc`, `func`, `if`, `ife`, `for`, `fori`,
+  `while`, `case`, `try`, `tryf`, `when`, `block`, `obj`, `echo`, `discard`). When the word before
+  the caret is a template's name it is expanded, indented like the line, with the caret at the
+  right place; otherwise the templates are listed like completions. Your own go into
+  `settings.json` as `"codeTemplates": [{"name", "description", "code"}]` (`|` marks the caret).
 - Edit > Complete Code (`Ctrl+Space`): the names that fit the word before the caret, listed under
   it (`Up`, `Down`, `PageUp`, `PageDown` choose, `Enter` or `Tab` insert, `Esc` closes; typing
   narrows the list, `Backspace` widens it). After `self.` they are the form's components and its

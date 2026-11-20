@@ -26,6 +26,17 @@ suite "settings":
     let q = loadSettings(path)
     check q == s
 
+  test "code templates: round trip, bad entries are dropped":
+    var s = defaultSettings()
+    check s.codeTemplates.len == 0
+    s.codeTemplates = @[("log", "echo a line", "echo \"|\"")]
+    check saveSettings(s, path)
+    check loadSettings(path).codeTemplates == s.codeTemplates
+    writeFile(path, """{"codeTemplates": [{"name": "ok", "code": "x|"}, {"name": "no code"}, {"name": "bad name", "code": "x"}, 5, {"code": "y"}]}""")
+    check loadSettings(path).codeTemplates == @[("ok", "", "x|")]
+    writeFile(path, """{"codeTemplates": "nope"}""")
+    check loadSettings(path).codeTemplates.len == 0
+
   test "editor options: defaults, round trip, old files and bad values":
     let d = defaultSettings()
     check d.editorTabWidth == 2 and d.editorInsertSpaces and d.editorLineNumbers and d.editorFontFamily == ""

@@ -11,7 +11,7 @@ import ./icons
 type
   ActId* = enum
     aNewApp, aNewForm, aNewInheritedForm, aOpenProject, aSave, aSaveAs, aSaveProjectAs, aSaveAll, aClose, aExit,
-    aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll, aCodeComplete, aRevertProp, aRevertComponent, aAlignDlg, aSizeDlg, aTabOrder,
+    aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll, aCodeComplete, aCodeTemplate, aRevertProp, aRevertComponent, aAlignDlg, aSizeDlg, aTabOrder,
     aFind, aReplace, aFindNext, aFindInFiles, aGotoLine, aFindUnit, aQuickFix,
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
@@ -48,6 +48,7 @@ const defs: array[ActId, ActDef] = [
   (aDelete, "&Delete", "Delete the selection", "Ctrl+Del", icDelete),
   (aSelectAll, "Select &All", "Select all", "Ctrl+A", -1),
   (aCodeComplete, "Complete Co&de", "Offer the names that fit the word at the caret (components, properties, events, unit and nimvcl names, keywords)", "Ctrl+Space", -1),
+  (aCodeTemplate, "Insert &Template...", "Expand the code template named before the caret, or pick one from the list", "Ctrl+J", -1),
   (aRevertProp, "Revert to &Inherited", "Put the selected property of an inherited component back to the ancestor form's value", "", -1),
   (aRevertComponent, "Revert Component to Inherited", "Put every property of the selected inherited component back to the ancestor form's values", "", -1),
   (aAlignDlg, "&Align...", "Align the selected controls: sides, centers, equal spacing, centered in the window", "", -1),

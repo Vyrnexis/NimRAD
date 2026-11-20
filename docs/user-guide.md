@@ -534,6 +534,20 @@ exactly, the rest ignoring case and underscores. `Up`, `Down`, `PageUp` and `Pag
 (`Backspace` widens it); any other key, a click elsewhere or leaving the window closes it. When
 only one name fits it is inserted without a list.
 
+**Code templates** (`Ctrl+J`, Edit menu). When the word before the caret is the name of a
+template the template replaces it, indented like the line (one level is the editor's tab
+width, or a tab when Tab does not insert spaces), and the caret lands where the template
+needs the next input; one undo step takes it back. Otherwise the templates that start with
+the word (all of them when none does) are listed like completions. Built in: `proc`, `func`,
+`if`, `ife` (if/else), `for`, `fori` (`for i in 0 ..< n`), `while`, `case`, `try`, `tryf`
+(try/finally), `when`, `block`, `obj` (`type X = ref object`), `echo`, `discard`. Add your own
+in `settings.json`; a template with a built-in's name replaces it. `|` marks the caret (the
+first one; none: the end), and each pair of leading spaces in `code` is one indent level:
+
+```json
+"codeTemplates": [{"name": "log", "description": "echo a line", "code": "echo \"|\""}]
+```
+
 **Bookmarks.** `Shift+Ctrl+0` to `Shift+Ctrl+9` put bookmark 0 to 9 on the line of the
 caret (on the line already: it is removed); `Ctrl+0` to `Ctrl+9` jump to it, opening the
 unit that holds it. Each number exists once, so setting it in another unit moves it. The
@@ -575,6 +589,7 @@ close the project. The same commands are in **Search > Toggle Bookmarks** and
 | `Shift+Ctrl+0..9` / `Ctrl+0..9` | Set or remove / go to bookmark 0..9 |
 | `Shift+Ctrl+F` | Find in Files |
 | `Ctrl+Space` | Complete Code |
+| `Ctrl+J` | Insert Template |
 | `Ctrl+F9` | Compile |
 | `Shift+F9` | Build (compile everything again) |
 | `F9` | Run |

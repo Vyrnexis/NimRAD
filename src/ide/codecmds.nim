@@ -70,3 +70,49 @@ proc completeCode*(ide: IdeForm): bool {.discardable.} =
     accept = proc(row: int, a, b: CodePos) =
       if row in 0 ..< cands.len: c.replaceRange(a, b, cands[row].text))
   true
+
+proc userTemplates(ide: IdeForm): seq[CodeTemplate] =
+  mergeTemplates(ide.settings.codeTemplates.mapIt(
+    CodeTemplate(name: it.name, description: it.description, code: it.code)))
+
+proc expandTemplate*(c: CodeEdit, t: CodeTemplate, a, b: CodePos) =
+  ## Puts the template where the word from `a` to `b` is, indented like its
+  ## line, the caret at the template's mark. One undo step.
+  let unit = if c.insertSpaces: ' '.repeat(c.tabWidth) else: "\t"
+  let e = t.expand(leadingBlank(c.lineAt(a.line)), unit)
+  c.beginUndoGroup()
+  c.replaceRange(a, b, e.text)
+  c.caretPos = (a.line + e.caretLine, if e.caretLine == 0: a.col + e.caretCol else: e.caretCol)
+  c.endUndoGroup()
+
+proc insertTemplate*(ide: IdeForm): bool {.discardable.} =
+  ## Ctrl+J: the word before the caret is a template's name: expand it. Else the
+  ## templates that start with the word are listed (all of them when none does).
+  let ed = ide.activeCode
+  if ed == nil: return false
+  let c = ed.code
+  let pos = c.caretPos
+  let all = ide.userTemplates
+  let w = wordBefore(c.lineAt(pos.line), pos.col)
+  var start: CodePos = (pos.line, w.start)
+  var prefix = w.prefix
+  let i = all.exact(prefix)
+  if i >= 0:
+    expandTemplate(c, all[i], start, pos)
+    return true
+  var shown = all.matching(prefix)
+  if shown.len == 0:
+    start = pos
+    prefix = ""
+    shown = all
+  if shown.len == 1:
+    expandTemplate(c, shown[0], start, pos)
+    return true
+  proc row(t: CodeTemplate): string = t.name & "   " & t.description
+  discard showPicker(ide, c, start, shown.map(row),
+    refilter = proc(p: string): seq[string] =
+      shown = all.matching(p)
+      shown.map(row),
+    accept = proc(r: int, a, b: CodePos) =
+      if r in 0 ..< shown.len: expandTemplate(c, shown[r], a, b))
+  true

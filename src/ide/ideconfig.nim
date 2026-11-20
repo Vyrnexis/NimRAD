@@ -5,14 +5,19 @@
 ## {"recentProjects": ["/home/me/app/app.nimproj"], "theme": "light",
 ##  "editorFontSize": 13, "editorFontFamily": "", "editorTabWidth": 2,
 ##  "editorInsertSpaces": true, "editorLineNumbers": true, "nimPath": "nim", "layout": "", "showHints": false,
-##  "window": {"x": 100, "y": 60, "w": 1360, "h": 860, "maximized": false}}
+##  "window": {"x": 100, "y": 60, "w": 1360, "h": 860, "maximized": false},
+##  "codeTemplates": [{"name": "log", "description": "echo a line", "code": "echo \"|\""}]}
 ## ```
+##
+## `codeTemplates` are the user's own Ctrl+J templates (`codeinsight`: `|` is
+## where the caret goes); an entry without a name made of letters, digits and
+## `_`, or without code, is ignored.
 ##
 ## `loadSettings` never fails: a missing or corrupt file, or a field of the
 ## wrong type, gives the default for that field. `saveSettings` writes through
 ## a temporary file so a crash cannot leave half a file.
 
-import std/[json, os, strutils]
+import std/[json, os, strutils, sequtils]
 import ./fileio
 
 const
@@ -35,6 +40,9 @@ type
     layout*: string                ## docking layout string (opaque to this module)
     showHints*: bool               ## compiler hints are requested and listed
     window*: WindowState           ## where the main window was (w = 0: never saved)
+    codeTemplates*: seq[UserTemplate]  ## the user's own code templates (Ctrl+J)
+
+  UserTemplate* = tuple[name, description, code: string]
 
   WindowState* = tuple[x, y, w, h: int, maximized: bool]
     ## Position and size of the window when it is not maximized, and whether it was.
@@ -94,6 +102,15 @@ proc loadSettings*(path = settingsPath()): Settings =
     result.layout = j["layout"].getStr
   if j.hasKey("showHints") and j["showHints"].kind == JBool:
     result.showHints = j["showHints"].getBool
+  if j.hasKey("codeTemplates") and j["codeTemplates"].kind == JArray:
+    for e in j["codeTemplates"]:
+      if e.kind != JObject: continue
+      proc str(k: string): string =
+        if e.hasKey(k) and e[k].kind == JString: e[k].getStr else: ""
+      let t: UserTemplate = (str("name").strip, str("description"), str("code"))
+      if t.name.len > 0 and t.code.len > 0 and
+         t.name.allIt(it in {'a'..'z', 'A'..'Z', '0'..'9', '_'}) and result.codeTemplates.len < 200:
+        result.codeTemplates.add t
   if j.hasKey("window") and j["window"].kind == JObject:
     let w = j["window"]
     proc num(k: string, lo, hi: int): int =
@@ -115,6 +132,7 @@ proc saveSettings*(s: Settings, path = settingsPath()): bool =
                "editorTabWidth": s.editorTabWidth, "editorInsertSpaces": s.editorInsertSpaces,
                "editorLineNumbers": s.editorLineNumbers, "nimPath": s.nimPath,
                "layout": s.layout, "showHints": s.showHints,
+               "codeTemplates": s.codeTemplates.mapIt(%*{"name": it.name, "description": it.description, "code": it.code}),
                "window": {"x": s.window.x, "y": s.window.y, "w": s.window.w, "h": s.window.h,
                           "maximized": s.window.maximized}}
     writeFileAtomic(path, j.pretty & "\n")

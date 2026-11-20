@@ -57,3 +57,39 @@ suite "candidates":
 
   test "unit identifiers skip comments, strings and keywords":
     check unitIdents("let a = \"b\" # c\nproc d() = discard\n") == @["a", "d"]
+
+suite "templates":
+  let all = mergeTemplates(@[])
+
+  test "built-ins are found by name and prefix":
+    check all.exact("tryf") >= 0 and all.exact("nosuch") == -1 and all.exact("") == -1
+    check all.matching("tr").mapIt(it.name) == @["try", "tryf"]
+    check all.matching("fo").mapIt(it.name) == @["for", "fori"]
+
+  test "user templates add and replace":
+    let m = mergeTemplates(@[CodeTemplate(name: "proc", description: "mine", code: "proc x|"),
+                             CodeTemplate(name: "log", description: "", code: "echo \"|\"")])
+    check m[m.exact("proc")].description == "mine"
+    check m.exact("log") >= 0
+    check m.len == all.len + 1
+
+  test "expansion: caret, indent of the line, indent unit":
+    let t = all[all.exact("ife")]
+    let e = t.expand("    ", "  ")
+    check e.text == "if :\n      discard\n    else:\n      discard"
+    check (e.caretLine, e.caretCol) == (0, 3)
+    let tab = all[all.exact("try")].expand("\t", "\t")
+    check tab.text == "try:\n\t\t\n\texcept CatchableError:\n\t\tdiscard"
+    check (tab.caretLine, tab.caretCol) == (1, 2)
+    let four = all[all.exact("proc")].expand("", "    ")
+    check four.text == "proc () =\n    discard"
+    check (four.caretLine, four.caretCol) == (0, 5)
+
+  test "no marker: the caret goes to the end":
+    let e = CodeTemplate(name: "x", code: "a\nb").expand("  ", "  ")
+    check e.text == "a\n  b" and (e.caretLine, e.caretCol) == (1, 3)
+
+  test "every built-in expands with exactly one caret mark":
+    for t in all:
+      check t.code.count(CaretMark) == 1
+      check CaretMark notin t.expand("", "  ").text
