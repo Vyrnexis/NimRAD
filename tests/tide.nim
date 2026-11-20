@@ -1486,10 +1486,22 @@ suite "Bookmarks":
     ide.activeControl = c
     discard c.model.deleteSelection()
     check ed.bookmarks.lineOf(7) == 4
-    # its own line deleted: the bookmark stays on the line that took its place
+    # a line moved with Alt+Up carries its marker, and the slot with it
+    c.caretPos = (4, 0)
+    c.moveLineUp()
+    check c.hasMarker(3, MarkerKind.mkBookmark) and ed.bookmarks.lineOf(7) == 3
+    c.moveLineDown()
+    check c.hasMarker(4, MarkerKind.mkBookmark) and ed.bookmarks.lineOf(7) == 4
+    # its own line deleted: the marker goes, so does the slot; undo brings both back
     c.select((4, 0), (5, 0))
     discard c.model.deleteSelection()
-    check ed.bookmarks.lineOf(7) == 4 and c.hasMarker(4, MarkerKind.mkBookmark)
+    check not c.hasMarker(4, MarkerKind.mkBookmark) and ed.bookmarks.lineOf(7) == -1
+    c.undo()
+    check c.hasMarker(4, MarkerKind.mkBookmark) and ed.bookmarks.lineOf(7) == 4
+    c.redo()
+    check ed.bookmarks.lineOf(7) == -1
+    c.undo()
+    check ed.bookmarks.lineOf(7) == 4
     # a second editor: the slot is global
     c.caretPos = (1, 0)
     check ide.toggleBookmark(2)

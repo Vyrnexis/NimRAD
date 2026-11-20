@@ -2,10 +2,15 @@
 ## editor. The editor shows a bookmark marker in the gutter; which slot
 ## (0 .. 9) owns the line is kept here, because nimvcl's markers have no number.
 ##
-## nimvcl's markers follow their line when lines are inserted or removed, and
-## a change listener on the model reports the same (first line, old count,
-## new count), so the slots move by the same rule. A slot whose marker is gone
-## (the text was loaded again) is forgotten when it is asked for.
+## nimvcl's markers are the truth: they follow their line when lines are
+## inserted or removed, are dropped with a deleted line, are carried by
+## Alt+Up/Down and come back with an undo. The slots follow them. A change
+## listener on the model first moves the slots by the same rule as the markers
+## (first line, old count, new count); `reconcile` then compares them with
+## `markerLines`: a slot whose marker is not where the slot is takes the
+## unclaimed marker on a neighbouring line (a moved line), else it is dropped
+## and remembered in `lost`, so that the marker an undo puts back gets its slot
+## again. A slot never stays on a line without a marker.
 
 import nimvcl
 
@@ -15,26 +20,52 @@ type
   Bookmarks* = ref object
     code: CodeEdit
     lines: array[BookmarkSlots, int]     ## -1: the slot is free
+    lost: array[BookmarkSlots, int]      ## where a dropped slot was, -1 none
+
+func shifted(l, first, oldN, newN: int): int =
+  ## The rule of nimvcl's `markersChanged`.
+  if l >= first + oldN: l + newN - oldN
+  elif l >= first + newN: first + max(newN, 1) - 1
+  else: l
+
+proc reconcile(b: Bookmarks) =
+  let marks = b.code.markerLines(MarkerKind.mkBookmark)
+  var claimed: seq[int]
+  for i in 0 ..< BookmarkSlots:
+    if b.lines[i] >= 0 and b.lines[i] in marks: claimed.add b.lines[i]
+  for i in 0 ..< BookmarkSlots:
+    let l = b.lines[i]
+    if l < 0 or l in marks: continue
+    b.lines[i] = -1
+    for d in [1, -1]:                    # the line was moved up or down
+      if l + d in marks and l + d notin claimed:
+        b.lines[i] = l + d
+        claimed.add l + d
+        break
+    if b.lines[i] < 0: b.lost[i] = l
+  for i in 0 ..< BookmarkSlots:          # a marker put back (undo)
+    let l = b.lost[i]
+    if l >= 0 and b.lines[i] < 0 and l in marks and l notin claimed:
+      b.lines[i] = l
+      b.lost[i] = -1
+      claimed.add l
 
 proc newBookmarks*(code: CodeEdit): Bookmarks =
   let b = Bookmarks(code: code)
-  for i in 0 ..< BookmarkSlots: b.lines[i] = -1
+  for i in 0 ..< BookmarkSlots:
+    b.lines[i] = -1
+    b.lost[i] = -1
   discard code.model.addChangeListener(proc(first, oldN, newN: int) =
-    # the rule of nimvcl's `markersChanged`
     for i in 0 ..< BookmarkSlots:
-      let l = b.lines[i]
-      if l < 0: continue
-      if l >= first + oldN: b.lines[i] = l + newN - oldN
-      elif l >= first + newN: b.lines[i] = first + max(newN, 1) - 1)
+      if b.lines[i] >= 0: b.lines[i] = shifted(b.lines[i], first, oldN, newN)
+      if b.lost[i] >= 0: b.lost[i] = shifted(b.lost[i], first, oldN, newN)
+    b.reconcile())
   b
 
 proc lineOf*(b: Bookmarks, slot: int): int =
   ## The line (0 based) of the bookmark, -1 when the slot is free.
   if slot notin 0 ..< BookmarkSlots: return -1
-  let l = b.lines[slot]
-  if l >= 0 and not b.code.hasMarker(l, MarkerKind.mkBookmark):
-    b.lines[slot] = -1
-    return -1
+  b.reconcile()
   b.lines[slot]
 
 proc shared(b: Bookmarks, line, skip: int): bool =
@@ -46,6 +77,7 @@ proc clear*(b: Bookmarks, slot: int) =
   let l = b.lineOf(slot)
   if l < 0: return
   b.lines[slot] = -1
+  b.lost[slot] = -1
   if not b.shared(l, slot): b.code.removeMarker(l, MarkerKind.mkBookmark)
 
 proc set*(b: Bookmarks, slot, line: int) =
@@ -53,6 +85,7 @@ proc set*(b: Bookmarks, slot, line: int) =
   if slot notin 0 ..< BookmarkSlots or line notin 0 ..< b.code.lineCount: return
   b.clear slot
   b.lines[slot] = line
+  b.lost[slot] = -1
   b.code.addMarker(line, MarkerKind.mkBookmark)
 
 proc toggle*(b: Bookmarks, slot, line: int): bool =

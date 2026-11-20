@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Numbered bookmarks follow the gutter markers: a deleted bookmark line frees its slot (undo brings it back) and a line moved with Alt+Up/Down keeps its bookmark.
 - Double click on the form creates `FormCreate` (its `onCreate`, like Delphi) instead of `FormShow`; the default events come from nimvcl.
 - Designer: changes made in the Object Inspector (a rename and a handler change included) are undo steps of the form designer (Ctrl+Z), and Edit > Size and Tab Order are one undo step each.
 - View > Code Explorer: a docked tree (a tab of Object TreeView, closed at first) of the active
