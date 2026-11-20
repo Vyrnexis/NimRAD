@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Search > Find in Files... (`Shift+Ctrl+F`): text (the selection or the word at the caret to
+  start with), case sensitive, whole words, regular expression, in all units of the project
+  or in the project folder (`.nim` and `.nfm`; not hidden folders, `nimcache` or the output
+  folder). The lines found are listed in Messages (file, line, text); a double click or `F8`
+  opens the place, a form file opens the form. Units with unsaved edits are searched as
+  edited. At most 1000 lines are listed, files over 2 MB are skipped.
 - Numbered bookmarks as in Delphi: `Shift+Ctrl+0` .. `9` set bookmark N on the caret line (or
   remove it when it is on that line), `Ctrl+0` .. `9` go to it, also in another unit. The
   gutter shows a bookmark icon, bookmarks follow their line while you edit, and a number is

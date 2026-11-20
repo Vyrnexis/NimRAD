@@ -3,7 +3,7 @@
 
 import std/[sequtils, strutils]
 import nimvcl
-import ./[project, ideform]
+import ./[project, ideform, findinfiles]
 
 proc askSaveDefault*(unitName: string): SaveChoice =
   let d = newForm(nil, 440, 150)
@@ -196,3 +196,31 @@ proc askEditorOptionsDefault*(o: var EditorOptions): bool =
       o.insertSpaces = spaces.checked
       o.lineNumbers = nums.checked
       result = true
+
+proc askFindInFilesDefault*(o: var FindOptions): bool =
+  let d = newForm(nil, 460, 290)
+  d.caption = "Find in Files"
+  d.borderStyle = bsSingle
+  d.position = poScreenCenter
+  newLabel(d, "Text to find:", 20, 24, 100)
+  let text = newEdit(d, o.text, 130, 20, 310)
+  let cs = newCheckBox(d, "Case sensitive", o.caseSensitive, 20, 62, 200)
+  let ww = newCheckBox(d, "Whole words only", o.wholeWord, 20, 92, 200)
+  let rx = newCheckBox(d, "Regular expression", o.regex, 20, 122, 200)
+  let scope = radioColumn(d, "Where", ["All units of the project", "The project folder"],
+                          236, 56, 204, ord o.scope)
+  let ok = newButton(d, "OK", 264, 232, 84, 32)
+  ok.modalResult = mrOk
+  ok.isDefault = true
+  let cancel = newButton(d, "Cancel", 356, 232, 84, 32)
+  cancel.modalResult = mrCancel
+  cancel.isCancel = true
+  d.activeControl = text
+  d.modal(r):
+    if r == mrOk:
+      o.text = text.text
+      o.caseSensitive = cs.checked
+      o.wholeWord = ww.checked
+      o.regex = rx.checked
+      o.scope = if scope[1].checked: fsFolder else: fsUnits
+      result = o.text.len > 0

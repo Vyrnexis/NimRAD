@@ -209,6 +209,11 @@ proc addNote*(p: MessagesPanel, text: string, icon = icInfo) =
   p.addItem r
   p.addOutput text
 
+proc addMatch*(p: MessagesPanel, file: string, line, col: int, text: string) =
+  ## A line found by Find in Files: listed like a message (the file and line in
+  ## their columns); a double click or F8 jumps to it.
+  p.addRow Message(kind: MessageKind.mkInfo, file: file, line: line, col: col, text: text)
+
 proc firstError*(p: MessagesPanel): int =
   ## Index into `msgs` of the first error with a location, or -1.
   for i, m in p.msgs:

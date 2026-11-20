@@ -7,7 +7,7 @@ import nimvcl/dsl/[props, props_std]
 import ./[bookmarks, project, messages, ideconfig, icons, actions, palette,
           projecttree, messagespanel, uniteditor, editortabs, quickfix,
           ideform, ideeditors, designcmds, projectcommands, buildcontroller,
-          quickfixes]
+          quickfixes, findcmds]
 
 proc setDark*(ide: IdeForm, dark: bool) =
   ide.settings.theme = if dark: "dark" else: "light"
@@ -117,6 +117,7 @@ proc connectActions*(ide: IdeForm) =
   on aFindUnit: ide.findUnitImport()
   on aQuickFix: ide.quickFix()
   on aFindNext: ide.findNext()
+  on aFindInFiles: ide.findInFilesCommand()
   on aGotoLine: ide.gotoLineDialog()
   on aViewProjectMgr: ide.toggleDockPanel(ide.pnlProject)
   on aViewInspector: ide.toggleDockPanel(ide.pnlInspector)
@@ -205,7 +206,7 @@ proc buildMenu*(ide: IdeForm) =
   edit.addSeparator()
   for id in [aAlignDlg, aSizeDlg, aTabOrder]: edit.addAct a[id]
   let search = m.addItem("&Search")
-  for id in [aFind, aReplace, aFindNext]: search.addAct a[id]
+  for id in [aFind, aReplace, aFindNext, aFindInFiles]: search.addAct a[id]
   search.addSeparator()
   search.addAct a[aGotoLine]
   search.addAct a[aFindUnit]

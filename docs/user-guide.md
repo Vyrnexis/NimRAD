@@ -515,6 +515,15 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 Tab inserts spaces, and whether the gutter shows line numbers; it applies to every open
 editor and to the ones you open later.
 
+**Find in Files** (`Shift+Ctrl+F`, Search menu) searches every unit of the project or the
+whole project folder (`.nim` and `.nfm` files; hidden folders, `nimcache` and the output
+folder are left out). The text starts as the selection or the word at the caret. Options:
+case sensitive, whole words only, regular expression. Every line found is a row in
+**Messages** with its file and line; double click it, or press `F8` for the next one, to
+open the place (a hit in a `.nfm` opens the form of that unit). Units you have edited but
+not saved are searched as they are in the editor. The list stops at 1000 lines and files
+over 2 MB are skipped.
+
 **Bookmarks.** `Shift+Ctrl+0` to `Shift+Ctrl+9` put bookmark 0 to 9 on the line of the
 caret (on the line already: it is removed); `Ctrl+0` to `Ctrl+9` jump to it, opening the
 unit that holds it. Each number exists once, so setting it in another unit moves it. The
@@ -554,6 +563,7 @@ close the project. The same commands are in **Search > Toggle Bookmarks** and
 | `Shift+F11` | Add to Project |
 | `Shift+Ctrl+F11` | Project Options |
 | `Shift+Ctrl+0..9` / `Ctrl+0..9` | Set or remove / go to bookmark 0..9 |
+| `Shift+Ctrl+F` | Find in Files |
 | `Ctrl+F9` | Compile |
 | `Shift+F9` | Build (compile everything again) |
 | `F9` | Run |

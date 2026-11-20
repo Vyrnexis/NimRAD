@@ -13,7 +13,7 @@ that makes the documentation pictures (`src/ide/session.nim`, used by
 `mainform` builds the window and re-exports the parts. Everything the user can
 do is a proc on `IdeForm`, so the menu, the scripted session and the tests drive
 the same code. The few modal dialogs are hooks (`askSave`, `showError`,
-`askText`, `pickFile`, `pickItem`, `askAlign`, `askSize`, `askOrder`, `askEditorOptions`) that tests replace.
+`askText`, `pickFile`, `pickItem`, `askAlign`, `askSize`, `askOrder`, `askEditorOptions`, `askFindInFiles`) that tests replace.
 
 | Module | Holds |
 |---|---|
@@ -23,6 +23,7 @@ the same code. The few modal dialogs are hooks (`askSave`, `showError`,
 | `projectcommands` | Opening, creating and changing projects and units; fonts; options; rename |
 | `buildcontroller` | Compile, Run and Stop as one state machine (`BuildPhase`: idle, compiling, compiling for run, retrying after an automatic import, checking, running; Build is a compile with `buildForce`) |
 | `bookmarks` | The numbered bookmarks of a code editor: slot to line, kept in step with the edits through the model's change listener (nimvcl markers carry no number) |
+| `findcmds`, `findinfiles` | Search > Find in Files: the command (dialog hook, results into Messages) and the search itself (files to read, nimvcl's `Searcher`, limits) |
 | `quickfixes` | Quick Fix and Find Unit applied to the editors or the files |
 | `ideui` | Menus, toolbars, docking and the wiring of the actions |
 | `idedialogs` | The real dialogs behind the hooks |

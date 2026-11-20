@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import std/[os, tables, strutils]
 import ./[project, builder, ideconfig, actions, palette, projecttree,
-          messagespanel, uniteditor, editortabs]
+          messagespanel, uniteditor, editortabs, findinfiles]
 
 proc versionOf(nimble: string): string {.compileTime.} =
   ## The `version = "..."` line of nimrad.nimble.
@@ -118,6 +118,9 @@ type
       ## The Size dialog; false when cancelled.
     askEditorOptions*: proc(o: var EditorOptions): bool
       ## The Editor Options dialog; false when cancelled.
+    askFindInFiles*: proc(o: var FindOptions): bool
+      ## The Find in Files dialog (starts with the options in `o`); false when cancelled.
+    findOptions*: FindOptions    ## what Find in Files was asked last
     askOrder*: proc(title: string, items: seq[string]): seq[int]
       ## A list the user puts in order (Move Up, Move Down): the indexes of
       ## `items` in the new order, or empty when cancelled.

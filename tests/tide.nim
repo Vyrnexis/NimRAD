@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/dsl/props
 import nimvcl/controls/inspector
 import ide/[mainform, session, project, builder, ideconfig, uniteditor, messagespanel,
-            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck, bookmarks]
+            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck, bookmarks, findinfiles]
 
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
@@ -1371,6 +1371,88 @@ suite "Bookmarks":
     # text loaded again: the marker is gone, so is the slot
     main.code.text = "x\ny\n"
     check main.bookmarks.lineOf(2) == -1
+    check ide.closeAllEditors()
+
+suite "Find in Files":
+  test "the dialog's options search the units, the lines go to Messages and open on a double click":
+    check ide.closeAllEditors()
+    let ed = ide.openUnit("unit1")
+    ed.typeAtEnd "\n# zzfind here\nlet zzFind2 = 1\n"          # unsaved: it is what is searched
+    ide.settle
+    check ed.modified
+    check ide.acts[aFindInFiles].enabled
+    check ide.acts[aFindInFiles].shortcut == shortcut("Shift+Ctrl+F")
+    var seen = FindOptions()
+    ide.askFindInFiles = proc(o: var FindOptions): bool =
+      seen = o
+      o.text = "zzfind"
+      true
+    check ide.findInFilesCommand()
+    check ide.findOptions.text == "zzfind"
+    let m = ide.messages
+    check m.list.items[0].caption.startsWith("Find in Files: 'zzfind'")
+    var rows: seq[int]
+    for r in 0 ..< m.list.items.count:
+      if m.list.items[r].tag >= 0: rows.add m.list.items[r].tag
+    check rows.len == 2
+    check m.msgs[rows[0]].file.extractFilename == "unit1.nim"
+    check m.msgs[rows[1]].line == m.msgs[rows[0]].line + 1
+    check m.list.items[m.list.items.count - 1].caption == "2 lines in 1 files"
+    check m.list.itemIndex == m.rowOf(rows[0])             # the first one is selected
+    # a double click opens the place
+    ed.showDesigner()
+    m.list.onItemDblClick(m.list, m.rowOf(rows[1]), 0)
+    check ide.activeEditor.unitName == "unit1" and not ide.activeEditor.designerVisible
+    check ide.activeEditor.code.caretPos.line == m.msgs[rows[1]].line - 1
+    # F8 goes to the next one
+    ide.refreshActions()
+    ide.pressKey(keyF8)
+    check ide.activeEditor.code.caretPos.line == m.msgs[rows[0]].line - 1
+
+  test "the options: case, whole word, regular expression, folder; a bad pattern and no hit are said":
+    let ed = ide.activeEditor
+    ed.code.caretPos = (ed.code.lineCount - 2, 6)           # on `zzFind2`
+    ide.askFindInFiles = proc(o: var FindOptions): bool =
+      check o.text == "zzFind2"                              # the word at the caret
+      o.caseSensitive = true
+      o.wholeWord = true
+      true
+    check ide.findInFilesCommand()
+    check ide.messages.list.items[ide.messages.list.items.count - 1].caption == "1 lines in 1 files"
+    ide.askFindInFiles = proc(o: var FindOptions): bool =
+      o = FindOptions(text: r"zz\w+\d", regex: true, scope: fsFolder)
+      true
+    check ide.findInFilesCommand()
+    check ide.messages.list.items.count == 3
+    ide.askFindInFiles = proc(o: var FindOptions): bool =
+      o = FindOptions(text: "(", regex: true)
+      true
+    check ide.findInFilesCommand()
+    check "bad regular expression" in ide.messages.list.items[0].caption
+    ide.askFindInFiles = proc(o: var FindOptions): bool =
+      o = FindOptions(text: "no-such-text-anywhere-xyz")
+      true
+    check ide.findInFilesCommand()
+    check ide.messages.list.items[ide.messages.list.items.count - 1].caption.startsWith("Nothing found")
+    ide.askFindInFiles = proc(o: var FindOptions): bool = false
+    let before = ide.messages.list.items.count
+    check not ide.findInFilesCommand()
+    check ide.messages.list.items.count == before
+
+  test "a hit in a form file opens the form":
+    check ide.saveAll()
+    ide.askFindInFiles = proc(o: var FindOptions): bool =
+      o = FindOptions(text: "object ", scope: fsFolder)
+      true
+    check ide.findInFilesCommand()
+    let m = ide.messages
+    var k = -1
+    for i, x in m.msgs:
+      if x.file.endsWith(".nfm"): k = i
+    check k >= 0
+    check ide.closeAllEditors()
+    m.jump k
+    check ide.activeEditor != nil and ide.activeEditor.designerVisible
     check ide.closeAllEditors()
 
 suite "reopen and startup":

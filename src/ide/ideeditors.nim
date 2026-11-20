@@ -309,6 +309,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aRevertComponent].enabled = designer and ide.canRevertComponent
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
   a[aFindUnit].enabled = ed != nil
+  a[aFindInFiles].enabled = hasProject
   for i in 0 ..< BookmarkSlots:
     a[ActId(ord(aToggleBookmark0) + i)].enabled = ed != nil
     a[ActId(ord(aGotoBookmark0) + i)].enabled = ide.editors.len > 0
@@ -589,6 +590,16 @@ proc jumpTo*(ide: IdeForm, file: string, line, col: int): bool =
   ## Opens the unit of `file` in its code view with the caret at `line`,
   ## `col` (1-based, as the compiler prints them).
   let name = ide.unitOfFile(file)
+  if name.len == 0 and file.toLowerAscii.endsWith(".nfm") and ide.project != nil:
+    # a line of a form file: the form of that unit (there is no text view of it)
+    let f = normalizedPath(file)
+    for u in ide.project.units:
+      if ide.project.nfmPathOf(u) == f:
+        let ed = ide.openUnit(u.name)
+        if ed == nil: return false
+        ed.showDesigner()
+        ide.say file.extractFilename & " line " & $line & ": the form of " & u.name
+        return true
   if name.len == 0:
     ide.say "Not a unit of this project: " & file.extractFilename
     return false

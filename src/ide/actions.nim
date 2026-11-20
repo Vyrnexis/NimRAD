@@ -12,7 +12,7 @@ type
   ActId* = enum
     aNewApp, aNewForm, aNewInheritedForm, aOpenProject, aSave, aSaveAs, aSaveProjectAs, aSaveAll, aClose, aExit,
     aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll, aRevertProp, aRevertComponent, aAlignDlg, aSizeDlg, aTabOrder,
-    aFind, aReplace, aFindNext, aGotoLine, aFindUnit, aQuickFix,
+    aFind, aReplace, aFindNext, aFindInFiles, aGotoLine, aFindUnit, aQuickFix,
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
     aAddToProject, aAddFont, aRemoveFont, aRemoveFromProject, aViewSource, aProjectOptions,
@@ -55,6 +55,7 @@ const defs: array[ActId, ActDef] = [
   (aFind, "&Find...", "Find text", "Ctrl+F", icFind),
   (aReplace, "&Replace...", "Find and replace text", "Ctrl+H", -1),
   (aFindNext, "Find &Next", "Find the next match", "F3", -1),
+  (aFindInFiles, "Find in &Files...", "Search the units of the project or its folder for text; the lines found are listed in Messages", "Shift+Ctrl+F", -1),
   (aGotoLine, "&Go to Line Number...", "Jump to a line", "Alt+G", -1),
   (aFindUnit, "Find &Unit...", "Add the import of the nimvcl module that declares the identifier at the caret", "Shift+Ctrl+A", -1),
   (aQuickFix, "&Quick Fix", "Apply the fix of the selected compiler message (add a missing import, correct a name)", "Ctrl+.", -1),
