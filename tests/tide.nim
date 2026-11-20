@@ -1015,7 +1015,7 @@ suite "compiler messages":
   test "F8 and Ctrl+Alt+Down go to the next message, wrapping at the end":
     let m = ide.messages
     check ide.acts[aNextMessage].shortcut == shortcut("F8")
-    check ide.acts[aNextMessageAlt].shortcut == shortcut("Ctrl+Alt+Down")
+    check ide.acts[aNextMessage].secondaryShortcuts == @[shortcut("Ctrl+Alt+Down")]
     check ide.acts[aNextMessage].enabled
     var order: seq[int]                     # the messages F8 can reach
     for i, x in m.msgs:

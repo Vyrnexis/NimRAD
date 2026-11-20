@@ -16,7 +16,7 @@ type
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aViewTodo, aViewExplorer, aToggleView, aTheme,
     aViewUnits, aViewForms,
     aAddToProject, aAddFont, aRemoveFont, aRemoveFromProject, aViewSource, aProjectOptions,
-    aCompile, aBuild, aSyntaxCheck, aRun, aReset, aRunParameters, aShowHints, aNextMessage, aNextMessageAlt,
+    aCompile, aBuild, aSyntaxCheck, aRun, aReset, aRunParameters, aShowHints, aNextMessage,
     aPointer, aFindComponent, aBringToFront, aSendToBack, aAlignLefts, aAlignTops, aCenterH, aCenterV,
     aToggleBookmark0, aToggleBookmark1, aToggleBookmark2, aToggleBookmark3, aToggleBookmark4, aToggleBookmark5, aToggleBookmark6, aToggleBookmark7, aToggleBookmark8, aToggleBookmark9,
     aGotoBookmark0, aGotoBookmark1, aGotoBookmark2, aGotoBookmark3, aGotoBookmark4, aGotoBookmark5, aGotoBookmark6, aGotoBookmark7, aGotoBookmark8, aGotoBookmark9,
@@ -86,7 +86,6 @@ const defs: array[ActId, ActDef] = [
   (aRunParameters, "&Parameters...", "Command line arguments of the program", "", icOptions),
   (aShowHints, "Show &Hints", "Show compiler hints in Messages", "", icHint),
   (aNextMessage, "&Next Message", "Go to the next compiler message", "F8", -1),
-  (aNextMessageAlt, "Next Message", "Go to the next compiler message", "Ctrl+Alt+Down", -1),
   (aPointer, "&Pointer", "Stop placing components", "", icPointer),
   (aFindComponent, "Find &Component", "Search the component palette", "Ctrl+Alt+C", -1),
   (aBringToFront, "Bring to &Front", "Bring the selection to the front", "", -1),
@@ -131,6 +130,7 @@ proc newIdeActions*(owner: Form, icons: ImageList): IdeActions =
                       (if d.key.len > 0: shortcut(d.key) else: noShortcut))
     a.hint = d.hint
     a.imageIndex = d.icon
+    if d.id == aNextMessage: a.secondaryShortcuts = @[shortcut("Ctrl+Alt+Down")]
     result.acts[d.id] = a
 
 iterator pairs*(a: IdeActions): (ActId, Action) =

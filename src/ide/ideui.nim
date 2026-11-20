@@ -149,7 +149,6 @@ proc connectActions*(ide: IdeForm) =
   on aRunParameters: ide.showRunParameters()
   on aShowHints: ide.setShowHints(not ide.settings.showHints)
   on aNextMessage: discard ide.nextMessage()
-  on aNextMessageAlt: discard ide.nextMessage()
   on aCompile: discard ide.compile()
   on aBuild: discard ide.build()
   on aSyntaxCheck: discard ide.syntaxCheck()

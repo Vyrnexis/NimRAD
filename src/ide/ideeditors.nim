@@ -325,8 +325,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aViewForms].enabled = hasProject
   a[aRunParameters].enabled = hasProject
   a[aShowHints].checked = ide.settings.showHints
-  for id in [aNextMessage, aNextMessageAlt]:
-    a[id].enabled = ide.messages.nextJumpable() >= 0
+  a[aNextMessage].enabled = ide.messages.nextJumpable() >= 0
   a[aProjectOptions].enabled = hasProject
   a[aCompile].enabled = hasProject and not busy
   for id in [aBuild, aSyntaxCheck]: a[id].enabled = hasProject and not busy
