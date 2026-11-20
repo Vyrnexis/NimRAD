@@ -13,7 +13,7 @@ requires "nim >= 2.2.0"
 # nimvcl brings in the SDL3 binding itself. Pinned to a release tag (bump it
 # when nimvcl is released). During development a sibling
 # checkout (../nimvcl) is preferred, see config.nims.
-requires "https://github.com/Vyrnexis/nimvcl#v0.3.0"
+requires "https://github.com/Vyrnexis/nimvcl#v0.4.0"
 
 task test, "Run the test suite headless":
   exec "bash scripts/test.sh"
