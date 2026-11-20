@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Output: a partial line (a prompt without a newline) shows after 0.2 s instead of
+  waiting for the rest; Program Reset after the program ended on its own no longer
+  reports "cancelled".
 - Quick fixes: "Did you mean ...?" is refused ("compile again") when its line has changed
   since the build instead of editing the wrong place; an import for a file outside
   the project says so instead of "already imported"; the automatic import option

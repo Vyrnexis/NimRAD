@@ -239,6 +239,17 @@ suite "async":
     check lines == @["stdin: 0"]
     check not wasCancelled()
 
+  when defined(posix):
+    test "a partial line is delivered without waiting for its newline":
+      let t0 = epochTime()
+      var promptAt = -1.0
+      let r = runCapture("sh", @["-c", "printf prompt; sleep 1.5; echo ' done'"], "",
+        proc(l: string) =
+          if promptAt < 0 and l == "prompt": promptAt = epochTime() - t0)
+      check r.exitCode == 0
+      check promptAt in 0.0 .. 1.2
+      check r.lines.join("") == "prompt done"
+
   test "cancel a compile":
     reset()
     let p = mkProject("cancel", okSrc)

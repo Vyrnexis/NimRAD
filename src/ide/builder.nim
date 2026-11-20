@@ -82,6 +82,7 @@ type JobCtl = object
   lock: Lock             # guards pid and job: a kill never meets a reaped pid or a closed handle
   pid: int
   job: int               # Windows job object of the process
+  live: bool             # a job was started and has not reached its end
   stop: Atomic[bool]
 
 proc killTree(ctl: ptr JobCtl) =
@@ -94,12 +95,27 @@ proc publish(ctl: ptr JobCtl, child: Child) =
     ctl.job = child.job
     if ctl.stop.load: killTree(ctl.pid, ctl.job)    # stop requested before the pid was known
 
-proc release(ctl: ptr JobCtl) =
-  ## Called before the child is reaped (and its job closed): from here on a stop
-  ## has nothing to kill.
+proc begin(ctl: ptr JobCtl) =
   withLock ctl.lock:
     ctl.pid = 0
     ctl.job = 0
+    ctl.live = true
+
+proc release(ctl: ptr JobCtl) =
+  ## Called before the child is reaped (and its job closed): from here on a stop
+  ## has nothing to kill, and nothing to cancel.
+  withLock ctl.lock:
+    ctl.pid = 0
+    ctl.job = 0
+    ctl.live = false
+
+proc requestStop(ctl: ptr JobCtl): bool =
+  ## Kills the job; false when it had already ended (nothing was cancelled).
+  withLock ctl.lock:
+    if ctl.live:
+      ctl.stop.store true
+      killTree(ctl.pid, ctl.job)
+      result = true
 
 proc streamProcess(exe: string, args: seq[string], workDir: string,
                    emit: proc(lines: seq[string]) {.gcsafe.}, ctl: ptr JobCtl): int =
@@ -110,6 +126,7 @@ proc streamProcess(exe: string, args: seq[string], workDir: string,
   try:
     child = startChild(exe, args, workDir)
   except CatchableError as e:
+    if ctl != nil: ctl.release()
     emit @["cannot start " & exe & ": " & e.msg]
     return -1
   if ctl != nil: ctl.publish child
@@ -117,6 +134,9 @@ proc streamProcess(exe: string, args: seq[string], workDir: string,
     var buf = newString(16384)
     var acc = ""
     while true:
+      if acc.len > 0 and not child.readable(200):
+        emit @[acc]                      # a partial line (a prompt) must not wait for its newline
+        acc = ""
       let n = child.readSome(buf)
       if n <= 0: break
       acc.add buf[0 ..< n]
@@ -147,35 +167,33 @@ proc isUpToDate*(p: Project, opts = defaultBuildOptions()): bool =
   ## now would give (see `buildcheck`); false at any doubt.
   fileExists(p.exePath) and buildcheck.isUpToDate(p, p.compileArgs(opts), opts.nimExe)
 
+proc collectLines(lines: ref seq[string], onLine: LineProc): proc(ls: seq[string]) {.gcsafe.} =
+  ## The `emit` of `streamProcess` that keeps every line and passes it on.
+  result = proc(ls: seq[string]) {.gcsafe.} =
+    {.cast(gcsafe).}:
+      for l in ls:
+        lines[].add l
+        if onLine != nil: onLine(l)
+
 proc compileProjectSync*(p: Project, onLine: LineProc = nil,
                          opts = defaultBuildOptions()): CompileResult =
   ## Compiles on the calling thread; `onLine` (optional) gets each line, and
   ## all lines are also returned in `lines`.
   createDir p.outputPath
-  var lines: seq[string]
+  let lines = new seq[string]
   let args = p.compileArgs(opts)
   let snap = takeSnapshot(p, args, opts.nimExe)
-  let code = streamProcess(opts.nimExe, args, p.dir,
-    proc(ls: seq[string]) {.gcsafe.} =
-      {.cast(gcsafe).}:
-        for l in ls:
-          lines.add l
-          if onLine != nil: onLine(l), nil)
+  let code = streamProcess(opts.nimExe, args, p.dir, collectLines(lines, onLine), nil)
   if code == 0: recordBuild(p, snap)
-  result = CompileResult(ok: code == 0, exitCode: code, lines: lines,
+  result = CompileResult(ok: code == 0, exitCode: code, lines: lines[],
                          exe: if code == 0: p.exePath else: "")
 
 proc runCapture*(exe: string, args: seq[string] = @[], workDir = "",
                  onLine: LineProc = nil): tuple[exitCode: int, lines: seq[string]] =
   ## Runs a program on the calling thread and collects its merged output.
-  var lines: seq[string]
-  let code = streamProcess(exe, args, workDir,
-    proc(ls: seq[string]) {.gcsafe.} =
-      {.cast(gcsafe).}:
-        for l in ls:
-          lines.add l
-          if onLine != nil: onLine(l), nil)
-  (code, lines)
+  let lines = new seq[string]
+  let code = streamProcess(exe, args, workDir, collectLines(lines, onLine), nil)
+  (code, lines[])
 
 # ------------------------------------------------------------- async variants
 
@@ -264,7 +282,7 @@ proc startJob(kind: JobKind, a: JobArgs, onLines: LinesProc) =
   if threadUsed[kind]:
     joinThread threads[kind]      # the previous worker has delivered its end
   ctls[kind].stop.store false
-  addr(ctls[kind]).release()
+  addr(ctls[kind]).begin()
   backlog.store 0
   gCancelled = false
   gOnLines[kind] = onLines
@@ -311,9 +329,7 @@ proc runProject*(p: Project, onLine: LineProc, onExit: ExitProc): bool =
   runProject(p, eachLine(onLine), onExit)
 
 proc stopJob(kind: JobKind) =
-  gCancelled = true
-  ctls[kind].stop.store true
-  killTree addr ctls[kind]
+  if addr(ctls[kind]).requestStop(): gCancelled = true
 
 proc stopProject*() =
   ## Kills the running program and everything it started (its `onExit` still
