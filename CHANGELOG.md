@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Save no longer silently overwrites a `.nim` or `.nfm` that another program changed
+  since the unit was opened or last saved: it asks "... changed on disk. Overwrite?",
+  and Cancel leaves the file alone (the save counts as failed, so closing stays open).
 - The Object TreeView is no longer looked at again after every property change or drag
   step, and when it is rebuilt (a component added, removed, renamed or moved) the nodes
   you collapsed stay collapsed and the scroll position is kept.

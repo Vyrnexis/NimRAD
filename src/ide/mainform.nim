@@ -32,6 +32,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide.setBounds(0, 0, width.float32, height.float32)
   ide.position = poScreenCenter
   ide.askSave = askSaveDefault
+  ide.askOverwrite = askOverwriteDefault
   ide.showError = showErrorDefault
   ide.askText = askTextDefault
   ide.pickItem = pickItemDefault

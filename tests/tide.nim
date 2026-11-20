@@ -36,6 +36,13 @@ ide.askSave = proc(unitName: string): SaveChoice =
   asked.add unitName
   answer
 
+var
+  overwrites: seq[string]
+  overwrite = true
+ide.askOverwrite = proc(text: string): bool =
+  overwrites.add text
+  overwrite
+
 var projectFile = ""
 var sess: SessionResult
 
@@ -301,6 +308,29 @@ suite "closing":
     check ide.project != nil and ide.editors.len == 1 and ed.modified
     removeDir path
     writeFile(path, good)
+    check ide.closeEditor(ed)
+    discard ide.closeProject()
+
+suite "files changed on disk":
+  test "Save asks before it overwrites a file someone else changed; Cancel is a failed save":
+    check ide.openProject(projectFile)
+    let ed = ide.activeEditor
+    ed.typeAtEnd "\n# mine\n"
+    let path = ide.project.dir / "unit1.nim"
+    writeFile(path, "# theirs\n")                  # another program saved the file
+    overwrites.setLen 0
+    overwrite = false
+    check not ide.trySave(ed)
+    check overwrites == @["unit1.nim changed on disk. Overwrite?"]
+    check readFile(path) == "# theirs\n" and ed.modified
+    check not ide.closeEditor(ed)                  # a failed save counts as Cancel
+    overwrite = true
+    check ide.trySave(ed)
+    check "# mine" in readFile(path) and not ed.modified
+    overwrites.setLen 0
+    ed.typeAtEnd "\n# more\n"
+    check ide.trySave(ed)                          # our own write is not a change
+    check overwrites.len == 0
     check ide.closeEditor(ed)
     discard ide.closeProject()
 

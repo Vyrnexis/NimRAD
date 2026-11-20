@@ -46,6 +46,9 @@ proc pickItemDefault*(title: string, items: seq[string], selected: int): int =
 proc askTextDefault*(caption, prompt: string, value: var string): bool =
   inputQuery(caption, prompt, value)
 
+proc askOverwriteDefault*(text: string): bool =
+  messageDlg(text, mtWarning, {mbYes, mbCancel}, mbCancel, "Save") == mrYes
+
 proc showErrorDefault*(text: string) = messageDlg(text, mtError)
 
 proc pickFileDefault*(ide: IdeForm): proc(title: string, filters: seq[(string, string)]): string =

@@ -451,7 +451,14 @@ proc saveEditor*(ide: IdeForm, ed: UnitEditor) =
 
 proc trySave*(ide: IdeForm, ed: UnitEditor): bool =
   ## `saveEditor`, but a failure (read-only file, disk full) is reported and
-  ## gives false instead of raising.
+  ## gives false instead of raising. A file that someone else changed since it was
+  ## read is only overwritten when `askOverwrite` agrees; if not, nothing is
+  ## written and the answer is false (a failed save).
+  let changed = ed.changedOnDisk
+  if changed.len > 0 and ide.askOverwrite != nil and
+     not ide.askOverwrite(changed.join(" and ") & " changed on disk. Overwrite?"):
+    ide.say "Not saved: " & changed.join(" and ") & " changed on disk"
+    return false
   try:
     ide.saveEditor(ed)
     result = true

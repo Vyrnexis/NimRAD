@@ -54,6 +54,7 @@ type
     fAnc: Obj                      ## cached read-only copy of the ancestor form (see `ancestorCopy`)
     fAncStamp: string              ## path, size and time of the file `fAnc` was read from
     fAncChecked: float             ## when the stamp was last compared with the file (`epochTime`)
+    fNimStamp, fNfmStamp: string   ## size and time of the `.nim` / `.nfm` when read or last written
     fBusy: bool                    ## ignore designer callbacks while rebuilding
 
   DesignTitle = ref object of Panel
@@ -350,8 +351,16 @@ proc nfmDir(e: UnitEditor): string =
   ## Image paths of the form are relative to the folder of its `.nfm`.
   e.project.nfmPathOf(e.fUnit).parentDir
 
+proc fileStamp(path: string): string =
+  ## Size and modification time ("" when the file is not there).
+  try:
+    let i = getFileInfo(path)
+    $i.size & "|" & $i.lastWriteTime.toUnixFloat
+  except OSError: ""
+
 proc readNfm(e: UnitEditor): string =
   let path = e.project.nfmPathOf(e.fUnit)
+  e.fNfmStamp = fileStamp(path)           # before reading: a change meanwhile is noticed
   result = readFile(path)
   e.fNfmEol = if "\r\n" in result: "\r\n" else: "\n"
 
@@ -1027,6 +1036,19 @@ proc designNfm(e: UnitEditor): string =
   result = writeNfm(root)
   if e.fNfmEol == "\r\n": result = result.replace("\n", "\r\n")
 
+proc changedOnDisk*(e: UnitEditor): seq[string] =
+  ## The names of the files `save` is about to write that were changed (or made)
+  ## by someone else since this editor read or wrote them. A file that is gone is
+  ## not a change: saving makes it again.
+  if e.fDesigner != nil and e.fDesignDirty:
+    let f = e.project.nfmPathOf(e.fUnit)
+    let st = fileStamp(f)
+    if st.len > 0 and st != e.fNfmStamp: result.add f.extractFilename
+  if e.fCode.modified or not fileExists(e.project.nimPathOf(e.fUnit)):
+    let f = e.project.nimPathOf(e.fUnit)
+    let st = fileStamp(f)
+    if st.len > 0 and st != e.fNimStamp: result.add f.extractFilename
+
 proc save*(e: UnitEditor) =
   ## Writes the `.nfm` (when the form changed) and the `.nim` (when the code
   ## changed); both are clean afterwards. The control imports between the
@@ -1035,6 +1057,7 @@ proc save*(e: UnitEditor) =
   if e.fDesigner != nil and e.fDesignDirty:
     let nfm = e.designNfm
     writeFileAtomic(e.project.nfmPathOf(e.fUnit), nfm)
+    e.fNfmStamp = fileStamp(e.project.nfmPathOf(e.fUnit))
     e.fDesignDirty = false
     if e.fUnit.isForm:
       e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir, e.project.importAll,
@@ -1045,12 +1068,14 @@ proc save*(e: UnitEditor) =
     # temporary file); a failed write leaves the text modified.
     let path = e.project.nimPathOf(e.fUnit)
     writeFileAtomic(path, e.fCode.model.toText(e.fCode.ensureTrailingNewline))
+    e.fNimStamp = fileStamp(path)
     e.fCode.markSaved()
     e.fCode.fileName = path
   e.checkModified()
 
 proc loadCode(e: UnitEditor) =
   let path = e.project.nimPathOf(e.fUnit)
+  e.fNimStamp = fileStamp(path)
   if fileExists(path):
     e.fCode.loadFromFile(path)
   e.fCode.highlighter = newNimHighlighter()

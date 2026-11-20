@@ -83,6 +83,8 @@ type
     buildCount*: int
     # modal dialogs (replaced by tests)
     askSave*: proc(unitName: string): SaveChoice
+    askOverwrite*: proc(text: string): bool
+      ## "X changed on disk. Overwrite?"; false = leave the file alone (the save fails)
     showError*: proc(text: string)
     askText*: proc(caption, prompt: string, value: var string): bool
     pickFile*: proc(title: string, filters: seq[(string, string)]): string
