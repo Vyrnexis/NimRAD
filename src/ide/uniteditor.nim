@@ -492,6 +492,11 @@ proc teardownDesign(e: UnitEditor) =
     for t in e.tiles:
       if t.component of Timer: Timer(t.component).enabled = false
   if e.fFrame != nil: e.fFrame.free()
+  # the hidden model form owns the non-visual components (action lists, menus,
+  # image lists): free it like `releaseCopy` does, it has no window of its own
+  if e.fForm != nil:
+    try: e.fForm.free()
+    except CatchableError: discard
   e.fDesigner = nil
   e.fFrame = nil
   e.fBody = nil
