@@ -261,9 +261,8 @@ proc refreshActions*(ide: IdeForm) =
   a[aPaste].enabled = ed != nil
   a[aDelete].enabled = ed != nil and (not designer or hasSel)
   a[aSelectAll].enabled = ed != nil
-  let rc = ide.singleSelected          # an inherited component, or the form of an inherited form
-  a[aRevertProp].enabled = rc != nil and (rc.inherited or rc of Form)
-  a[aRevertComponent].enabled = a[aRevertProp].enabled
+  a[aRevertProp].enabled = designer and ide.canRevertProperty      # the Inspector's selected row differs
+  a[aRevertComponent].enabled = designer and ide.canRevertComponent
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
   a[aFindUnit].enabled = ed != nil
   a[aQuickFix].enabled = hasProject and ide.messages.firstWithFix() >= 0
@@ -305,13 +304,14 @@ proc sync*(ide: IdeForm) =
   if ed != nil and ed.isForm and ide.palette.picked.len > 0 and ed.designer.creating.len == 0:
     ide.palette.reset()
 
-proc watchedState(ide: IdeForm): tuple[msgs, panels, units: int, state: BuildState] =
+proc watchedState(ide: IdeForm): WatchedState =
   ## The few things the action states depend on that nobody tells us about.
   for p in [ide.pnlProject, ide.pnlInspector, ide.pnlTree, ide.pnlMessages]:
     result.panels = result.panels * 2 + (if p.state != dpHidden: 1 else: 0)
   result.msgs = ide.messages.msgs.len
   result.units = if ide.project == nil: -1 else: ide.project.units.len
   result.state = buildState()
+  result.prop = ide.inspector.selectedProp     # Revert to Inherited follows the selected row
 
 proc flush*(ide: IdeForm) =
   ## The idle hook: refreshes the Object TreeView and the actions only when

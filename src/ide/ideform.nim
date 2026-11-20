@@ -33,6 +33,8 @@ static: doAssert AppVersion.len > 0, "no version found in nimrad.nimble"
 type
   SaveChoice* = enum scSave, scDiscard, scCancel
 
+  WatchedState* = tuple[msgs, panels, units: int, state: BuildState, prop: string]
+
   BuildPhase* = enum
     ## One state instead of a handful of flags. The `...ForRun` phases start the
     ## program when the build succeeds; the `Retry` ones are the second build
@@ -66,7 +68,7 @@ type
     treeSig*: string
     treeDirty*: bool            ## the components of the bound form changed
     actionsDirty*: bool         ## something the action states depend on changed
-    watched*: tuple[msgs, panels, units: int, state: BuildState]
+    watched*: WatchedState
       ## what changes without an event of ours (messages, dock panels, project)
     treeComps*: seq[Component]
     treeNodes*: seq[TreeNode]

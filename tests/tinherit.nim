@@ -393,9 +393,19 @@ suite "Revert to Inherited in the IDE":
     ide.sync()
     ed.selectComponent(ed.find("Button1"))
     ide.inspector.selectProp("caption")
+    ide.sync()
+    check not ide.acts[aRevertProp].enabled              # a row that is not overridden
+    check not ide.acts[aRevertComponent].enabled
     ide.inspector.setValue("caption", pvString("Edited"))
     ide.sync()
     check ide.acts[aRevertProp].enabled and ide.acts[aRevertComponent].enabled
+    ed.showCode()
+    ide.sync()
+    check not ide.acts[aRevertProp].enabled              # the code view shows
+    check not ide.acts[aRevertComponent].enabled
+    ed.showDesigner()
+    ide.sync()
+    check ide.acts[aRevertProp].enabled
     check ide.canRevertProperty and ide.canRevertComponent
     ide.acts[aRevertProp].execute()
     ide.sync()

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Edit > Revert to Inherited is enabled only while the designer shows and the selected
+  property (or component) really differs from the ancestor form's.
 - Help > About shows the version from `nimrad.nimble` (it said 0.0.1).
 - Closing a tab that is not the active one keeps the active tab.
 - Smaller fixes: a main file that cannot be saved before the IDE edits it is reported and
