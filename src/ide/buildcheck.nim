@@ -105,6 +105,12 @@ proc projectFiles(p: Project, args: seq[string], tooMany: var bool): seq[string]
   ## and nimcache folders, the program) and hidden folders.
   var skip = @[p.outputPath, nimcacheDir(p, args)]
   skip.keepItIf it.len > 0
+  for d in skip:
+    # the project lives inside the output (or nimcache) folder: every project
+    # file would be left out, so nothing could be told about them
+    if p.dir == d or p.dir.startsWith(d & DirSep):
+      tooMany = true
+      return
   let exe = p.exePath
   for f in walkDirRec(p.dir, yieldFilter = {pcFile, pcLinkToFile}, followFilter = {pcDir},
                       skipSpecial = true):
@@ -160,10 +166,18 @@ proc recordBuild*(p: Project, snap: Snapshot): bool {.discardable.} =
     if j.kind != JObject or not j.hasKey("depfiles") or j["depfiles"].kind != JArray or
        j["depfiles"].len == 0: return false
     var deps = newJArray()
+    var verified = 0'i64
     for d in j["depfiles"]:
       let path = d[0].getStr
       var st = stampOf(path, d[1].getStr)
       if st.size < 0: return false                          # vanished during the build
+      # a file replaced after the compiler read it (even with an older time, as
+      # `cp -p` does) must not be stamped as current: compare with what was read
+      if verified + st.size <= MaxHashTotal:
+        if $secureHashFile(path) != st.hash: return false
+        verified += st.size
+      else:
+        st.mtime = -1                                       # not verified: the hash decides later
       try:
         if getLastModificationTime(path) >= snap.started - initDuration(seconds = 1):
           st.mtime = -1                                     # maybe changed since: use the hash
@@ -182,8 +196,16 @@ proc recordBuild*(p: Project, snap: Snapshot): bool {.discardable.} =
     try: removeFile sp
     except OSError: discard
 
+func movesProgram(flags: seq[string]): bool =
+  ## `--out`, `-o` or `--outdir` among the user's flags: the program is not where
+  ## `exePath` says, so it cannot be checked.
+  for f in flags:
+    let name = f.strip(chars = {'-'}, trailing = false).split({':', '='})[0]
+    if f.startsWith('-') and name in ["o", "out", "outdir"]: return true
+
 proc isUpToDate*(p: Project, args: seq[string], nimExe: string): bool =
   ## Whether building with `args` would produce the program that is there.
+  if movesProgram(p.nimFlags): return false
   let sp = p.stampPath(args)
   if sp.len == 0 or not fileExists(sp) or not fileExists(p.exePath): return false
   try:

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Run no longer skips the build wrongly: an output folder that is (or contains) the
+  project folder, or `-o`/`--out`/`--outdir` among the project's flags, always
+  builds, and a module replaced during the build (even keeping an older time)
+  is noticed by the next check.
 - A build lists up to 100 errors in Messages (`--errorMax:100`), not just the first;
   a project's own `--errorMax` flag still wins.
 - Messages: the gcc/ld lines that follow `Error: execution of an external compiler

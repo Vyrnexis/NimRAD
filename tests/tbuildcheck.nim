@@ -116,6 +116,26 @@ suite "up to date":
     check build()
     check current()
 
+  test "an output folder that holds the project always builds":
+    let d2 = root / "flat"
+    createDir d2
+    writeFile d2 / "flat.nim", "echo 1\n"
+    let q = Project(filePath: d2 / "flat.nimproj", name: "flat", mainFile: "flat.nim",
+                    outputDir: ".")
+    q.save()
+    check q.compileProjectSync().ok
+    check not q.isUpToDate()
+
+  test "--out, -o or --outdir in the flags always builds":
+    let keep = p.nimFlags
+    for f in ["-o:app", "--out=app", "--outdir:build"]:
+      p.nimFlags = keep & @[f]
+      check build()
+      check not current()
+    p.nimFlags = keep
+    check build()
+    check current()
+
   test "the program that is skipped is the one that runs":
     let r = runCapture(p.exePath)
     check r.exitCode == 0 and r.lines == @["12"]
