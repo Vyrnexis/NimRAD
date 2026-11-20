@@ -7,7 +7,7 @@ import nimvcl/dsl/[props, props_std]
 import ./[bookmarks, project, messages, ideconfig, icons, actions, palette,
           projecttree, messagespanel, uniteditor, editortabs, quickfix,
           ideform, ideeditors, designcmds, projectcommands, buildcontroller,
-          quickfixes, findcmds]
+          quickfixes, findcmds, codecmds]
 
 proc setDark*(ide: IdeForm, dark: bool) =
   ide.settings.theme = if dark: "dark" else: "light"
@@ -107,6 +107,7 @@ proc connectActions*(ide: IdeForm) =
   on aPaste: ide.editPaste()
   on aDelete: ide.editDelete()
   on aSelectAll: ide.editSelectAll()
+  on aCodeComplete: ide.completeCode()
   on aRevertProp: ide.revertProperty()
   on aRevertComponent: ide.revertComponent()
   on aAlignDlg: ide.alignDialog()
@@ -200,6 +201,8 @@ proc buildMenu*(ide: IdeForm) =
   for id in [aCut, aCopy, aPaste, aDelete]: edit.addAct a[id]
   edit.addSeparator()
   edit.addAct a[aSelectAll]
+  edit.addSeparator()
+  for id in [aCodeComplete]: edit.addAct a[id]
   edit.addSeparator()
   edit.addAct a[aRevertProp]
   edit.addAct a[aRevertComponent]

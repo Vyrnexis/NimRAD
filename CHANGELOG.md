@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Edit > Complete Code (`Ctrl+Space`): the names that fit the word before the caret, listed under
+  it (`Up`, `Down`, `PageUp`, `PageDown` choose, `Enter` or `Tab` insert, `Esc` closes; typing
+  narrows the list, `Backspace` widens it). After `self.` they are the form's components and its
+  properties and events, after `Button1.` the properties and events of that component's class;
+  elsewhere the identifiers of the unit, the components, nimvcl names and keywords. One match
+  is inserted at once.
 - Search > Find in Files... (`Shift+Ctrl+F`): text (the selection or the word at the caret to
   start with), case sensitive, whole words, regular expression, in all units of the project
   or in the project folder (`.nim` and `.nfm`; not hidden folders, `nimcache` or the output

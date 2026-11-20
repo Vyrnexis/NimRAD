@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/dsl/props
 import nimvcl/controls/inspector
 import ide/[mainform, session, project, builder, ideconfig, uniteditor, messagespanel,
-            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck, bookmarks, findinfiles]
+            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck, bookmarks, findinfiles, codepicker]
 
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
@@ -1453,6 +1453,92 @@ suite "Find in Files":
     check ide.closeAllEditors()
     m.jump k
     check ide.activeEditor != nil and ide.activeEditor.designerVisible
+    check ide.closeAllEditors()
+
+suite "Code insight":
+  proc lastLine(ed: UnitEditor): string = ed.code.lineAt(ed.code.lineCount - 1)
+  proc ctrl(k: Key, shift: ShiftState = {ssCtrl}) = ide.pressKey(k, shift)
+  proc toEnd(ed: UnitEditor) =
+    ed.code.caretPos = (ed.code.lineCount - 1, ed.lastLine.len)
+
+  test "the actions: shortcuts":
+    check ide.acts[aCodeComplete].shortcut == shortcut("Ctrl+Space")
+    check ide.acts[aCodeComplete].shortcut != noShortcut
+
+  test "completion: one candidate is inserted, several are listed and narrowed by typing":
+    check ide.closeAllEditors()
+    let ed = ide.openUnit("unit1")
+    ed.typeAtEnd "\nproc zzAlpha() = discard\nlet zzBeta = 1\nzzA"
+    ide.refreshActions()
+    check ide.acts[aCodeComplete].enabled
+    ctrl(keySpace)
+    check not codepicker.isOpen()
+    check ed.lastLine == "zzAlpha"
+    ide.typeText "\nzz"
+    ctrl(keySpace)
+    check codepicker.isOpen()
+    check pickerRows() == @["zzBeta", "zzAlpha", "zzFind2"]   # shorter first
+    ide.pressKey(keyDown)
+    check pickerChoice() == 1
+    ide.pressKey(keyUp)
+    ide.typeText "A"                                      # typed into the editor, narrows the list
+    check ed.lastLine == "zzA"
+    check pickerRows() == @["zzAlpha"]
+    ide.pressKey(keyBackspace)                            # deleted in the editor, widens it
+    check ed.lastLine == "zz"
+    check pickerRows() == @["zzBeta", "zzAlpha", "zzFind2"]
+    ide.pressKey(keyEnter)                                # picks the chosen row, replaces the typed prefix
+    check not codepicker.isOpen()
+    check ed.lastLine == "zzBeta"
+    check ed.code.caretPos == (ed.code.lineCount - 1, 6)
+
+  test "completion: Esc, an other key and no match close the list":
+    let ed = ide.activeEditor
+    ide.typeText "\nzz"
+    ctrl(keySpace)
+    check codepicker.isOpen()
+    ide.pressKey(keyEscape)
+    check not codepicker.isOpen()
+    check ed.lastLine == "zz"
+    ctrl(keySpace)
+    check codepicker.isOpen()
+    ide.pressKey(keyLeft)                                 # goes on to the editor
+    check not codepicker.isOpen()
+    check ed.code.caretPos.col == 1
+    ed.toEnd
+    ctrl(keySpace)
+    check codepicker.isOpen()
+    ide.typeText "q"
+    check not codepicker.isOpen()                         # nothing starts with zzq
+    check ed.lastLine == "zzq"
+    ide.pressKey(keyBackspace)
+    ide.typeText "B"
+    ctrl(keySpace)                                        # a single match is inserted
+    check ed.lastLine == "zzBeta"
+
+  test "completion after self. and after a component name":
+    let ed = ide.activeEditor
+    var comp = ""
+    for (c, depth) in ed.componentTree:
+      if comp.len == 0 and depth > 0 and classOf(Obj(c)).name == "Button": comp = c.name
+    check comp.len > 0
+    ide.typeText "\nself."
+    ctrl(keySpace)
+    check codepicker.isOpen()
+    check comp in pickerRows()
+    ide.typeText comp[0 .. 1]
+    check pickerRows()[0] == comp
+    ide.pressKey(keyTab)
+    check ed.lastLine == "self." & comp
+    ide.typeText ".onCl"
+    ctrl(keySpace)                                        # the one event: inserted at once
+    check ed.lastLine == "self." & comp & ".onClick"
+    ide.typeText "\n" & comp & "."
+    ctrl(keySpace)
+    check codepicker.isOpen()
+    check "onClick   event" in pickerRows()
+    check "caption   string" in pickerRows()
+    ide.pressKey(keyEscape)
     check ide.closeAllEditors()
 
 suite "reopen and startup":

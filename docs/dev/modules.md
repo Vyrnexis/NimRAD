@@ -24,6 +24,7 @@ the same code. The few modal dialogs are hooks (`askSave`, `showError`,
 | `buildcontroller` | Compile, Run and Stop as one state machine (`BuildPhase`: idle, compiling, compiling for run, retrying after an automatic import, checking, running; Build is a compile with `buildForce`) |
 | `bookmarks` | The numbered bookmarks of a code editor: slot to line, kept in step with the edits through the model's change listener (nimvcl markers carry no number) |
 | `findcmds`, `findinfiles` | Search > Find in Files: the command (dialog hook, results into Messages) and the search itself (files to read, nimvcl's `Searcher`, limits) |
+| `codeinsight`, `codepicker`, `codecmds` | Edit > Complete Code: the candidates and their ranking (pure: word before the caret, unit identifiers, components, nimvcl names, keywords; members from the class registry), the pick list popup (a menu popup that takes the form's keys while the editor keeps the focus) and the command that feeds them from the active editor |
 | `quickfixes` | Quick Fix and Find Unit applied to the editors or the files |
 | `ideui` | Menus, toolbars, docking and the wiring of the actions |
 | `idedialogs` | The real dialogs behind the hooks |

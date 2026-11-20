@@ -21,7 +21,7 @@ import nimvcl
 from sdl3 import getWindowFlags, maximizeWindow, WINDOW_MAXIMIZED, Rect,
   getDisplayForRect, getDisplayUsableBounds
 import ./[project, ideconfig, icons, actions, palette, uniteditor]
-import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, ideui]
+import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, codecmds, ideui]
 export ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, ideui
 
 proc rememberWindow*(ide: IdeForm) =

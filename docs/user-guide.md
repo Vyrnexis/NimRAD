@@ -524,6 +524,16 @@ open the place (a hit in a `.nfm` opens the form of that unit). Units you have e
 not saved are searched as they are in the editor. The list stops at 1000 lines and files
 over 2 MB are skipped.
 
+**Code completion** (`Ctrl+Space`, Edit menu, in the code view). The word before the caret is
+completed from a list under it: after `self.` the components of the form and its own
+properties and events; after a component name (`Button1.`) the properties and events of its
+class, with their types; elsewhere the identifiers of the unit, the components, the names
+nimvcl exports and the Nim keywords, in that order. Names match as in Nim: the first letter
+exactly, the rest ignoring case and underscores. `Up`, `Down`, `PageUp` and `PageDown` choose,
+`Enter` or `Tab` replace the typed word, `Esc` closes. Keep typing to narrow the list
+(`Backspace` widens it); any other key, a click elsewhere or leaving the window closes it. When
+only one name fits it is inserted without a list.
+
 **Bookmarks.** `Shift+Ctrl+0` to `Shift+Ctrl+9` put bookmark 0 to 9 on the line of the
 caret (on the line already: it is removed); `Ctrl+0` to `Ctrl+9` jump to it, opening the
 unit that holds it. Each number exists once, so setting it in another unit moves it. The
@@ -564,6 +574,7 @@ close the project. The same commands are in **Search > Toggle Bookmarks** and
 | `Shift+Ctrl+F11` | Project Options |
 | `Shift+Ctrl+0..9` / `Ctrl+0..9` | Set or remove / go to bookmark 0..9 |
 | `Shift+Ctrl+F` | Find in Files |
+| `Ctrl+Space` | Complete Code |
 | `Ctrl+F9` | Compile |
 | `Shift+F9` | Build (compile everything again) |
 | `F9` | Run |
