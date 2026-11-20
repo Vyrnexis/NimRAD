@@ -271,6 +271,28 @@ suite "closing":
     check asked == @["unit1"]
     discard ide.closeProject()
 
+  test "a save that fails is reported and counts as Cancel":
+    check ide.openProject(projectFile)
+    let ed = ide.activeEditor
+    ed.typeAtEnd "\n# cannot save\n"
+    let path = ide.project.dir / "unit1.nim"
+    let good = readFile(path)
+    removeFile path
+    createDir path                       # a directory in the way: the rename fails
+    answer = scSave
+    errors.setLen 0
+    var can = true
+    ide.onCloseQuery(ide, can)
+    check not can
+    check not ide.closeEditor(ed)
+    check not ide.closeProject()
+    check errors.len == 3
+    check ide.project != nil and ide.editors.len == 1 and ed.modified
+    removeDir path
+    writeFile(path, good)
+    check ide.closeEditor(ed)
+    discard ide.closeProject()
+
 suite "layout":
   test "the docking layout is saved and restored":
     check ide.openProject(projectFile)

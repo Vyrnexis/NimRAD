@@ -96,9 +96,14 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
         of scCancel:
           canClose = false
           return
-        of scSave: e.save()
+        of scSave:
+          if not ide.trySave(e):
+            canClose = false
+            return
         of scDiscard: discard
-    if ide.project != nil: ide.project.save()
+    if not ide.trySaveProject():
+      canClose = false
+      return
     ide.programReset()
     ide.saveLayout()
   Application.addIdleHook("ide-sync", proc() = ide.flush())

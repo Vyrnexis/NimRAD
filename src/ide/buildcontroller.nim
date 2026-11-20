@@ -69,7 +69,7 @@ proc startBuild(ide: IdeForm, phase: BuildPhase, notes: seq[string] = @[]): bool
   ## Saves everything and starts the compiler; `phase` is where the controller
   ## goes when it started.
   if ide.project == nil or ide.busy: return false
-  ide.saveAll()
+  if not ide.saveAll(): return false
   ide.messages.clear()
   ide.clearErrorMarkers()
   ide.messages.showMessages()
@@ -100,7 +100,7 @@ proc run*(ide: IdeForm): bool =
   ## from exactly these files and arguments is not built again (`isUpToDate`;
   ## at any doubt it is).
   if ide.project == nil or ide.busy: return false
-  ide.saveAll()
+  if not ide.saveAll(): return false
   if ide.project.isUpToDate(ide.buildOptions):
     ide.messages.clear()
     ide.clearErrorMarkers()

@@ -94,6 +94,15 @@ proc fail*(ide: IdeForm, text: string) =
   ide.say text
   ide.showError text
 
+proc trySaveProject*(ide: IdeForm): bool =
+  ## Saves the project file; a failure is reported and gives false.
+  if ide.project == nil: return true
+  try:
+    ide.project.save()
+    result = true
+  except CatchableError as e:
+    ide.fail "Cannot save the project " & ide.project.name & ": " & e.msg
+
 proc activeIndex*(ide: IdeForm): int =
   if ide.editors.len == 0: -1 else: ide.pages.activePageIndex
 

@@ -9,9 +9,9 @@ import ./[cmdargs, project, ideconfig, messagespanel, uniteditor, mainfile,
 
 proc closeProject*(ide: IdeForm): bool =
   ## Closes the project and its editors (false: cancelled at the save prompt).
+  if not ide.trySaveProject(): return false
   if not ide.closeAllEditors(): return false
   if ide.project != nil:
-    ide.project.save()
     ide.project.unregisterFonts()
   ide.project = nil
   ide.messages.clear()
@@ -234,13 +234,13 @@ proc applyOptions*(ide: IdeForm, o: ProjectOptions) =
   p.autoImports = o.autoImports
   let modeChanged = p.importAll != o.importAll
   if modeChanged:
-    ide.saveAll()                      # unsaved edits go to disk before the files are rewritten
+    if not ide.saveAll(): return       # unsaved edits go to disk before the files are rewritten
     p.importAll = o.importAll
     let changed = p.rewriteImports()
     for e in ide.editors: e.reloadFromDisk()
     ide.say(if p.importAll: "All units import nimvcl (" & $changed.len & " files changed)"
             else: "Units import the prelude and their controls (" & $changed.len & " files changed)")
-  p.save()
+  if not ide.trySaveProject(): return
   if not modeChanged: ide.say "Project options saved"
 
 proc runParameters*(ide: IdeForm): string =
@@ -250,8 +250,7 @@ proc runParameters*(ide: IdeForm): string =
 proc setRunParameters*(ide: IdeForm, text: string) =
   if ide.project == nil: return
   ide.project.runArgs = splitArgs(text)
-  ide.project.save()
-  ide.say "Run parameters saved"
+  if ide.trySaveProject(): ide.say "Run parameters saved"
 
 proc showRunParameters*(ide: IdeForm) =
   ## Run > Parameters: the command line arguments of the program.

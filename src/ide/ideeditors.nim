@@ -441,6 +441,15 @@ proc saveEditor*(ide: IdeForm, ed: UnitEditor) =
   ed.save()
   for i, k in kids: k.rebaseOnAncestor(pending[i])
 
+proc trySave*(ide: IdeForm, ed: UnitEditor): bool =
+  ## `saveEditor`, but a failure (read-only file, disk full) is reported and
+  ## gives false instead of raising.
+  try:
+    ide.saveEditor(ed)
+    result = true
+  except CatchableError as e:
+    ide.fail "Cannot save " & ed.unitName & ": " & e.msg
+
 proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
   ## Closes a unit's tab; asks what to do with unsaved changes (false = the
   ## user cancelled).
@@ -450,7 +459,8 @@ proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
     let choice = ide.askSave(ed.unitName)
     case choice
     of scCancel: return false
-    of scSave: ide.saveEditor(ed)
+    of scSave:
+      if not ide.trySave(ed): return false     # a failed save counts as Cancel
     of scDiscard: discard
   if ide.bound == ed:
     if ed.isForm: ed.designer.cancelCreate()
@@ -475,9 +485,9 @@ proc closeAllEditors*(ide: IdeForm): bool =
 proc saveActive*(ide: IdeForm) =
   let ed = ide.activeEditor
   if ed == nil: return
-  ide.saveEditor(ed)
+  let ok = ide.trySave(ed)
   ide.updateTabs()
-  ide.say "Saved " & ed.unitName
+  if ok: ide.say "Saved " & ed.unitName
 
 proc depth(ide: IdeForm, ed: UnitEditor): int =
   ## How many forms the unit's form inherits from, one after the other.
@@ -489,15 +499,19 @@ proc depth(ide: IdeForm, ed: UnitEditor): int =
     name = ide.project.units[i].ancestor
     inc result
 
-proc saveAll*(ide: IdeForm) =
+proc saveAll*(ide: IdeForm): bool {.discardable.} =
+  ## Saves every unit and the project; false (reported) when one cannot be written.
   # descendants first: their form files hold differences from the ancestor file as
   # it is on disk, so they are written before an ancestor changes it
   var order = ide.editors
   order.sort(proc(a, b: UnitEditor): int = cmp(ide.depth(b), ide.depth(a)))
-  for e in order: ide.saveEditor(e)
-  if ide.project != nil: ide.project.save()
+  for e in order:
+    if not ide.trySave(e):
+      ide.updateTabs()
+      return false
+  result = ide.trySaveProject()
   ide.updateTabs()
-  ide.say "All saved"
+  if result: ide.say "All saved"
 
 proc refreshProject*(ide: IdeForm) =
   ide.projectTree.refresh(ide.project)

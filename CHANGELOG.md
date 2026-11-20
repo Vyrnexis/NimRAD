@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A file that cannot be written (read-only, disk full) is reported when saving,
+  closing a tab or project, or closing the window, instead of raising; a failed
+  save counts as Cancel, so nothing is lost.
 - A form file that does not parse no longer makes the unit lose its control
   imports.
 - A unit that cannot be written stays marked as modified.
