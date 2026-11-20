@@ -188,8 +188,7 @@ proc nameTaken(e: UnitEditor, name: string, skip: Component = nil): bool =
     if c != skip and c.name.styleKey == key: hit = true)
   if hit: return true
   if e.fUnit.formType.styleKey == key: return true
-  let fc = classByName("Form")
-  fc != nil and fc.findProp(name) != nil       # `caption`, `width`...: a Form field
+  isReservedFieldName(name)       # `caption`, `show`...: a field or proc of Component, Control or Form
 
 proc freshName(e: UnitEditor, className: string, extra: HashSet[string] = initHashSet[string]()): string =
   var base = className
@@ -547,6 +546,7 @@ proc nameProblem(e: UnitEditor, c: Component, nw: string): string =
   if c == Component(e.fForm): "rename the form from the project, not here"
   elif c.inherited: "`" & c.name & "` comes from the ancestor form and cannot be renamed here"
   elif not isValidIdent(nw): "`" & nw & "` is not a valid identifier"
+  elif isReservedFieldName(nw): "`" & nw & "` is reserved (a field or property of Component, Control or Form)"
   elif e.nameTaken(nw, c): "the name `" & nw & "` is already used"
   else: e.descendantProblem(c.name)
 
