@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Saving a project keeps the keys this version does not know inside unit and font
+  records (as it already did at the top level).
 - Output: a partial line (a prompt without a newline) shows after 0.2 s instead of
   waiting for the rest; Program Reset after the program ended on its own no longer
   reports "cancelled".

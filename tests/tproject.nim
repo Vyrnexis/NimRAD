@@ -84,6 +84,19 @@ suite "project file":
     let p = Project(filePath: root / "x.nimproj", nimvclPath: "../elsewhere/src")
     check p.nimvclSrc == root.parentDir / "elsewhere" / "src"
 
+suite "unknown keys in records":
+  test "unit and font records keep the keys this version does not know":
+    createDir root / "keep2"
+    writeFile(root / "keep2" / "k.nimproj", """{"name": "k",
+      "units": [{"name": "u", "nim": "u.nim", "nfm": "", "isForm": false, "formType": "",
+                 "future": {"a": 1}}],
+      "fonts": [{"file": "fonts/F.ttf", "family": "F", "style": "regular", "license": "OFL"}]}""")
+    let p = loadProject(root / "keep2" / "k.nimproj")
+    p.save()
+    let j = parseJson(readFile(p.filePath))
+    check j["units"][0]["future"]["a"].getInt == 1
+    check j["fonts"][0]["license"].getStr == "OFL"
+
 suite "project options and names":
   test "defines, title and version are saved and become compiler arguments":
     let p = Project(filePath: root / "o" / "o.nimproj", name: "o", mainFile: "o.nim",

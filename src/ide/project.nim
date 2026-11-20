@@ -69,6 +69,8 @@ const
   KnownKeys = ["formatVersion", "name", "mainFile", "units", "fonts", "outputDir", "nimFlags",
                "defines", "title", "version", "runArgs", "nimvclPath", "autoImports", "importAll",
                "classImports"]
+  UnitKeys = ["name", "nim", "nfm", "isForm", "formType", "ancestor"]
+  FontKeys = ["file", "family", "style"]
   tmplMain = staticRead("../../templates/main.nim.tmpl")
   tmplUnit = staticRead("../../templates/unit.nim.tmpl")
   tmplNfm = staticRead("../../templates/unit.nfm.tmpl")
@@ -86,6 +88,7 @@ type
     isForm*: bool
     formType*: string    ## `Form1` for a form unit
     ancestor*: string    ## unit of the ancestor form when this form is inherited, else ""
+    extra: JsonNode      ## the keys of the record this version does not know, kept for `save`
 
   ClassScan = object
     size: int64
@@ -96,6 +99,7 @@ type
     file*: string        ## relative to the project folder, `fonts/Foo-Regular.ttf`
     family*: string      ## name used in `FontSpec.family`
     style*: string       ## "regular", "bold", "italic" or "bolditalic"
+    extra: JsonNode      ## the keys of the record this version does not know, kept for `save`
 
   Project* = ref object
     filePath*: string    ## absolute path of the .nimproj
@@ -208,14 +212,31 @@ proc strs(j: JsonNode, key: string): seq[string] =
     for e in j[key]:
       if e.kind == JString: result.add e.getStr
 
+proc unknownKeys(j: JsonNode, known: openArray[string]): JsonNode =
+  ## The keys of the record `j` that are not in `known` (nil when there are none).
+  for k, v in j:
+    if k notin known:
+      if result == nil: result = newJObject()
+      result[k] = v
+
+proc addExtra(rec, extra: JsonNode) =
+  if extra != nil:
+    for k, v in extra:
+      if not rec.hasKey(k): rec[k] = v
+
 proc toJson*(p: Project): JsonNode =
   var us = newJArray()
   for u in p.units:
-    us.add %*{"name": u.name, "nim": u.nimPath, "nfm": u.nfmPath,
-              "isForm": u.isForm, "formType": u.formType}
-    if u.ancestor.len > 0: us[us.len - 1]["ancestor"] = %u.ancestor
+    var rec = %*{"name": u.name, "nim": u.nimPath, "nfm": u.nfmPath,
+                 "isForm": u.isForm, "formType": u.formType}
+    if u.ancestor.len > 0: rec["ancestor"] = %u.ancestor
+    rec.addExtra u.extra
+    us.add rec
   var fs = newJArray()
-  for f in p.fonts: fs.add %*{"file": f.file, "family": f.family, "style": f.style}
+  for f in p.fonts:
+    var rec = %*{"file": f.file, "family": f.family, "style": f.style}
+    rec.addExtra f.extra
+    fs.add rec
   result = %*{"formatVersion": FormatVersion, "name": p.name, "mainFile": p.mainFile,
      "units": us, "fonts": fs, "outputDir": p.outputDir, "nimFlags": p.nimFlags,
      "defines": p.defines, "title": p.title, "version": p.version, "runArgs": p.runArgs,
@@ -272,7 +293,8 @@ proc loadProject*(path: string): Project =
       # Paths are stored with '/'; a file written by hand on Windows may use '\'.
       var u = ProjectUnit(name: e.str("name", ""), nimPath: unixPath(e.str("nim", "")),
                           nfmPath: unixPath(e.str("nfm", "")), formType: e.str("formType", ""),
-                          ancestor: unixPath(e.str("ancestor", "")))
+                          ancestor: unixPath(e.str("ancestor", "")),
+                          extra: e.unknownKeys(UnitKeys))
       u.isForm = e.hasKey("isForm") and e["isForm"].kind == JBool and e["isForm"].getBool
       if u.name.len > 0 and u.nimPath.len > 0: result.units.add u
   if j.hasKey("classImports") and j["classImports"].kind == JObject:
@@ -282,7 +304,7 @@ proc loadProject*(path: string): Project =
     for e in j["fonts"]:
       if e.kind != JObject: continue
       let f = ProjectFont(file: unixPath(e.str("file", "")), family: e.str("family", ""),
-                          style: e.str("style", "regular"))
+                          style: e.str("style", "regular"), extra: e.unknownKeys(FontKeys))
       if f.file.len > 0 and f.family.len > 0: result.fonts.add f
 
 # ------------------------------------------------------------------- editing
