@@ -2,7 +2,7 @@
 ## identifiers are valid names, and which modules a file imports. Comments are
 ## recognised with nimvcl's lexer, so they never count.
 
-import std/[strutils, sequtils]
+import std/[strutils, sequtils, sets]
 import nimvcl/controls/nimlexer
 
 const NimKeywords* = ["addr", "and", "as", "asm", "bind", "block", "break", "case", "cast",
@@ -103,6 +103,19 @@ proc importedModules*(src: string): seq[string] =
     let open = text.count('[') - text.count(']')
     if open <= 0 and not code.endsWith(","): finish()
   finish()
+
+proc codeIdentKeys*(src: string): HashSet[string] =
+  ## The identifiers the code uses, as `styleKey`s; comments and strings (also
+  ## multi-line ones) never count.
+  let h = newNimHighlighter()
+  var state = 0
+  var toks: seq[Token]
+  for raw in src.split('\n'):
+    let line = raw.strip(chars = {'\r'}, leading = false)
+    toks.setLen 0
+    state = h.lexLine(line, state, toks)
+    for t in toks:
+      if t.kind == tkIdent: result.incl line[t.start ..< min(t.start + t.len, line.len)].styleKey
 
 # ------------------------------------------------------------------- lines
 

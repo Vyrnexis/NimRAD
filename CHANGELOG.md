@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A control import stays in a unit's managed import block while the unit's code
+  still names the class (`Timer(...)`, `cast[Label](x)`), also after the last
+  object of the class left the form.
 - The program file: a commented-out `# let x = newForm1()` is not taken for the
   form's create line, and a file whose first line has no CRLF but others do keeps
   its CRLF endings when units are added.

@@ -14,7 +14,7 @@
 ##
 ## The IDE rewrites the lines of the block when it saves the unit, from the
 ## classes in the designed form: a new class adds its module, the last object
-## of a class removes it. Only lines of the form `import nimvcl/<dir>/<module>`
+## of a class removes it, unless the unit's code still names the class. Only lines of the form `import nimvcl/<dir>/<module>`
 ## inside the block are the IDE's; any other line in the block, and everything
 ## outside it, is left alone. A unit without the block (an older project that
 ## says `import nimvcl`) is never changed.
@@ -146,8 +146,10 @@ func managedPath(line: string, owned: openArray[string]): string =
     if p.len > 0 and not p.anyIt(it in {' ', ',', '[', ']', '#', '{'}) and
        (p.startsWith("nimvcl/") or p in owned): return p
 
-proc syncImports*(src: string, wanted: seq[string], owned: openArray[string] = []): string =
-  ## Makes the managed lines of the `imports` block match `wanted`. A module
+proc syncImports*(src: string, wanted: seq[string], owned: openArray[string] = [],
+                  keep: HashSet[string] = initHashSet[string]()): string =
+  ## Makes the managed lines of the `imports` block match `wanted`; a managed
+  ## line of a module in `keep` stays although it is not wanted. A module
   ## the file already imports elsewhere is not added again. Returns `src`
   ## unchanged when the block is missing. The lines the IDE manages are the
   ## `nimvcl/...` imports and those of the modules in `owned`.
@@ -159,7 +161,7 @@ proc syncImports*(src: string, wanted: seq[string], owned: openArray[string] = [
   while i > r.b:                       # drop the lines that are no longer needed
     let p = managedPath(lines[i], owned)
     if p.len > 0:
-      if p in wanted and p notin present: present.incl p
+      if (p in wanted or p in keep) and p notin present: present.incl p
       else: lines.delete i             # stale (or a duplicate)
     dec i
   let r2 = findBlock(lines, UnitImportsBlock)
@@ -174,6 +176,19 @@ proc syncImports*(src: string, wanted: seq[string], owned: openArray[string] = [
       inc at
   lines.join("\n")
 
+proc usedModules(src: string, user: UserClasses): HashSet[string] =
+  ## The modules of the classes the unit's code names (outside the managed
+  ## block, comments and strings): `Timer(...)` or `cast[Label](x)` still need
+  ## their import when no object of the class is left on the form.
+  let lines = src.split('\n')
+  let r = findBlock(lines, UnitImportsBlock)
+  if r.b < 0: return
+  let idents = (lines[0 ..< r.b] & lines[r.e + 1 .. ^1]).join("\n").codeIdentKeys
+  for (c, m) in user:
+    if c.styleKey in idents: result.incl m
+  for (c, m) in classModules:
+    if c.styleKey in idents: result.incl m
+
 proc syncFromNfm*(src, nfmText: string, baseDir = "", importAll = false,
                   user: UserClasses = []): string =
   ## `syncImports` for the classes of a form file; with `importAll` the block
@@ -184,7 +199,8 @@ proc syncFromNfm*(src, nfmText: string, baseDir = "", importAll = false,
   let found = tryImportsFor(nfmText, baseDir, user)
   if found.isNone: return src
   let wanted = found.get
-  syncImports(src, if importAll: wanted.filterIt(it in owned) else: wanted, owned)
+  syncImports(src, if importAll: wanted.filterIt(it in owned) else: wanted, owned,
+              usedModules(src, user))
 
 proc collectNames(root: NfmNode, dir: string, seen: var HashSet[string],
                   names: var seq[string], depth = 0) =

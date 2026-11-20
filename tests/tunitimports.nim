@@ -69,6 +69,16 @@ suite "syncImports":
     check d == a
     check syncFromNfm(d, formWith()) == unitText
 
+  test "an import stays while the code names the class":
+    let a = syncFromNfm(unitText, formWith("Button", "Timer"))
+    check "import nimvcl/core/timer" in a
+    let code = a & "\nproc go() =\n  let t = Timer(interval: 5)\n  # Label in a comment\n  echo \"ListBox\"\n"
+    let b = syncFromNfm(code, formWith("Button"))
+    check "import nimvcl/core/timer" in b
+    check "label" notin b.toLowerAscii.split("imports end")[0].split("imports begin")[1]
+    # once the code stops naming it, the import goes
+    check "import nimvcl/core/timer" notin syncFromNfm(a, formWith("Button"))
+
   test "user imports are untouched":
     var s = unitText.replace("import nimvcl/dsl/formload\n",
       "import nimvcl/dsl/formload\nimport std/[os, strutils]\nimport nimvcl/controls/button\n")
