@@ -68,6 +68,24 @@ proc dropButton(r: Rig): Control =
   r.ed.find("Button1")
 
 suite "unit editor":
+  test "a unit that cannot be written stays modified":
+    let r = rig("savefail")
+    let path = r.proj.dir / "util.nim"
+    writeFile(path, "var x = 1\n")
+    discard r.proj.addUnit("util", "util.nim")
+    let u = newUnitEditor(r.proj, "util", r.host)
+    discard u.code.model.replace((0, 8), (0, 9), "2")
+    check u.modified
+    removeFile path
+    createDir path                    # a directory in the way: the rename fails
+    expect CatchableError: u.save()
+    check u.modified
+    check u.code.fileName == path
+    removeDir path
+    u.save()
+    check not u.modified
+    check readFile(path) == "var x = 2\n"
+
   test "a form unit has both views, a plain unit only code":
     let r = rig("views")
     check r.ed.isForm

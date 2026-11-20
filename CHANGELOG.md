@@ -4,6 +4,7 @@
 
 - A form file that does not parse no longer makes the unit lose its control
   imports.
+- A unit that cannot be written stays marked as modified.
 
 ## 0.2.1 - 2026-11-20
 

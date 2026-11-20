@@ -1027,18 +1027,13 @@ proc save*(e: UnitEditor) =
       e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir, e.project.importAll,
                                 e.project.userClassImports(e.unitName)))
   if e.fCode.modified or not fileExists(e.project.nimPathOf(e.fUnit)):
-    # through a temporary file, so a failed write cannot cut the unit short
+    # Written here rather than by `CodeEdit.saveToFile`, which marks the text
+    # saved before the file is in place (and renames the editor to the
+    # temporary file); a failed write leaves the text modified.
     let path = e.project.nimPathOf(e.fUnit)
-    let tmp = path & ".tmp"
-    try:
-      e.fCode.saveToFile(tmp)
-      moveFile(tmp, path)
-    except CatchableError:
-      try: removeFile tmp
-      except OSError: discard
-      raise
-    finally:
-      e.fCode.fileName = path
+    writeFileAtomic(path, e.fCode.model.toText(e.fCode.ensureTrailingNewline))
+    e.fCode.markSaved()
+    e.fCode.fileName = path
   e.checkModified()
 
 proc loadCode(e: UnitEditor) =
