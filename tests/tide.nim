@@ -600,6 +600,11 @@ suite "save as":
     check fileExists(exePath(ide.project))
 
 
+suite "version":
+  test "the version comes from nimrad.nimble":
+    check AppVersion.len > 0 and AppVersion != "0.0.1"
+    check ("version       = \"" & AppVersion & "\"") in readFile(currentSourcePath().parentDir.parentDir / "nimrad.nimble")
+
 suite "editor tabs":
   test "every tab has a close button; a click on it closes the unit and asks first":
     check ide.closeAllEditors()

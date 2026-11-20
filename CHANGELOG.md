@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Help > About shows the version from `nimrad.nimble` (it said 0.0.1).
 - Closing a tab that is not the active one keeps the active tab.
 - Smaller fixes: a main file that cannot be saved before the IDE edits it is reported and
   its text kept; Save As / Save Project As stop when a file cannot be saved first;

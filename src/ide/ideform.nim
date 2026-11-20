@@ -10,13 +10,25 @@
 
 import nimvcl
 import nimvcl/controls/inspector
-import std/[os, tables]
+import std/[os, tables, strutils]
 import ./[project, builder, ideconfig, actions, palette, projecttree,
           messagespanel, uniteditor, editortabs]
 
+proc versionOf(nimble: string): string {.compileTime.} =
+  ## The `version = "..."` line of nimrad.nimble.
+  for line in nimble.splitLines:
+    let l = line.strip
+    if l.startsWith("version"):
+      let q1 = l.find('"')
+      let q2 = l.rfind('"')
+      if q1 >= 0 and q2 > q1: return l[q1 + 1 ..< q2]
+
 const
   AppName* = "NimRAD"
-  AppVersion* = "0.0.1"
+  AppVersion* = versionOf(staticRead("../../nimrad.nimble"))
+    ## From nimrad.nimble at compile time.
+
+static: doAssert AppVersion.len > 0, "no version found in nimrad.nimble"
 
 type
   SaveChoice* = enum scSave, scDiscard, scCancel
