@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/dsl/props
 import nimvcl/controls/inspector
 import ide/[mainform, session, project, builder, ideconfig, uniteditor, messagespanel,
-            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck, bookmarks, findinfiles, codepicker]
+            messages, palette, actions, projecttree, mainfile, icons, buildcheck, bookmarks, findinfiles, codepicker]
 
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
@@ -531,9 +531,9 @@ proc buildAndSmoke(): tuple[ok: bool, warnings: int, exit: int, log: string] =
 
 proc pageIndexOfClose(i: int): PointF =
   ide.settle
-  let r = ide.pages.closeRect(i)
+  let r = ide.pages.tabRect(i)
   doAssert r.w > 0
-  ide.pages.clientToForm(pointF(r.x + r.w / 2, r.y + r.h / 2))
+  ide.pages.clientToForm(pointF(r.right - 12, r.y + r.h / 2))   # the cross at the tab's right end
 
 proc tabPoint(i: int): PointF =
   ide.settle
@@ -782,11 +782,7 @@ suite "editor tabs":
     let b = ide.openUnit("third")
     check a != nil and b != nil and ide.editors.len == 2
     ide.settle
-    for i in 0 .. 1:
-      let r = ide.pages.closeRect(i)
-      check r.w > 0 and r.h > 0
-      check r.right <= ide.pages.tabRect(i).right
-      check r.x > ide.pages.tabRect(i).x + 10             # the cross sits right of the name
+    check ide.pages.closeButtons
     b.typeAtEnd "\n# tab note\n"
     ide.settle
     check ide.pages.sheets()[1].caption == "third*"

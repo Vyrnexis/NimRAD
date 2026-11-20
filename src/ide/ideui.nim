@@ -5,7 +5,7 @@ import nimvcl/controls/inspector
 import std/[strutils, tables]
 import nimvcl/dsl/[props, props_std]
 import ./[bookmarks, project, messages, ideconfig, icons, actions, palette,
-          projecttree, messagespanel, todopanel, codeexplorer, uniteditor, editortabs, quickfix,
+          projecttree, messagespanel, todopanel, codeexplorer, uniteditor, quickfix,
           ideform, ideeditors, designcmds, projectcommands, buildcontroller,
           quickfixes, findcmds, codecmds, outlinecmds]
 
@@ -311,8 +311,10 @@ proc buildDocking*(ide: IdeForm) =
     revProp.enabled = ide.canRevertProperty(clickedProp)
     revComp.enabled = ide.canRevertComponent
   ide.inspector.popupMenu = pm
-  ide.pages = newEditorPages()
-  ide.pages.onCloseTab = proc(i: int) =
+  ide.pages = newPageControl()
+  ide.pages.closeButtons = true
+  ide.pages.onTabClose = proc(s: Control, i: int, allow: var bool) =
+    allow = false                  # the IDE closes the unit (asking to save first)
     if i >= 0 and i < ide.editors.len: discard ide.closeEditor(ide.editors[i])
   ide.pages.onChange = proc(sender: Control) =
     ide.bindActive()

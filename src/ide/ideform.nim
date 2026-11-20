@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import std/[os, tables, strutils]
 import ./[project, builder, ideconfig, actions, palette, projecttree,
-          messagespanel, uniteditor, editortabs, findinfiles, todopanel, codeexplorer, codeoutline]
+          messagespanel, uniteditor, findinfiles, todopanel, codeexplorer, codeoutline]
 
 proc versionOf(nimble: string): string {.compileTime.} =
   ## The `version = "..."` line of nimrad.nimble.
@@ -88,7 +88,7 @@ type
     outlineChanged*: float      ## when `outlineSeen` was noticed (`epochTime`)
     outlineDelay*: float        ## seconds without edits before the Code Explorer follows (0.3)
     todoDirty*: bool            ## the To-Do List is out of date (shown again at the next idle)
-    pages*: EditorPages
+    pages*: PageControl
     status*: StatusBar
     editors*: seq[UnitEditor]
     sheets*: seq[TabSheet]

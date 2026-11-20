@@ -32,7 +32,7 @@ the same code. The few modal dialogs are hooks (`askSave`, `showError`,
 | `idedialogs` | The real dialogs behind the hooks |
 | `actions` | The action table: captions, hints, shortcuts, icons |
 | `uniteditor` | The editor of one unit: form designer and code view, inheritance, rebuild of descendants |
-| `editortabs`, `palette`, `projecttree`, `messagespanel`, `icons` | Editor tab strip with close buttons, component palette with search, Project Manager, Messages and Output windows, procedurally drawn icons |
+| `palette`, `projecttree`, `messagespanel`, `icons` | component palette with search, Project Manager, Messages and Output windows, procedurally drawn icons |
 | `session` | The scripted session |
 
 ## Building and running
