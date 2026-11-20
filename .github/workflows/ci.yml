@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         # the released version the IDE depends on, and nimvcl's main branch
-        nimvcl: [v0.2.1, main]
+        nimvcl: [v0.3.0, main]
     continue-on-error: ${{ matrix.nimvcl == 'main' }}
     env:
       SDL_VIDEO_DRIVER: offscreen
@@ -45,7 +45,7 @@ jobs:
   # Only the nimvcl release the IDE pins (nimrad.nimble) is tried. If SDL's
   # "offscreen" video driver turns out to be missing, use SDL_VIDEO_DRIVER=dummy.
   windows:
-    name: windows (nimvcl v0.2.1)
+    name: windows (nimvcl v0.3.0)
     runs-on: windows-latest
     continue-on-error: true
     defaults:
@@ -78,7 +78,7 @@ jobs:
           echo "$RUNNER_TEMP\\sdl" >> "$GITHUB_PATH"
       - name: Get nimvcl
         # A sibling checkout is picked up by config.nims.
-        run: git clone --depth 1 --branch v0.2.1 https://github.com/Vyrnexis/nimvcl.git nimvcl
+        run: git clone --depth 1 --branch v0.3.0 https://github.com/Vyrnexis/nimvcl.git nimvcl
       - name: Install dependencies
         working-directory: nimvcl
         run: nimble install -d -y
@@ -94,7 +94,7 @@ jobs:
         run: for f in build/tests/run-*/*.log; do echo "=== $f"; tail -n 60 "$f"; done
 
   macos:
-    name: macos (nimvcl v0.2.1)
+    name: macos (nimvcl v0.3.0)
     runs-on: macos-latest
     continue-on-error: true
     env:
@@ -108,7 +108,7 @@ jobs:
       - name: Install Nim and SDL3
         run: brew install nim sdl3 sdl3_ttf sdl3_image
       - name: Get nimvcl
-        run: git clone --depth 1 --branch v0.2.1 https://github.com/Vyrnexis/nimvcl.git nimvcl
+        run: git clone --depth 1 --branch v0.3.0 https://github.com/Vyrnexis/nimvcl.git nimvcl
       - name: Install dependencies
         working-directory: nimvcl
         run: nimble install -d -y
