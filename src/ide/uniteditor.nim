@@ -1135,14 +1135,17 @@ proc save*(e: UnitEditor) =
       e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir, e.project.importAll,
                                 e.project.userClassImports(e.unitName)))
   if e.fCode.modified or not fileExists(e.project.nimPathOf(e.fUnit)):
-    # Written here rather than by `CodeEdit.saveToFile`, which marks the text
-    # saved before the file is in place (and renames the editor to the
-    # temporary file); a failed write leaves the text modified.
+    # `saveCopyTo` writes atomically and keeps the file's permissions; the text
+    # is marked saved only once the file is in place. A symbolic link is
+    # written through (the link stays, its target is replaced).
     let path = e.project.nimPathOf(e.fUnit)
-    writeFileAtomic(path, e.fCode.model.toText(e.fCode.ensureTrailingNewline))
+    var target = path
+    if symlinkExists(path):
+      try: target = expandFilename(path)
+      except OSError: discard
+    e.fCode.saveCopyTo(target)
     e.fNimStamp = fileStamp(path)
-    e.fCode.markSaved()
-    e.fCode.fileName = path
+    e.fCode.modified = false
   e.checkModified()
 
 proc loadCode(e: UnitEditor) =
