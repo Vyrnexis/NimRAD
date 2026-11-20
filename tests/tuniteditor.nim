@@ -368,7 +368,7 @@ suite "unit editor":
     r.host.click(edit.center, 2)
     check r.ed.code.text.contains("proc Edit1Change(self: Form1, sender: Control) =")
     check not r.ed.code.text.contains("Edit1Click")
-    check defaultEvent(r.ed.componentTree[0][0]) == "onShow"     # the form
+    check defaultEvent(r.ed.componentTree[0][0]) == "onCreate"   # the form
     check defaultEvent(newCheckBox(nil, "x")) == "onChange"
     check defaultEvent(newButton(nil, "x")) == "onClick"
     check defaultEvent(newTimer(nil)) == "onTimer"
