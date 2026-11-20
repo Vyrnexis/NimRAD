@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add to Project checks first that the file exists and is a `.nim` file, takes a relative
+  path from the project's folder, and refuses a form whose `.nfm` cannot be read (it used
+  to add a form unit without a form type).
 - File > New Application that fails half way removes the files it made (so trying again
   works) and reopens the project that was open; changing the import mode in Project >
   Options puts the files back when one cannot be written; Remove Font deletes the font

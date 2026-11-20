@@ -454,6 +454,18 @@ suite "main program file":
     check ide.removeFromProject("extra")
     check "extra" notin mainText().toLowerAscii.replace("nimrad", "")
 
+  test "Add to Project refuses a missing file, a non-.nim file and an unreadable form":
+    let n = errors.len
+    check not ide.addToProject(ide.project.dir / "nothere.nim")
+    writeFile(ide.project.dir / "notes.txt", "x")
+    check not ide.addToProject(ide.project.dir / "notes.txt")
+    writeFile(ide.project.dir / "broken.nim", "echo 1\n")
+    writeFile(ide.project.dir / "broken.nfm", "this is not a form\n")
+    check not ide.addToProject("broken.nim")           # relative: from the project folder
+    check ide.project.findUnit("broken") < 0 and ide.project.findUnit("nothere") < 0
+    check errors.len == n + 3 and "not a readable form" in errors[^1]
+    errors.setLen n
+
   test "Remove from Project removes the import and the create line":
     check ide.removeFromProject("helpers")
     check "helpers" notin mainText()

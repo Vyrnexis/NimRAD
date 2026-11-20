@@ -120,20 +120,25 @@ proc newForm*(ide: IdeForm): UnitEditor =
 
 proc addToProject*(ide: IdeForm, path: string): bool =
   ## Adds an existing `.nim` unit (a form unit when a `.nfm` of the same name
-  ## sits next to it).
+  ## sits next to it). A relative `path` is taken from the project's folder.
   if ide.project == nil: return false
-  let name = path.splitFile.name
-  let nfm = path.changeFileExt(".nfm")
+  let file = if path.isAbsolute: path else: ide.project.dir / path
+  let name = file.splitFile.name
+  let nfm = file.changeFileExt(".nfm")
   let mainEd = ide.beforeMainEdit()
   try:
+    if file.splitFile.ext != ".nim": raise newException(ProjectError, file & " is not a .nim file")
+    if not fileExists(file): raise newException(ProjectError, "no such file: " & file)
     if not validName(name): raise newException(ProjectError, "bad unit name " & name)
     if name == ide.project.name: raise newException(ProjectError, name & " is the program file")
     var u: ProjectUnit
     if fileExists(nfm):
-      u = ide.project.addUnit(name, path, nfm, true, formTypeOfNfm(nfm),
-                              ide.project.ancestorUnitOf(nfm))
+      let formType = formTypeOfNfm(nfm)
+      if formType.len == 0:
+        raise newException(ProjectError, nfm & " is not a readable form file")
+      u = ide.project.addUnit(name, file, nfm, true, formType, ide.project.ancestorUnitOf(nfm))
     else:
-      u = ide.project.addUnit(name, path)
+      u = ide.project.addUnit(name, file)
     ide.project.save()
     if not ide.project.addToMain(u) and fileExists(ide.project.mainPath) and
        not readFile(ide.project.mainPath).hasBlock(ImportsBlock):
