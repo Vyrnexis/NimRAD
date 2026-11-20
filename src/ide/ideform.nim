@@ -66,6 +66,7 @@ type
     bound*: UnitEditor
     defaultLayout*: string
     treeSig*: string
+    treeOwner*: UnitEditor      ## whose components the Object TreeView shows
     treeDirty*: bool            ## the components of the bound form changed
     actionsDirty*: bool         ## something the action states depend on changed
     watched*: WatchedState

@@ -1024,6 +1024,34 @@ suite "the idle hook only refreshes what changed":
     for _ in 1 .. 3: Application.processMessages(0)
     check not hasMarker()
 
+  test "a collapsed node of the Object TreeView stays collapsed over a property change and a rebuild":
+    check ide.closeAllEditors()
+    let ed = ide.openUnit("unit1")
+    ide.settle
+    check ide.dropComponent("Panel")
+    check ide.dropComponent("Button")                  # into the selected panel
+    ide.settle
+    var inner: TreeNode
+    for i, n in ide.treeNodes:
+      if ide.treeComps[i].name == "Panel1": inner = n
+    check inner != nil and inner.hasChildren
+    inner.collapse()
+    let before = ide.objTree.items.top(0)
+    check not inner.expanded
+    for (c, _) in ed.componentTree:
+      if c.name == "Button1": ed.selectComponent(c)
+    check ide.inspector.setValue("caption", pvString("Changed"))
+    ide.settle
+    check ide.objTree.items.top(0) == before           # the property change did not rebuild
+    check not inner.expanded
+    check ide.dropComponent("Label")                   # a rebuild keeps what was collapsed
+    ide.settle
+    check ide.objTree.items.top(0) != before
+    var again = false
+    for i, n in ide.treeNodes:
+      if n.hasChildren and not n.expanded: again = true
+    check again
+
 suite "reopen and startup":
   setup:
     errors.setLen 0

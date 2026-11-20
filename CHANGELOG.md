@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The Object TreeView is no longer looked at again after every property change or drag
+  step, and when it is rebuilt (a component added, removed, renamed or moved) the nodes
+  you collapsed stay collapsed and the scroll position is kept.
 - Edit > Revert to Inherited is enabled only while the designer shows and the selected
   property (or component) really differs from the ancestor form's.
 - Help > About shows the version from `nimrad.nimble` (it said 0.0.1).

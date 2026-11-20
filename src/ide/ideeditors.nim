@@ -26,6 +26,16 @@ proc refreshTree*(ide: IdeForm) =
   for (c, d) in flat: sig.add $d & ":" & c.name & ":" & classNameOfComp(c) & ";"
   if sig != ide.treeSig:
     ide.treeSig = sig
+    # what the user collapsed, and where the tree was scrolled, survive a rebuild of the
+    # same form's tree (by component name)
+    let sameForm = ide.treeOwner == ed
+    ide.treeOwner = ed
+    var collapsed: seq[string]
+    let scrollY = if sameForm: ide.objTree.scrollPosY else: 0.0
+    if sameForm:
+      for i, n in ide.treeNodes:
+        if n.hasChildren and not n.expanded and i < ide.treeComps.len:
+          collapsed.add ide.treeComps[i].name
     ide.syncingTree = true
     ide.objTree.beginUpdate()
     ide.objTree.items.clear()
@@ -49,7 +59,11 @@ proc refreshTree*(ide: IdeForm) =
       ide.treeComps.add c
       ide.treeNodes.add n
     ide.objTree.expandAll()
+    if collapsed.len > 0:
+      for i, n in ide.treeNodes:
+        if n.hasChildren and ide.treeComps[i].name in collapsed: n.collapse()
     ide.objTree.endUpdate()
+    if scrollY > 0: ide.objTree.scrollTo(ide.objTree.scrollPosX, scrollY)
     ide.syncingTree = false
   # selection
   if ed != nil and ed.isForm:
@@ -367,10 +381,9 @@ proc hookEditor(ide: IdeForm, ed: UnitEditor) =
     ide.updateTabs()
     ide.updateStatus()
   ed.onDesignChanged = proc(e: UnitEditor) =
-    ide.actionsDirty = true
-    ide.treeDirty = true          # a changed name or caption shows in the Object TreeView
+    ide.actionsDirty = true       # not the tree: it shows names and classes, see onStructureChanged
     ide.updateTabs()
-  ed.onStructureChanged = proc(e: UnitEditor) = ide.treeDirty = true
+  ed.onStructureChanged = proc(e: UnitEditor) = ide.treeDirty = true   # components added, removed, renamed, moved
   ed.onMessage = proc(e: UnitEditor, msg: string) = ide.say msg
   ed.code.onCaretMove = proc(s: Control, line, col: int) = ide.updateStatus()
 
