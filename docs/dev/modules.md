@@ -22,6 +22,7 @@ the same code. The few modal dialogs are hooks (`askSave`, `showError`,
 | `designcmds` | Edit > Align..., Size... and Tab Order...: the dialog hooks (`askAlign`, `askSize`, `askOrder`) and the work on the designer |
 | `projectcommands` | Opening, creating and changing projects and units; fonts; options; rename |
 | `buildcontroller` | Compile, Run and Stop as one state machine (`BuildPhase`: idle, compiling, compiling for run, retrying after an automatic import, checking, running; Build is a compile with `buildForce`) |
+| `bookmarks` | The numbered bookmarks of a code editor: slot to line, kept in step with the edits through the model's change listener (nimvcl markers carry no number) |
 | `quickfixes` | Quick Fix and Find Unit applied to the editors or the files |
 | `ideui` | Menus, toolbars, docking and the wiring of the actions |
 | `idedialogs` | The real dialogs behind the hooks |

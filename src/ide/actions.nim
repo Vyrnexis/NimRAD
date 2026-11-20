@@ -18,6 +18,8 @@ type
     aAddToProject, aAddFont, aRemoveFont, aRemoveFromProject, aViewSource, aProjectOptions,
     aCompile, aBuild, aSyntaxCheck, aRun, aReset, aRunParameters, aShowHints, aNextMessage, aNextMessageAlt,
     aPointer, aFindComponent, aBringToFront, aSendToBack, aAlignLefts, aAlignTops, aCenterH, aCenterV,
+    aToggleBookmark0, aToggleBookmark1, aToggleBookmark2, aToggleBookmark3, aToggleBookmark4, aToggleBookmark5, aToggleBookmark6, aToggleBookmark7, aToggleBookmark8, aToggleBookmark9,
+    aGotoBookmark0, aGotoBookmark1, aGotoBookmark2, aGotoBookmark3, aGotoBookmark4, aGotoBookmark5, aGotoBookmark6, aGotoBookmark7, aGotoBookmark8, aGotoBookmark9,
     aEditorOptions, aAbout
 
   IdeActions* = ref object
@@ -87,6 +89,26 @@ const defs: array[ActId, ActDef] = [
   (aAlignTops, "Align &Top Edges", "Align the selection to the top edge", "", -1),
   (aCenterH, "Center &Horizontally", "Center the selection horizontally", "", -1),
   (aCenterV, "Center &Vertically", "Center the selection vertically", "", -1),
+  (aToggleBookmark0, "Bookmark &0", "Set bookmark 0 on the current line, or remove it when it is there", "Shift+Ctrl+0", -1),
+  (aToggleBookmark1, "Bookmark &1", "Set bookmark 1 on the current line, or remove it when it is there", "Shift+Ctrl+1", -1),
+  (aToggleBookmark2, "Bookmark &2", "Set bookmark 2 on the current line, or remove it when it is there", "Shift+Ctrl+2", -1),
+  (aToggleBookmark3, "Bookmark &3", "Set bookmark 3 on the current line, or remove it when it is there", "Shift+Ctrl+3", -1),
+  (aToggleBookmark4, "Bookmark &4", "Set bookmark 4 on the current line, or remove it when it is there", "Shift+Ctrl+4", -1),
+  (aToggleBookmark5, "Bookmark &5", "Set bookmark 5 on the current line, or remove it when it is there", "Shift+Ctrl+5", -1),
+  (aToggleBookmark6, "Bookmark &6", "Set bookmark 6 on the current line, or remove it when it is there", "Shift+Ctrl+6", -1),
+  (aToggleBookmark7, "Bookmark &7", "Set bookmark 7 on the current line, or remove it when it is there", "Shift+Ctrl+7", -1),
+  (aToggleBookmark8, "Bookmark &8", "Set bookmark 8 on the current line, or remove it when it is there", "Shift+Ctrl+8", -1),
+  (aToggleBookmark9, "Bookmark &9", "Set bookmark 9 on the current line, or remove it when it is there", "Shift+Ctrl+9", -1),
+  (aGotoBookmark0, "Bookmark &0", "Go to bookmark 0", "Ctrl+0", -1),
+  (aGotoBookmark1, "Bookmark &1", "Go to bookmark 1", "Ctrl+1", -1),
+  (aGotoBookmark2, "Bookmark &2", "Go to bookmark 2", "Ctrl+2", -1),
+  (aGotoBookmark3, "Bookmark &3", "Go to bookmark 3", "Ctrl+3", -1),
+  (aGotoBookmark4, "Bookmark &4", "Go to bookmark 4", "Ctrl+4", -1),
+  (aGotoBookmark5, "Bookmark &5", "Go to bookmark 5", "Ctrl+5", -1),
+  (aGotoBookmark6, "Bookmark &6", "Go to bookmark 6", "Ctrl+6", -1),
+  (aGotoBookmark7, "Bookmark &7", "Go to bookmark 7", "Ctrl+7", -1),
+  (aGotoBookmark8, "Bookmark &8", "Go to bookmark 8", "Ctrl+8", -1),
+  (aGotoBookmark9, "Bookmark &9", "Go to bookmark 9", "Ctrl+9", -1),
   (aEditorOptions, "&Editor Options...", "Editor font, size, tab width, tab key and line numbers", "", -1),
   (aAbout, "&About NimRAD", "About", "", icHelp)]
 

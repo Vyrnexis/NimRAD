@@ -6,7 +6,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import std/[os, strutils, algorithm]
 import nimvcl/dsl/[props, props_std]
-import ./[project, builder, ideconfig, icons, actions, palette,
+import ./[bookmarks, project, builder, ideconfig, icons, actions, palette,
           projecttree, messagespanel, uniteditor, ideform]
 
 
@@ -201,6 +201,35 @@ proc gotoLineDialog*(ide: IdeForm) =
     except ValueError:
       ide.say "Not a line number: " & v
 
+# bookmarks -------------------------------------------------------------
+
+proc toggleBookmark*(ide: IdeForm, slot: int): bool {.discardable.} =
+  ## Ctrl+Shift+0..9: bookmark `slot` on the caret line of the active editor, or
+  ## off when it is there already. A slot is one for the whole IDE: setting it
+  ## frees it in the other editors.
+  let c = ide.codeOfActive
+  if c == nil or slot notin 0 ..< BookmarkSlots: return false
+  let ed = ide.activeEditor
+  if ed.bookmarks.lineOf(slot) != c.caretPos.line:
+    for o in ide.editors:
+      if o != ed: o.bookmarks.clear slot
+  result = ed.bookmarks.toggle(slot, c.caretPos.line)
+  ide.say(if result: "Bookmark " & $slot & " set" else: "Bookmark " & $slot & " removed")
+
+proc gotoBookmark*(ide: IdeForm, slot: int): bool {.discardable.} =
+  ## Ctrl+0..9: the line of bookmark `slot`, in whichever editor holds it.
+  if slot notin 0 ..< BookmarkSlots: return false
+  for i, o in ide.editors:
+    let l = o.bookmarks.lineOf(slot)
+    if l < 0: continue
+    ide.pages.activePage = ide.sheets[i]
+    o.showCode()
+    o.code.gotoLine(l)
+    ide.activeControl = o.code
+    ide.say "Bookmark " & $slot
+    return true
+  ide.say "Bookmark " & $slot & " is not set"
+
 # panels ----------------------------------------------------------------
 
 proc panelShown(p: DockPanel): bool = p.state != dpHidden
@@ -280,6 +309,9 @@ proc refreshActions*(ide: IdeForm) =
   a[aRevertComponent].enabled = designer and ide.canRevertComponent
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
   a[aFindUnit].enabled = ed != nil
+  for i in 0 ..< BookmarkSlots:
+    a[ActId(ord(aToggleBookmark0) + i)].enabled = ed != nil
+    a[ActId(ord(aGotoBookmark0) + i)].enabled = ide.editors.len > 0
   a[aQuickFix].enabled = hasProject and ide.messages.firstWithFix() >= 0
   a[aToggleView].enabled = ed != nil and ed.isForm
   a[aAddToProject].enabled = hasProject

@@ -4,7 +4,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import std/[strutils, tables]
 import nimvcl/dsl/[props, props_std]
-import ./[project, messages, ideconfig, icons, actions, palette,
+import ./[bookmarks, project, messages, ideconfig, icons, actions, palette,
           projecttree, messagespanel, uniteditor, editortabs, quickfix,
           ideform, ideeditors, designcmds, projectcommands, buildcontroller,
           quickfixes]
@@ -73,6 +73,13 @@ template withDesigner(ide: IdeForm, d, body: untyped) =
   if ed != nil and ed.isForm:
     let d = ed.designer
     body
+
+proc connectBookmark(ide: IdeForm, slot: int) =
+  # a proc of its own: a closure made in the loop would see the last slot
+  ide.acts[ActId(ord(aToggleBookmark0) + slot)].onExecute = proc(x: Action) =
+    ide.toggleBookmark(slot)
+  ide.acts[ActId(ord(aGotoBookmark0) + slot)].onExecute = proc(x: Action) =
+    ide.gotoBookmark(slot)
 
 proc connectActions*(ide: IdeForm) =
   let a = ide.acts
@@ -157,6 +164,7 @@ proc connectActions*(ide: IdeForm) =
     ide.withDesigner(d): d.centerInParent(true, false)
   on aCenterV:
     ide.withDesigner(d): d.centerInParent(false, true)
+  for i in 0 ..< BookmarkSlots: ide.connectBookmark i
   on aEditorOptions: ide.editorOptions()
   on aAbout:
     messageDlg(AppName & " " & AppVersion & "\n\nA Delphi-style IDE for building windowed\n" &
@@ -202,6 +210,12 @@ proc buildMenu*(ide: IdeForm) =
   search.addAct a[aGotoLine]
   search.addAct a[aFindUnit]
   search.addAct a[aQuickFix]
+  search.addSeparator()
+  let toggles = search.addItem("&Toggle Bookmarks")
+  let gotos = search.addItem("Go to &Bookmark")
+  for i in 0 ..< BookmarkSlots:
+    toggles.addAct a[ActId(ord(aToggleBookmark0) + i)]
+    gotos.addAct a[ActId(ord(aGotoBookmark0) + i)]
   let view = m.addItem("&View")
   for id in [aViewProjectMgr, aViewInspector, aViewTree, aViewMessages]: view.addAct a[id]
   view.addSeparator()

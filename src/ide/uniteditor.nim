@@ -16,7 +16,7 @@ import std/[os, strutils, tables, sets, sequtils, times, algorithm]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
-import ./[project, codegen, fileio, nimsource, unitimports]
+import ./[project, codegen, fileio, nimsource, unitimports, bookmarks]
 from ./ideconfig import DefaultTabWidth
 
 type
@@ -31,6 +31,8 @@ type
       ## The set or the names of the components changed (the Object TreeView follows).
     onMessage*: proc(e: UnitEditor, msg: string)
       ## A problem or hint for the status line (a refused rename, ...).
+    bookmarks*: Bookmarks
+      ## the numbered bookmarks of the code view
     loadError*: string
       ## Why the form could not be loaded ("" when fine); the unit then only
       ## has its code view and `save` leaves the `.nfm` alone.
@@ -1320,6 +1322,7 @@ proc newUnitEditor*(project: Project, unitName: string, parent: Container): Unit
   ed.align = alClient
   ed.tabWidth = DefaultTabWidth
   e.fCode = ed
+  e.bookmarks = newBookmarks(ed)
   e.loadCode()
   ed.onModifiedChanged = proc(s: Control) = e.checkModified()
   # the designer

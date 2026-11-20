@@ -515,6 +515,13 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 Tab inserts spaces, and whether the gutter shows line numbers; it applies to every open
 editor and to the ones you open later.
 
+**Bookmarks.** `Shift+Ctrl+0` to `Shift+Ctrl+9` put bookmark 0 to 9 on the line of the
+caret (on the line already: it is removed); `Ctrl+0` to `Ctrl+9` jump to it, opening the
+unit that holds it. Each number exists once, so setting it in another unit moves it. The
+gutter marks the line, and the mark moves with the text. Bookmarks are not kept when you
+close the project. The same commands are in **Search > Toggle Bookmarks** and
+**Search > Go to Bookmark**.
+
 ## Themes
 
 **View > Dark Theme** switches the whole IDE. It is remembered.
@@ -546,6 +553,7 @@ editor and to the ones you open later.
 | `Shift+F12` | View Forms... |
 | `Shift+F11` | Add to Project |
 | `Shift+Ctrl+F11` | Project Options |
+| `Shift+Ctrl+0..9` / `Ctrl+0..9` | Set or remove / go to bookmark 0..9 |
 | `Ctrl+F9` | Compile |
 | `Shift+F9` | Build (compile everything again) |
 | `F9` | Run |

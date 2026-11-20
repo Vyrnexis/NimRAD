@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Numbered bookmarks as in Delphi: `Shift+Ctrl+0` .. `9` set bookmark N on the caret line (or
+  remove it when it is on that line), `Ctrl+0` .. `9` go to it, also in another unit. The
+  gutter shows a bookmark icon, bookmarks follow their line while you edit, and a number is
+  used once in the whole project. Search > Toggle Bookmarks and Go to Bookmark list them.
+  They are not saved with the project.
 - Tools > Editor Options... is a dialog now: font family, font size, tab width, insert spaces for
   Tab and line numbers. It applies to every open and new editor and is kept in `settings.json`
   (`editorFontFamily`, `editorTabWidth`, `editorInsertSpaces`, `editorLineNumbers`; files

@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/dsl/props
 import nimvcl/controls/inspector
 import ide/[mainform, session, project, builder, ideconfig, uniteditor, messagespanel,
-            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck]
+            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck, bookmarks]
 
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
@@ -1304,6 +1304,73 @@ suite "Editor Options":
       true
     check ide.editorOptions()
     check e1.code.tabWidth == 2 and e1.code.showLineNumbers
+    check ide.closeAllEditors()
+
+suite "Bookmarks":
+  test "numbered bookmarks follow the lines, move, and work across editors":
+    check ide.closeAllEditors()
+    let ed = ide.openUnit("unit1")
+    ed.showCode()
+    ide.activeControl = ed.code
+    let c = ed.code
+    c.text = "line0\nline1\nline2\nline3\nline4\n"
+    c.caretPos = (2, 0)
+    ide.refreshActions()
+    check ide.acts[aToggleBookmark3].enabled and ide.acts[aGotoBookmark3].enabled
+    check ide.acts[aToggleBookmark3].shortcut == shortcut("Shift+Ctrl+3")
+    check ide.acts[aGotoBookmark3].shortcut == shortcut("Ctrl+3")
+    check ide.toggleBookmark(3)
+    check ed.bookmarks.lineOf(3) == 2 and c.hasMarker(2, MarkerKind.mkBookmark)
+    c.caretPos = (4, 0)
+    check ide.toggleBookmark(7)
+    # lines inserted above move both
+    c.caretPos = (0, 0)
+    ide.typeText "new\n"
+    check ed.bookmarks.lineOf(3) == 3 and ed.bookmarks.lineOf(7) == 5
+    check c.hasMarker(3, MarkerKind.mkBookmark) and c.hasMarker(5, MarkerKind.mkBookmark)
+    # go to
+    c.caretPos = (0, 0)
+    ide.pressKey(key('3'), {ssCtrl})
+    check c.caretPos.line == 3
+    c.caretPos = (1, 0)                                 # the shortcut of Toggle
+    ide.pressKey(key('9'), {ssCtrl, ssShift})
+    check ed.bookmarks.lineOf(9) == 1
+    ide.toggleBookmark(9)
+    check ed.bookmarks.lineOf(9) == -1
+    check ide.gotoBookmark(7) and c.caretPos.line == 5
+    check not ide.gotoBookmark(5)                       # free slot
+    # toggling on the same line removes it; on another line it moves
+    c.caretPos = (1, 0)
+    check ide.toggleBookmark(3)
+    check ed.bookmarks.lineOf(3) == 1 and not c.hasMarker(3, MarkerKind.mkBookmark)
+    check ide.toggleBookmark(3) == false
+    check ed.bookmarks.lineOf(3) == -1 and c.markerLines(MarkerKind.mkBookmark) == @[5]
+    # a line removed above moves the bookmark up
+    c.select((0, 0), (1, 0))
+    ide.activeControl = c
+    discard c.model.deleteSelection()
+    check ed.bookmarks.lineOf(7) == 4
+    # its own line deleted: the bookmark stays on the line that took its place
+    c.select((4, 0), (5, 0))
+    discard c.model.deleteSelection()
+    check ed.bookmarks.lineOf(7) == 4 and c.hasMarker(4, MarkerKind.mkBookmark)
+    # a second editor: the slot is global
+    c.caretPos = (1, 0)
+    check ide.toggleBookmark(2)
+    let main = ide.openMain()
+    main.showCode()
+    ide.activeControl = main.code
+    main.code.caretPos = (1, 0)
+    check ide.toggleBookmark(2)
+    check ed.bookmarks.lineOf(2) == -1 and main.bookmarks.lineOf(2) == 1
+    ide.activeControl = main.code
+    check ide.pages.activePageIndex == ide.editorIndex(main.unitName)
+    ide.pages.activePage = ide.sheets[ide.editorIndex("unit1")]
+    check ide.gotoBookmark(2)
+    check ide.activeEditor == main and main.code.caretPos.line == 1
+    # text loaded again: the marker is gone, so is the slot
+    main.code.text = "x\ny\n"
+    check main.bookmarks.lineOf(2) == -1
     check ide.closeAllEditors()
 
 suite "reopen and startup":
