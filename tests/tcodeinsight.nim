@@ -19,10 +19,11 @@ suite "words":
     check wordBefore("", 0).prefix == ""
     check wordBefore("abc", 99).prefix == "abc"
 
-  test "Nim style matching: first letter exact, the rest free":
+  test "matching ignores case and underscores":
     check "fooBar".startsWithStyle("foo_b")
-    check "fooBar".startsWithStyle("FOOB") == false
-    check "Foo".startsWithStyle("fo") == false
+    check "fooBar".startsWithStyle("FOOB")
+    check "Foo".startsWithStyle("fo")
+    check "Foo".startsWithStyle("fx") == false
 
 suite "candidates":
   test "members of self and of a component":
@@ -40,10 +41,14 @@ suite "candidates":
     check c.texts[0 .. 1] == @["doWork", "doneFlag"] or c.texts[0 .. 1] == @["doneFlag", "doWork"]
     check "dosomething" notin c.texts
     check "do" notin c.texts                # the prefix itself
-    check c.allIt(it.text.startsWith("do"))
+    check c.allIt(it.text.toLowerAscii.startsWith("do"))
     check c.mapIt(ord(it.kind)).isSorted(system.cmp[int])
     let k = candidatesFor("", wordBefore("whi", 3), comps)
     check "while" in k.texts and k[0].kind in {ckSymbol, ckKeyword}
+
+  test "a lower-case prefix finds a capitalised name, the same case first":
+    let c = candidatesFor("let button = 1\n", wordBefore("butt", 4), comps)
+    check "Button1" in c.texts
     let l = candidatesFor("", wordBefore("Lab", 3), comps)
     check l[0].text == "Label1" and l[0].kind == ckComponent
     check "Label" in l.texts                # nimvcl symbol, behind the component

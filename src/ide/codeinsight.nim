@@ -78,9 +78,15 @@ func wordBefore*(line: string, col: int): Word =
     while q > 0 and isIdentByte(line[q - 1]): dec q
     result.qualifier = line[q ..< e]
 
+func looseKey(s: string): string =
+  ## `s` without case and underscores: what completion matches by, so `button`
+  ## also offers `Button` (Delphi's completion ignores case too).
+  for ch in s:
+    if ch != '_': result.add ch.toLowerAscii
+
 func startsWithStyle*(text, prefix: string): bool =
-  ## Nim identifier rules: `prefix` is the start of `text`.
-  prefix.len == 0 or text.styleKey.startsWith(prefix.styleKey)
+  ## `prefix` is the start of `text`, ignoring case and underscores.
+  prefix.len == 0 or text.looseKey.startsWith(prefix.looseKey)
 
 # -------------------------------------------------------------- candidates
 
@@ -130,6 +136,8 @@ proc rank*(cands: seq[Candidate], prefix: string): seq[Candidate] =
     keep.add c
   keep.sort(proc(a, b: Candidate): int =
     result = cmp(ord(a.kind), ord(b.kind))
+    if result == 0:                    # the prefix as typed (case included) first
+      result = cmp(not a.text.startsWith(prefix), not b.text.startsWith(prefix))
     if result == 0: result = cmp(a.text.len, b.text.len)
     if result == 0: result = cmp(a.text, b.text))
   result = if keep.len > MaxCandidates: keep[0 ..< MaxCandidates] else: keep
