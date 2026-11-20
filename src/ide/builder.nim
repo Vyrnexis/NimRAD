@@ -19,7 +19,7 @@
 ## flood the event queue nor use up memory. Stopping kills the whole process
 ## tree (see `proctree`).
 
-import std/[os, strutils, atomics]
+import std/[os, strutils, atomics, locks]
 import nimvcl
 import ./[project, proctree, buildcheck]
 when defined(macosx): import ./sdllink
@@ -79,12 +79,27 @@ proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
 # ----------------------------------------------------------- process streams
 
 type JobCtl = object
-  pid: Atomic[int]
-  job: Atomic[int]       # Windows job object of the process
+  lock: Lock             # guards pid and job: a kill never meets a reaped pid or a closed handle
+  pid: int
+  job: int               # Windows job object of the process
   stop: Atomic[bool]
 
 proc killTree(ctl: ptr JobCtl) =
-  killTree(ctl.pid.load, ctl.job.load)
+  withLock ctl.lock:
+    killTree(ctl.pid, ctl.job)
+
+proc publish(ctl: ptr JobCtl, child: Child) =
+  withLock ctl.lock:
+    ctl.pid = child.pid
+    ctl.job = child.job
+    if ctl.stop.load: killTree(ctl.pid, ctl.job)    # stop requested before the pid was known
+
+proc release(ctl: ptr JobCtl) =
+  ## Called before the child is reaped (and its job closed): from here on a stop
+  ## has nothing to kill.
+  withLock ctl.lock:
+    ctl.pid = 0
+    ctl.job = 0
 
 proc streamProcess(exe: string, args: seq[string], workDir: string,
                    emit: proc(lines: seq[string]) {.gcsafe.}, ctl: ptr JobCtl): int =
@@ -97,10 +112,7 @@ proc streamProcess(exe: string, args: seq[string], workDir: string,
   except CatchableError as e:
     emit @["cannot start " & exe & ": " & e.msg]
     return -1
-  if ctl != nil:
-    ctl.job.store child.job
-    ctl.pid.store child.pid
-    if ctl.stop.load: killTree ctl           # stop requested before the pid was known
+  if ctl != nil: ctl.publish child
   try:
     var buf = newString(16384)
     var acc = ""
@@ -124,10 +136,9 @@ proc streamProcess(exe: string, args: seq[string], workDir: string,
     killTree(child.pid, child.job)       # nobody reads its output any more
     raise
   finally:
-    result = child.waitChild()           # always: the child is never left unwaited
-    if ctl != nil:
-      ctl.pid.store 0
-      ctl.job.store 0
+    child.waitExited()                   # always: the child is never left unwaited
+    if ctl != nil: ctl.release()         # ... and no kill can reach its pid once it is reaped
+    result = child.waitChild()
 
 # --------------------------------------------------------------- sync variants
 
@@ -202,6 +213,8 @@ var
   gOnCompileDone: DoneProc
   gOnExit: ExitProc
 
+for k in JobKind: initLock ctls[k].lock
+
 proc buildState*(): BuildState = gState
 
 proc wasCancelled*(): bool =
@@ -251,8 +264,7 @@ proc startJob(kind: JobKind, a: JobArgs, onLines: LinesProc) =
   if threadUsed[kind]:
     joinThread threads[kind]      # the previous worker has delivered its end
   ctls[kind].stop.store false
-  ctls[kind].pid.store 0
-  ctls[kind].job.store 0
+  addr(ctls[kind]).release()
   backlog.store 0
   gCancelled = false
   gOnLines[kind] = onLines

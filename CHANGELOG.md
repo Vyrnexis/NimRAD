@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Stopping a build or program can no longer hit an unrelated process (a reaped pid or
+  a reused job handle), and a program started elsewhere at the same moment cannot
+  keep a build's output open (the pipe is close-on-exec from the start).
 - Run and Compile no longer walk `.git`, nimcache or the output folder when checking
   whether the program is up to date, and files unchanged since the last build are
   not hashed again, so the pause on large project folders is gone.

@@ -48,13 +48,25 @@ when defined(posix):
   else:
     var cEnviron {.importc: "environ", header: "<unistd.h>".}: cstringArray
 
+  when defined(linux):
+    proc cPipe2(fds: var array[2, cint], flags: cint): cint {.importc: "pipe2", header: "<unistd.h>".}
+  var cWEXITED {.importc: "WEXITED", header: "<sys/wait.h>".}: cint
+  var cWNOWAIT {.importc: "WNOWAIT", header: "<sys/wait.h>".}: cint
+  var cPPID {.importc: "P_PID", header: "<sys/wait.h>".}: cint
+
   proc startChild*(exe: string, args: seq[string], workDir: string): Child =
     ## Raises `OSError` when the program cannot be started.
     let cmd = resolveExe(exe)
     if not fileExists(cmd): raise newException(OSError, "no such program")
     var fds: array[2, cint]
-    if pipe(fds) != 0: raiseOSError(osLastError())
-    discard fcntl(fds[0], F_SETFD, FD_CLOEXEC)
+    # close-on-exec from the start, so a program spawned by another thread meanwhile
+    # does not inherit the write end (the read would then never see the end)
+    when defined(linux):
+      if cPipe2(fds, O_CLOEXEC) != 0: raiseOSError(osLastError())
+    else:
+      if pipe(fds) != 0: raiseOSError(osLastError())
+      discard fcntl(fds[0], F_SETFD, FD_CLOEXEC)
+      discard fcntl(fds[1], F_SETFD, FD_CLOEXEC)
     var acts: Tposix_spawn_file_actions
     var attr: Tposix_spawnattr
     discard posix_spawn_file_actions_init(acts)
@@ -100,6 +112,21 @@ when defined(posix):
       if result < 0 and errno == EINTR: continue
       return
 
+  proc waitExited*(c: var Child) =
+    ## Blocks until the child has ended without reaping it: until `waitChild` its
+    ## pid stays its own, so `killTree` cannot hit another process.
+    var info: SigInfo
+    while waitid(cPPID, Id(c.pid), info, cWEXITED or cWNOWAIT) < 0:
+      if errno != EINTR: return
+
+  proc readable*(c: Child, ms: int): bool =
+    ## Whether a read would not block within `ms` milliseconds (the end counts).
+    var pfd = TPollfd(fd: c.fd, events: POLLIN)
+    while true:
+      let r = poll(addr pfd, 1, cint(ms))
+      if r < 0 and errno == EINTR: continue
+      return r != 0
+
   proc waitChild*(c: var Child): int =
     ## The exit code (128 + signal when it was killed).
     discard close(c.fd)
@@ -131,6 +158,11 @@ else:
 
   proc readSome*(c: var Child, buf: var string): int =
     c.process.outputStream.readData(addr buf[0], buf.len)
+
+  proc waitExited*(c: var Child) =
+    discard c.process.waitForExit()
+
+  proc readable*(c: Child, ms: int): bool = true      # a read simply blocks
 
   proc waitChild*(c: var Child): int =
     result = c.process.waitForExit()
