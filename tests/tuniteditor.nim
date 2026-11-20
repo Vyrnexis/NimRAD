@@ -67,6 +67,11 @@ proc dropButton(r: Rig): Control =
   r.host.click(pointF(body.formOrigin.x + 40, body.formOrigin.y + 40))
   r.ed.find("Button1")
 
+proc keepHandler(r: Rig) =
+  ## Puts a line of the user's into the handler the caret is in (a handler that
+  ## is still the bare stub is removed on save).
+  discard r.ed.code.insertAt((r.ed.code.caretLine, 2), "# mine\n  ")
+
 suite "unit editor":
   test "a unit that cannot be written stays modified":
     let r = rig("savefail")
@@ -140,6 +145,7 @@ suite "unit editor":
     check r.ed.code.text.contains("proc Button1Click(self: Form1, sender: Control) =")
     check not r.ed.designerVisible
     check r.ed.code.caretLine > 0
+    r.keepHandler()
     r.ed.save()
     check not r.ed.modified
     let nfm = readFile(r.proj.dir / "unit1.nfm")
@@ -225,6 +231,7 @@ suite "unit editor":
     # events: double click on a tile creates onTimer
     r.host.click(r.ed.tileCenter(0), 2)
     check r.ed.code.text.contains("proc Timer1Timer(self: Form1,")
+    r.keepHandler()
     r.ed.save()
     let nfm = readFile(r.proj.dir / "unit1.nfm")
     check nfm.contains("object Timer1: Timer")
@@ -283,6 +290,7 @@ suite "unit editor":
     r.insp.selectProp("onShow")
     r.insp.dispatchDouble(r.insp.indexOfProp("onShow"))
     check r.ed.code.text.contains("proc FormShow(self: Form1, sender: Control) =")
+    r.keepHandler()
     r.ed.save()
     check readFile(r.proj.dir / "unit1.nfm").contains("onShow = FormShow")
     check r.proj.compiles()
@@ -307,6 +315,7 @@ suite "unit editor":
     r.ed.reloadFromDisk()
     discard r.dropButton()
     r.host.click(r.ed.find("Button1").center, 2)
+    r.keepHandler()
     r.ed.save()
     let n2 = readFile(r.proj.dir / "unit1.nfm")
     check "\r\n" in n2
@@ -348,6 +357,40 @@ suite "unit editor":
     check defaultEvent(newCheckBox(nil, "x")) == "onChange"
     check defaultEvent(newButton(nil, "x")) == "onClick"
     check defaultEvent(newTimer(nil)) == "onTimer"
+
+  test "save removes a handler that is still the generated stub":
+    let r = rig("emptyh")
+    let b = r.dropButton()
+    r.host.click(b.center, 2)
+    check r.ed.code.text.contains("proc Button1Click")
+    r.ed.save()
+    check not readFile(r.proj.dir / "unit1.nim").contains("Button1Click")
+    check not readFile(r.proj.dir / "unit1.nfm").contains("onClick")
+    check handlerNameOf(Obj(b), "onClick") == ""
+    check not r.ed.modified
+    check r.proj.compiles()
+
+  test "save keeps a handler with content and one that other code calls":
+    let r = rig("emptyh2")
+    let b = r.dropButton()
+    r.host.click(b.center, 2)
+    r.keepHandler()
+    r.ed.save()
+    check readFile(r.proj.dir / "unit1.nim").contains("proc Button1Click")
+    check readFile(r.proj.dir / "unit1.nfm").contains("onClick = Button1Click")
+    # a second button sharing an empty handler with code that calls it
+    r.ed.beginCreate "Button"
+    let body = r.ed.designedForm
+    r.host.click(pointF(body.formOrigin.x + 40, body.formOrigin.y + 120))
+    let b2 = r.ed.find("Button2")
+    check b2 != nil
+    r.host.click(b2.center, 2)
+    let last = r.ed.code.lineCount - 1
+    discard r.ed.code.insertAt((last, r.ed.code.lineAt(last).len),
+                               "\nproc other(self: Form1) =\n  Button2Click(self, nil)\n")
+    r.ed.save()
+    check readFile(r.proj.dir / "unit1.nim").contains("proc Button2Click")
+    check readFile(r.proj.dir / "unit1.nfm").contains("onClick = Button2Click")
 
   test "a handler stub is one undo step and the caret stays":
     let r = rig("undo1")

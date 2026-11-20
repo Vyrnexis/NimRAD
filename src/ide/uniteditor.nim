@@ -1067,11 +1067,59 @@ proc changedOnDisk*(e: UnitEditor): seq[string] =
     let st = fileStamp(f)
     if st.len > 0 and st != e.fNimStamp: result.add f.extractFilename
 
+proc bindsHandler(nfm, handler: string): bool =
+  ## Whether a form file binds an event to `handler` (`onClick = handler`).
+  for line in nfm.splitLines:
+    let parts = line.strip.split('=', 1)
+    if parts.len == 2 and parts[0].strip.startsWith("on") and
+       sameIdent(parts[1].strip, handler): return true
+
+proc handlerKept(e: UnitEditor, handler: string, bound: seq[(Component, string)]): bool =
+  ## Whether an empty handler must stay: an inherited component of this form is
+  ## bound to it, other code of this unit mentions it, or a form that inherits
+  ## from this one binds to it or mentions it.
+  for (c, _) in bound:
+    if c.inherited: return true
+  let without = removeEmptyHandler(e.codeOf, handler)
+  if renameHandler(without, handler, handler & "_") != without: return true
+  for d in e.project.descendantsOf(e.unitName):
+    let u = e.project.units[e.project.findUnit(d)]
+    try:
+      if u.nfmPath.len > 0 and fileExists(e.project.nfmPathOf(u)) and
+         bindsHandler(readFile(e.project.nfmPathOf(u)), handler): return true
+      if fileExists(e.project.nimPathOf(u)):
+        let src = readFile(e.project.nimPathOf(u))
+        if renameHandler(src, handler, handler & "_") != src: return true
+    except CatchableError: return true      # cannot tell: keep it
+
+proc removeEmptyHandlers(e: UnitEditor) =
+  ## Like Delphi, a handler that was only generated (its body is the stub's
+  ## `discard`) is removed when the unit is saved, and the events bound to it
+  ## are cleared first, so the form still compiles. A handler with any
+  ## content of the user, one still used by an inherited component, by other
+  ## code or by a descendant form is kept.
+  if e.fDesigner == nil or not e.fUnit.isForm: return
+  var removed = false
+  for handler in emptyHandlers(e.codeOf, e.fUnit.formType):
+    let h = handler
+    var bound: seq[(Component, string)]
+    e.walkNames(proc(c: Component) =
+      for (ev, name) in c.handlerNames:
+        if name == h: bound.add (c, ev))
+    if e.handlerKept(h, bound): continue
+    e.setCodeText(removeEmptyHandler(e.codeOf, h))
+    for (c, ev) in bound: setProp(Obj(c), ev, pvEvent(""))
+    removed = true
+  if removed:
+    e.touchDesign()
+    e.refreshInspector()
+
 proc save*(e: UnitEditor) =
   ## Writes the `.nfm` (when the form changed) and the `.nim` (when the code
   ## changed); both are clean afterwards. The control imports between the
   ## `nimrad: imports` markers of the `.nim` follow the classes of the form
   ## (see `unitimports`).
+  e.removeEmptyHandlers()
   if e.fDesigner != nil and e.fDesignDirty:
     let nfm = e.designNfm
     writeFileAtomic(e.project.nfmPathOf(e.fUnit), nfm)

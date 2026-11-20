@@ -227,6 +227,29 @@ suite "same handler name in ancestor and descendant":
     check code == 0
     check o.strip == "@[\"F2\", \"F1\", \"F1\"]"         # Form2's, its call of Form1's, then Form1's own
 
+suite "empty handlers on save and descendants":
+  test "an empty handler of the ancestor stays while a descendant uses it":
+    let p = newApplicationProject(root / "emp", "emp")
+    let e1 = newUnitEditor(p, "unit1", host)
+    e1.beginCreate "Button"
+    host.click(pointF(e1.designedForm.formOrigin.x + 40, e1.designedForm.formOrigin.y + 40))
+    e1.save()
+    let u2 = p.newInheritedFormUnit("unit1")
+    p.save()
+    let e2 = newUnitEditor(p, u2.name, host)
+    let last = e2.code.lineCount - 1
+    discard e2.code.insertAt((last, e2.code.lineAt(last).len),
+                             "\nproc other(self: Form2) =\n  Button1Click(Form1(self), nil)\n")
+    e2.save()
+    e2.dispose()                                  # its view covers the ancestor's
+    e1.dispose()
+    let e3 = newUnitEditor(p, "unit1", host)
+    e3.dblClick(e3.find("Button1"))
+    check "proc Button1Click(self: Form1" in e3.code.text
+    e3.save()
+    check "proc Button1Click" in readFile(root / "emp" / "unit1.nim")
+    check "onClick = Button1Click" in readFile(root / "emp" / "unit1.nfm")
+
 suite "File > New Inherited Form":
   test "the command lists the forms, creates the unit and opens it":
     let ide = newIdeForm(settingsFile = root / "settings.json")
@@ -536,6 +559,7 @@ suite "an open descendant after its ancestor was renamed":
     e1.beginCreate "Button"
     host.click(pointF(e1.designedForm.formOrigin.x + 40, e1.designedForm.formOrigin.y + 40))
     e1.dblClick(e1.find("Button1"))                  # the ancestor has a Button1Click
+    discard e1.code.insertAt((e1.code.caretLine, 2), "# mine\n  ")   # (a bare stub is removed on save)
     e1.save()
     discard p.newInheritedFormUnit("unit1")
     p.save()

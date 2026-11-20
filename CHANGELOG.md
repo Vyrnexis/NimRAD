@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Save removes an event handler that is still the generated stub (its body is only `discard`)
+  and clears the events bound to it, as Delphi does. A handler with any code of yours, one
+  that other code calls, one an inherited component uses, or one a descendant form uses stays.
 - A double click in the designer creates the default event of the class, as in Delphi:
   `onChange` for Edit, Memo, ComboBox, TrackBar, ScrollBar, SpinEdit, CheckBox, ListBox
   and RadioButton, `onTimer` for Timer, `onShow` for the form, `onClick` otherwise.

@@ -104,6 +104,9 @@ Clearing the text (or `Esc`) brings back the tabs exactly as they were.
 * Double click a component to create the handler of its default event and jump to it:
   `onChange` for Edit, Memo, ComboBox, TrackBar, ScrollBar, SpinEdit, CheckBox, ListBox and
   RadioButton, `onTimer` for Timer, `onShow` for the form, `onClick` for the rest.
+* Saving a form unit removes the handlers you never filled in (the body is only the
+  generated `discard`) and clears their events in the form. Handlers with code, handlers
+  that other code or a descendant form uses, and those of inherited components stay.
 * **Edit** and the toolbar work on whatever you are editing: in the form
   designer they undo, copy, cut, paste and delete components; in the code they
   work on the text.
