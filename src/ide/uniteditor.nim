@@ -1042,21 +1042,13 @@ proc redo*(e: UnitEditor): bool {.discardable.} =
 proc designNfm(e: UnitEditor): string =
   ## The `.nfm` text of the designed form. An inherited form is written as the
   ## difference from its ancestor's file (read afresh).
-  var root: NfmNode
-  if e.fForm.ancestorPath.len > 0:
-    var kids: seq[Obj]
-    for c in e.fBody.children: kids.add Obj(c)
-    for t in e.tiles: kids.add Obj(t.component)
-    root = formToNfmNode(e.fForm, kids)
-  else:
-    root = objectToNfmNode(Obj(e.fForm))
-    root.children = @[]
-    for c in e.fBody.children:
-      let n = objectToNfmNode(Obj(c))
-      if n != nil: root.children.add n
-    for t in e.tiles:
-      let n = objectToNfmNode(Obj(t.component))
-      if n != nil: root.children.add n
+  ## The references between the form's objects (`images`, `popupMenu`...) are
+  ## written only when the target is in the saved tree, so every child is saved
+  ## through one call that sees the whole tree.
+  var kids: seq[Obj]
+  for c in e.fBody.children: kids.add Obj(c)
+  for t in e.tiles: kids.add Obj(t.component)
+  let root = formToNfmNode(e.fForm, kids)
   result = writeNfm(root)
   if e.fNfmEol == "\r\n": result = result.replace("\n", "\r\n")
 
