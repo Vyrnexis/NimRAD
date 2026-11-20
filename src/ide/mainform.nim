@@ -18,7 +18,8 @@
 
 import std/[os, strutils]
 import nimvcl
-from sdl3 import getWindowFlags, maximizeWindow, WINDOW_MAXIMIZED
+from sdl3 import getWindowFlags, maximizeWindow, WINDOW_MAXIMIZED, Rect,
+  getDisplayForRect, getDisplayUsableBounds
 import ./[project, ideconfig, icons, actions, palette, uniteditor]
 import ./[ideform, idedialogs, ideeditors, projectcommands, buildcontroller, quickfixes, ideui]
 export ideform, idedialogs, ideeditors, projectcommands, buildcontroller, quickfixes, ideui
@@ -35,6 +36,18 @@ proc rememberWindow*(ide: IdeForm) =
     let pos = w.position
     ide.settings.window = (pos.x, pos.y, int(size.w), int(size.h), false)
 
+proc onSomeDisplay(x, y, w, h: int): bool =
+  ## Whether a good part of the rectangle (the title bar at least) lies on a
+  ## display, so a window put there can be reached; a display that has gone
+  ## (a monitor unplugged) must not hide the IDE.
+  var r = Rect(x: cint(x), y: cint(y), w: cint(w), h: cint(h))
+  let d = getDisplayForRect(addr r)
+  var u: Rect
+  if d == 0 or not getDisplayUsableBounds(d, u): return false
+  let ix = min(x + w, int(u.x + u.w)) - max(x, int(u.x))
+  let iy = min(y + 40, int(u.y + u.h)) - max(y, int(u.y))
+  ix >= 100 and iy >= 20
+
 proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): IdeForm =
   ## Builds the window (no project yet; see `startup`). `Application.init()`
   ## must have run. The settings are read from (and saved to) `settingsFile`.
@@ -45,7 +58,8 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide.setBounds(0, 0, width.float32, height.float32)
   ide.position = poScreenCenter
   let ws = ide.settings.window
-  if ws.w >= MinWindowW and ws.h >= MinWindowH:     # where the window was last time
+  if ws.w >= MinWindowW and ws.h >= MinWindowH and onSomeDisplay(ws.x, ws.y, ws.w, ws.h):
+    # where the window was last time, when that is still on a display
     ide.setBounds(ws.x.float32, ws.y.float32, ws.w.float32, ws.h.float32)
     ide.position = poDesigned
   if ws.maximized:
