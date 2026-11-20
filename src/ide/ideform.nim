@@ -48,6 +48,12 @@ type
     widthMode*, heightMode*: SizeMode
     width*, height*: int
 
+  EditorOptions* = object
+    ## The Tools > Editor Options dialog (what `Settings` keeps for the editors).
+    fontFamily*: string        ## "" = the theme's monospace font
+    fontSize*, tabWidth*: int
+    insertSpaces*, lineNumbers*: bool
+
   WatchedState* = tuple[msgs, panels, units: int, state: BuildState, prop: string]
 
   BuildPhase* = enum
@@ -110,6 +116,8 @@ type
       ## The Align dialog; false when cancelled.
     askSize*: proc(o: var SizeOptions): bool
       ## The Size dialog; false when cancelled.
+    askEditorOptions*: proc(o: var EditorOptions): bool
+      ## The Editor Options dialog; false when cancelled.
     askOrder*: proc(title: string, items: seq[string]): seq[int]
       ## A list the user puts in order (Move Up, Move Down): the indexes of
       ## `items` in the new order, or empty when cancelled.
@@ -187,10 +195,20 @@ proc isDark*(ide: IdeForm): bool = ide.settings.theme == "dark"
 
 proc editorFont*(ide: IdeForm): FontSpec =
   result = currentTheme().monoFont
+  if ide.settings.editorFontFamily.len > 0: result.family = ide.settings.editorFontFamily
   result.size = ide.settings.editorFontSize.float32
 
+proc applyEditorOptions*(ide: IdeForm, ed: UnitEditor) =
+  ## The font, tab width, tab key and gutter of the settings for one code editor.
+  let s = ide.settings
+  ed.code.font = ide.editorFont
+  ed.code.tabWidth = s.editorTabWidth
+  ed.code.insertSpaces = s.editorInsertSpaces
+  ed.code.showLineNumbers = s.editorLineNumbers
+
 proc applyEditorFont*(ide: IdeForm) =
-  for e in ide.editors: e.code.font = ide.editorFont
+  ## Applies the editor settings to every open editor and to the program Output.
+  for e in ide.editors: ide.applyEditorOptions e
   ide.messages.output.font = ide.editorFont
 
 proc updateCaption*(ide: IdeForm) =

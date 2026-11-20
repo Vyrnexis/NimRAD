@@ -87,7 +87,7 @@ const defs: array[ActId, ActDef] = [
   (aAlignTops, "Align &Top Edges", "Align the selection to the top edge", "", -1),
   (aCenterH, "Center &Horizontally", "Center the selection horizontally", "", -1),
   (aCenterV, "Center &Vertically", "Center the selection vertically", "", -1),
-  (aEditorOptions, "&Editor Options...", "Editor font size", "", -1),
+  (aEditorOptions, "&Editor Options...", "Editor font, size, tab width, tab key and line numbers", "", -1),
   (aAbout, "&About NimRAD", "About", "", icHelp)]
 
 proc `[]`*(a: IdeActions, id: ActId): Action = a.acts[id]

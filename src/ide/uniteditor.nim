@@ -17,6 +17,7 @@ import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
 import ./[project, codegen, fileio, nimsource, unitimports]
+from ./ideconfig import DefaultTabWidth
 
 type
   UnitEditor* = ref object of RootObj
@@ -1317,7 +1318,7 @@ proc newUnitEditor*(project: Project, unitName: string, parent: Container): Unit
   # the code
   let ed = newCodeEdit(view)
   ed.align = alClient
-  ed.tabWidth = 2
+  ed.tabWidth = DefaultTabWidth
   e.fCode = ed
   e.loadCode()
   ed.onModifiedChanged = proc(s: Control) = e.checkModified()

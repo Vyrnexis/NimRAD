@@ -15,18 +15,22 @@ proc setDark*(ide: IdeForm, dark: bool) =
   ide.applyEditorFont()
   ide.refreshActions()
 
-proc editorOptions*(ide: IdeForm) =
-  var v = $ide.settings.editorFontSize
-  let ok = ide.askText("Editor Options", "Font size (6 - 40):", v)
-  if not ok: return
-  try:
-    let n = parseInt(v.strip)
-    if n notin 6 .. 40: raise newException(ValueError, "range")
-    ide.settings.editorFontSize = n
-    ide.applyEditorFont()
-    ide.saveSettings()
-  except ValueError:
-    ide.say "Font size must be a number from 6 to 40"
+proc editorOptions*(ide: IdeForm): bool {.discardable.} =
+  ## Tools > Editor Options: the dialog gives the new values, which are applied
+  ## to every editor and kept in the settings.
+  let s = ide.settings
+  var o = EditorOptions(fontFamily: s.editorFontFamily, fontSize: s.editorFontSize,
+                        tabWidth: s.editorTabWidth, insertSpaces: s.editorInsertSpaces,
+                        lineNumbers: s.editorLineNumbers)
+  if ide.askEditorOptions == nil or not ide.askEditorOptions(o): return false
+  ide.settings.editorFontFamily = o.fontFamily.strip
+  ide.settings.editorFontSize = clamp(o.fontSize, 6, 40)
+  ide.settings.editorTabWidth = clamp(o.tabWidth, 1, 16)
+  ide.settings.editorInsertSpaces = o.insertSpaces
+  ide.settings.editorLineNumbers = o.lineNumbers
+  ide.applyEditorFont()
+  ide.saveSettings()
+  true
 
 proc showProjectOptions*(ide: IdeForm) =
   ## Project > Options: output folder, compiler flags, conditional defines,

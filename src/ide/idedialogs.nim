@@ -1,7 +1,7 @@
 ## The real dialogs behind the hooks of `IdeForm` (`askSave`, `showError`,
 ## `askText`, `pickFile`, `pickItem`); tests replace the hooks.
 
-import std/sequtils
+import std/[sequtils, strutils]
 import nimvcl
 import ./[project, ideform]
 
@@ -156,3 +156,43 @@ proc askOrderDefault*(title: string, items: seq[string]): seq[int] =
   d.activeControl = lb
   d.modal(r):
     if r == mrOk: result = order
+
+proc askEditorOptionsDefault*(o: var EditorOptions): bool =
+  let d = newForm(nil, 440, 290)
+  d.caption = "Editor Options"
+  d.borderStyle = bsSingle
+  d.position = poScreenCenter
+  newLabel(d, "Font:", 20, 24, 100)
+  let family = newComboBox(d, csDropDown, 130, 20, 290)
+  family.items.add "(default monospace)"
+  var seen: seq[string]
+  for f in systemFontFamilies() & registeredFontFamilies():
+    if f notin seen:
+      seen.add f
+      family.items.add f
+  family.text = if o.fontFamily.len > 0: o.fontFamily else: family.items[0]
+  newLabel(d, "Font size (6 - 40):", 20, 66, 110)
+  let size = newSpinEdit(d, o.fontSize, 130, 62, 84, 24)
+  size.minValue = 6
+  size.maxValue = 40
+  newLabel(d, "Tab width (1 - 16):", 20, 106, 110)
+  let tab = newSpinEdit(d, o.tabWidth, 130, 102, 84, 24)
+  tab.minValue = 1
+  tab.maxValue = 16
+  let spaces = newCheckBox(d, "Insert spaces for Tab", o.insertSpaces, 20, 144, 380)
+  let nums = newCheckBox(d, "Show line numbers", o.lineNumbers, 20, 176, 380)
+  let ok = newButton(d, "OK", 244, 230, 84, 32)
+  ok.modalResult = mrOk
+  ok.isDefault = true
+  let cancel = newButton(d, "Cancel", 336, 230, 84, 32)
+  cancel.modalResult = mrCancel
+  cancel.isCancel = true
+  d.modal(r):
+    if r == mrOk:
+      let t = family.text.strip
+      o.fontFamily = if t == family.items[0] or t.len == 0: "" else: t
+      o.fontSize = size.value
+      o.tabWidth = tab.value
+      o.insertSpaces = spaces.checked
+      o.lineNumbers = nums.checked
+      result = true

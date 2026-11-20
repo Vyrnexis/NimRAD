@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Tools > Editor Options... is a dialog now: font family, font size, tab width, insert spaces for
+  Tab and line numbers. It applies to every open and new editor and is kept in `settings.json`
+  (`editorFontFamily`, `editorTabWidth`, `editorInsertSpaces`, `editorLineNumbers`; files
+  without them keep working). The default tab width stays 2.
 - Project > Build (`Shift+F9`) compiles everything again with `-f`, ignoring the up-to-date
   check; Project > Syntax Check runs `nim check` and lists the messages like a compile,
   without making a program or writing the build record. Program Reset stops either.

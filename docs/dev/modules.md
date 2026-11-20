@@ -13,7 +13,7 @@ that makes the documentation pictures (`src/ide/session.nim`, used by
 `mainform` builds the window and re-exports the parts. Everything the user can
 do is a proc on `IdeForm`, so the menu, the scripted session and the tests drive
 the same code. The few modal dialogs are hooks (`askSave`, `showError`,
-`askText`, `pickFile`, `pickItem`, `askAlign`, `askSize`, `askOrder`) that tests replace.
+`askText`, `pickFile`, `pickItem`, `askAlign`, `askSize`, `askOrder`, `askEditorOptions`) that tests replace.
 
 | Module | Holds |
 |---|---|

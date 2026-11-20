@@ -511,7 +511,9 @@ Linux is what NimRAD is built and tested on. Windows and macOS are experimental
 
 `Ctrl+F` find, `Ctrl+H` replace, `F3` next match, `Alt+G` go to line. The code
 editor has Nim highlighting, folding, bracket matching and auto indent.
-**Tools > Editor Options** sets the font size.
+**Tools > Editor Options** sets the font family and size, the tab width (1 - 16), whether
+Tab inserts spaces, and whether the gutter shows line numbers; it applies to every open
+editor and to the ones you open later.
 
 ## Themes
 
@@ -554,7 +556,7 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 ## Files the IDE keeps
 
 `~/.config/nimrad/settings.json` (`$XDG_CONFIG_HOME` is honoured) holds the
-recent projects, the theme, the editor font size, the compiler to run, whether
+recent projects, the theme, the editor options (font, size, tab width, spaces, line numbers), the compiler to run, whether
 hints are shown and the docking layout. (Before the rename to NimRAD, version
 0.2.0, the program was called nimvcl-ide and its folder was `nimvcl-ide`; the
 folder is moved to `nimrad` the first time NimRAD starts, and only when `nimrad`

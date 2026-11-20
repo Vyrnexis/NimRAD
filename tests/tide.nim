@@ -1266,6 +1266,46 @@ suite "Build and Syntax Check":
     check ide.waitIdle(60)
     check ide.messages.list.items[ide.messages.list.items.count - 1].caption == "Syntax check cancelled"
 
+suite "Editor Options":
+  test "the dialog's values go to every open and new editor and into settings.json":
+    check ide.closeAllEditors()
+    let e1 = ide.openUnit("unit1")
+    check e1.code.tabWidth == 2 and e1.code.insertSpaces and e1.code.showLineNumbers
+    var seen = EditorOptions()
+    ide.askEditorOptions = proc(o: var EditorOptions): bool =
+      seen = o
+      o = EditorOptions(fontFamily: "serif", fontSize: 17, tabWidth: 4, insertSpaces: false,
+                        lineNumbers: false)
+      true
+    check ide.editorOptions()
+    check seen.fontSize == DefaultFontSize and seen.tabWidth == 2 and seen.insertSpaces
+    for e in [e1]:
+      check e.code.font.family == "serif" and e.code.font.size == 17
+      check e.code.tabWidth == 4 and not e.code.insertSpaces and not e.code.showLineNumbers
+    check ide.messages.output.font.size == 17
+    let ed2 = ide.openMain()                           # a new editor gets them too
+    check ed2.code.tabWidth == 4 and not ed2.code.showLineNumbers and ed2.code.font.family == "serif"
+    let s = loadSettings(settingsFile)
+    check s.editorFontFamily == "serif" and s.editorFontSize == 17 and s.editorTabWidth == 4
+    check not s.editorInsertSpaces and not s.editorLineNumbers
+    # values outside the ranges are clamped; cancel changes nothing
+    ide.askEditorOptions = proc(o: var EditorOptions): bool =
+      o.fontSize = 500
+      o.tabWidth = 0
+      true
+    check ide.editorOptions()
+    check ide.settings.editorFontSize == 40 and ide.settings.editorTabWidth == 1
+    ide.askEditorOptions = proc(o: var EditorOptions): bool = false
+    check not ide.editorOptions()
+    check ide.settings.editorFontSize == 40
+    # back to the defaults
+    ide.askEditorOptions = proc(o: var EditorOptions): bool =
+      o = EditorOptions(fontSize: DefaultFontSize, tabWidth: 2, insertSpaces: true, lineNumbers: true)
+      true
+    check ide.editorOptions()
+    check e1.code.tabWidth == 2 and e1.code.showLineNumbers
+    check ide.closeAllEditors()
+
 suite "reopen and startup":
   setup:
     errors.setLen 0

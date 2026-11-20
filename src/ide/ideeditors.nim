@@ -418,7 +418,7 @@ proc openUnit*(ide: IdeForm, unitName: string): UnitEditor =
   ide.editors.add ed
   ide.sheets.add sheet
   ide.hookEditor ed
-  ed.code.font = ide.editorFont
+  ide.applyEditorOptions ed
   ide.pages.activePage = sheet
   ide.bindActive()
   ide.say "Opened " & unitName

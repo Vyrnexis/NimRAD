@@ -73,6 +73,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide.askAlign = askAlignDefault
   ide.askSize = askSizeDefault
   ide.askOrder = askOrderDefault
+  ide.askEditorOptions = askEditorOptionsDefault
   ide.pickFile = pickFileDefault(ide)
   Application.theme = if ide.isDark: themeDark() else: themeLight()
 

@@ -26,6 +26,23 @@ suite "settings":
     let q = loadSettings(path)
     check q == s
 
+  test "editor options: defaults, round trip, old files and bad values":
+    let d = defaultSettings()
+    check d.editorTabWidth == 2 and d.editorInsertSpaces and d.editorLineNumbers and d.editorFontFamily == ""
+    var s = defaultSettings()
+    s.editorFontFamily = "DejaVu Sans Mono"
+    s.editorTabWidth = 4
+    s.editorInsertSpaces = false
+    s.editorLineNumbers = false
+    check saveSettings(s, path)
+    check loadSettings(path) == s
+    writeFile(path, """{"theme": "dark", "editorFontSize": 15, "somethingNew": 1}""")   # an old file
+    let o = loadSettings(path)
+    check o.editorFontSize == 15 and o.editorTabWidth == 2 and o.editorInsertSpaces and o.editorLineNumbers
+    writeFile(path, """{"editorTabWidth": 99, "editorInsertSpaces": "no", "editorLineNumbers": 0, "editorFontFamily": 7}""")
+    let b = loadSettings(path)
+    check b.editorTabWidth == 2 and b.editorInsertSpaces and b.editorLineNumbers and b.editorFontFamily == ""
+
   test "the window bounds are kept only when they make sense":
     writeFile(path, """{"window": {"x": -5, "y": 7, "w": 1000, "h": 700, "maximized": true}}""")
     check loadSettings(path).window == (-5, 7, 1000, 700, true)

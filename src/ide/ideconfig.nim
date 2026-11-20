@@ -3,7 +3,8 @@
 ##
 ## ```json
 ## {"recentProjects": ["/home/me/app/app.nimproj"], "theme": "light",
-##  "editorFontSize": 13, "nimPath": "nim", "layout": "", "showHints": false,
+##  "editorFontSize": 13, "editorFontFamily": "", "editorTabWidth": 2,
+##  "editorInsertSpaces": true, "editorLineNumbers": true, "nimPath": "nim", "layout": "", "showHints": false,
 ##  "window": {"x": 100, "y": 60, "w": 1360, "h": 860, "maximized": false}}
 ## ```
 ##
@@ -17,6 +18,7 @@ import ./fileio
 const
   MaxRecent* = 10
   DefaultFontSize* = 13
+  DefaultTabWidth* = 2
   MinWindowW* = 480              ## smaller saved windows are ignored
   MinWindowH* = 320
 
@@ -25,6 +27,10 @@ type
     recentProjects*: seq[string]   ## most recent first, at most `MaxRecent`
     theme*: string                 ## "light" or "dark"
     editorFontSize*: int
+    editorFontFamily*: string      ## "" = the theme's monospace font
+    editorTabWidth*: int           ## 1 .. 16
+    editorInsertSpaces*: bool      ## Tab inserts spaces instead of a tab character
+    editorLineNumbers*: bool       ## line numbers in the gutter
     nimPath*: string               ## the compiler to run ("nim" = look in PATH)
     layout*: string                ## docking layout string (opaque to this module)
     showHints*: bool               ## compiler hints are requested and listed
@@ -34,7 +40,8 @@ type
     ## Position and size of the window when it is not maximized, and whether it was.
 
 proc defaultSettings*(): Settings =
-  Settings(theme: "light", editorFontSize: DefaultFontSize, nimPath: "nim")
+  Settings(theme: "light", editorFontSize: DefaultFontSize, editorTabWidth: DefaultTabWidth,
+           editorInsertSpaces: true, editorLineNumbers: true, nimPath: "nim")
 
 const LegacySettingsDirName* = "nimvcl-ide"   ## the folder before the rename to NimRAD
 
@@ -72,6 +79,15 @@ proc loadSettings*(path = settingsPath()): Settings =
   if j.hasKey("editorFontSize") and j["editorFontSize"].kind == JInt:
     let n = j["editorFontSize"].getInt
     if n in 6 .. 96: result.editorFontSize = n
+  if j.hasKey("editorFontFamily") and j["editorFontFamily"].kind == JString:
+    result.editorFontFamily = j["editorFontFamily"].getStr.strip
+  if j.hasKey("editorTabWidth") and j["editorTabWidth"].kind == JInt:
+    let n = j["editorTabWidth"].getInt
+    if n in 1 .. 16: result.editorTabWidth = n
+  if j.hasKey("editorInsertSpaces") and j["editorInsertSpaces"].kind == JBool:
+    result.editorInsertSpaces = j["editorInsertSpaces"].getBool
+  if j.hasKey("editorLineNumbers") and j["editorLineNumbers"].kind == JBool:
+    result.editorLineNumbers = j["editorLineNumbers"].getBool
   if j.hasKey("nimPath") and j["nimPath"].kind == JString and j["nimPath"].getStr.strip.len > 0:
     result.nimPath = j["nimPath"].getStr
   if j.hasKey("layout") and j["layout"].kind == JString:
@@ -95,7 +111,9 @@ proc saveSettings*(s: Settings, path = settingsPath()): bool =
   try:
     createDir(parentDir(path))
     let j = %*{"recentProjects": s.recentProjects, "theme": s.theme,
-               "editorFontSize": s.editorFontSize, "nimPath": s.nimPath,
+               "editorFontSize": s.editorFontSize, "editorFontFamily": s.editorFontFamily,
+               "editorTabWidth": s.editorTabWidth, "editorInsertSpaces": s.editorInsertSpaces,
+               "editorLineNumbers": s.editorLineNumbers, "nimPath": s.nimPath,
                "layout": s.layout, "showHints": s.showHints,
                "window": {"x": s.window.x, "y": s.window.y, "w": s.window.w, "h": s.window.h,
                           "maximized": s.window.maximized}}
