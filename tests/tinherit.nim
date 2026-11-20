@@ -464,6 +464,18 @@ suite "an ancestor that is saved while its descendants are open":
     check Button(d.comp("Button1")).caption == "Four" and Control(d.comp("Button1")).left == 230
     check not a.modified and not d.modified
 
+  test "closing the window saves the same way (descendants first, with the rebase)":
+    ide.askSave = proc(unitName: string): SaveChoice = scSave
+    a.setOn("Button1", "caption", pvString("Five"))
+    d.setOn("Button1", "left", pvFloat(240))
+    var can = true
+    ide.onCloseQuery(ide, can)
+    check can
+    check "Five" in nfm("unit1")
+    check "left = 240" in nfm("unit2") and "Five" notin nfm("unit2")
+    check not a.modified and not d.modified
+    check Button(d.comp("Button1")).caption == "Five"
+
   test "an override of something the ancestor no longer has is dropped, with a message":
     d.setOn("Label1", "caption", pvString("Mine"))
     check d.designModified

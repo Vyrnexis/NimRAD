@@ -89,20 +89,19 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
     discard ide.site.loadLayout(ide.settings.layout)
 
   ide.onCloseQuery = proc(sender: Form, canClose: var bool) =
+    # ask for every modified unit first (Cancel keeps the window open), then
+    # save the chosen ones the way Save All does
+    var chosen: seq[UnitEditor]
     for e in ide.editors:
       if e.modified:
-        let choice = ide.askSave(e.unitName)
-        case choice
+        case ide.askSave(e.unitName)
         of scCancel:
           canClose = false
           return
-        of scSave:
-          if not ide.trySave(e):
-            canClose = false
-            return
+        of scSave: chosen.add e
         of scDiscard: discard
-    if not ide.trySaveProject():
-      canClose = false
+    if not (ide.saveEditors(chosen) and ide.trySaveProject()):
+      canClose = false                   # a failed save counts as Cancel
       return
     ide.programReset()
     ide.saveLayout()

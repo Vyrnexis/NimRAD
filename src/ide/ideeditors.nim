@@ -499,17 +499,20 @@ proc depth(ide: IdeForm, ed: UnitEditor): int =
     name = ide.project.units[i].ancestor
     inc result
 
-proc saveAll*(ide: IdeForm): bool {.discardable.} =
-  ## Saves every unit and the project; false (reported) when one cannot be written.
+proc saveEditors*(ide: IdeForm, eds: seq[UnitEditor]): bool =
+  ## Saves the given units in an order that is safe for inheritance; false
+  ## (reported) at the first one that cannot be written.
   # descendants first: their form files hold differences from the ancestor file as
   # it is on disk, so they are written before an ancestor changes it
-  var order = ide.editors
+  var order = eds
   order.sort(proc(a, b: UnitEditor): int = cmp(ide.depth(b), ide.depth(a)))
   for e in order:
-    if not ide.trySave(e):
-      ide.updateTabs()
-      return false
-  result = ide.trySaveProject()
+    if not ide.trySave(e): return false
+  true
+
+proc saveAll*(ide: IdeForm): bool {.discardable.} =
+  ## Saves every unit and the project; false (reported) when one cannot be written.
+  result = ide.saveEditors(ide.editors) and ide.trySaveProject()
   ide.updateTabs()
   if result: ide.say "All saved"
 
