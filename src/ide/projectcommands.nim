@@ -191,14 +191,22 @@ proc removeFromProject*(ide: IdeForm, unitName: string): bool =
   if ide.project.isMainForm(u):
     ide.fail "The main form (" & u.formType & ") cannot be removed from the project."
     return false
+  let kids = ide.project.inheritorsOf(unitName)
+  if kids.len > 0:                         # checked first: the editor stays open
+    ide.fail "Cannot remove " & unitName & ": it is the ancestor of " & kids.join(", ") &
+             "; remove those forms first."
+    return false
   let ed = ide.editorOf(unitName)
   if ed != nil and not ide.closeEditor(ed): return false
   let mainEd = ide.beforeMainEdit()
-  ide.project.removeUnit(unitName)         # also drops its import and create line from the main file
-  ide.project.save()
+  try:
+    ide.project.removeUnit(unitName)       # also drops its import and create line from the main file
+    ide.project.save()
+    result = true
+  except CatchableError as e:
+    ide.fail "Cannot remove " & unitName & ": " & e.msg
   ide.afterMainEdit(mainEd)
   ide.refreshProject()
-  true
 
 # options ---------------------------------------------------------------
 

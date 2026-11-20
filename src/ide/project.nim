@@ -544,6 +544,10 @@ proc isMainForm*(p: Project, u: ProjectUnit): bool =
   u.isForm and fileExists(p.mainPath) and
     mainfile.isMainForm(readFile(p.mainPath), u.formType)
 
+proc inheritorsOf*(p: Project, name: string): seq[string] =
+  ## The units whose form inherits directly from `name`'s form.
+  p.units.filterIt(it.ancestor == name).mapIt(it.name)
+
 proc removeUnit*(p: Project, name: string, deleteFiles = false) =
   ## Drops the unit from the project (and its import and create line from the
   ## main file, see `removeFromMain`); with `deleteFiles` its files go too.
@@ -553,7 +557,7 @@ proc removeUnit*(p: Project, name: string, deleteFiles = false) =
   if p.isMainForm(u):
     raise newException(ProjectError, "the form of unit " & name & " is the program's main form; " &
                        "it cannot be removed")
-  let kids = p.units.filterIt(it.ancestor == name).mapIt(it.name)
+  let kids = p.inheritorsOf(name)
   if kids.len > 0:
     raise newException(ProjectError, "unit " & name & " is the ancestor of " &
                        kids.join(", ") & "; remove those forms first")

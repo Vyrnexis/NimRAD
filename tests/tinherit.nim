@@ -253,6 +253,22 @@ suite "File > New Inherited Form":
     ide.pickItem = nil
     ide.showWindow()
 
+  test "an ancestor cannot be removed from the project; its editor stays open":
+    let ide = newIdeForm(settingsFile = root / "settings3.json")
+    ide.showWindow(1360, 860)
+    var errors: seq[string]
+    ide.showError = proc(text: string) = errors.add text
+    check ide.newApplication(root / "ide3", "ideapp3")
+    check ide.newInheritedForm("unit1") != nil              # unit2 inherits from unit1
+    check ide.newInheritedForm("unit2") != nil              # unit3 inherits from unit2
+    check ide.editorOf("unit2") != nil
+    check not ide.removeFromProject("unit2")
+    check errors.len == 1 and "unit3" in errors[0]
+    check ide.editorOf("unit2") != nil and ide.project.findUnit("unit2") >= 0
+    check ide.removeFromProject("unit3")
+    check ide.removeFromProject("unit2")
+    ide.showWindow()
+
 suite "Revert to Inherited":
   var rp: Project
   var anc, des: UnitEditor

@@ -7,6 +7,8 @@
   save counts as Cancel, so nothing is lost.
 - Closing the window saves the units like Save All does (forms inheriting from
   another are written before it), and asks about all of them first.
+- Remove from Project on a form that others inherit from says so and keeps its
+  tab open; a failure while removing is reported instead of raising.
 - A form file that does not parse no longer makes the unit lose its control
   imports.
 - A unit that cannot be written stays marked as modified.
