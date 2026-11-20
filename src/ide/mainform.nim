@@ -18,8 +18,7 @@
 
 import std/[os, strutils]
 import nimvcl
-from sdl3 import getWindowFlags, maximizeWindow, WINDOW_MAXIMIZED, Rect,
-  getDisplayForRect, getDisplayUsableBounds
+from sdl3 import Rect, getDisplayForRect, getDisplayUsableBounds
 import ./[project, ideconfig, icons, actions, palette, uniteditor]
 import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, codecmds, outlinecmds, ideui]
 export ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, outlinecmds, ideui
@@ -29,7 +28,7 @@ proc rememberWindow*(ide: IdeForm) =
   ## settings. A maximized window keeps the size it had before.
   let w = ide.win
   if w == nil: return
-  if (getWindowFlags(w.window) and WINDOW_MAXIMIZED) != 0:
+  if ide.windowState == wsMaximized:
     ide.settings.window.maximized = true
   else:
     let size = w.logicalSize
@@ -62,9 +61,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
     # where the window was last time, when that is still on a display
     ide.setBounds(ws.x.float32, ws.y.float32, ws.w.float32, ws.h.float32)
     ide.position = poDesigned
-  if ws.maximized:
-    ide.onShow = proc(sender: Control) =
-      discard maximizeWindow(ide.win.window)
+  if ws.maximized: ide.windowState = wsMaximized      # applied when the window is shown
   ide.askSave = askSaveDefault
   ide.askOverwrite = askOverwriteDefault
   ide.showError = showErrorDefault

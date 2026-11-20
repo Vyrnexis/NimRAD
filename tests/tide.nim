@@ -350,6 +350,9 @@ suite "layout":
     writeFile(f, """{"window": {"x": 30, "y": 40, "w": 900, "h": 700, "maximized": false}}""")
     let other = newIdeForm(settingsFile = f)
     check other.left == 30 and other.top == 40 and other.width == 900 and other.height == 700
+    check other.windowState == wsNormal
+    writeFile(f, """{"window": {"x": 30, "y": 40, "w": 900, "h": 700, "maximized": true}}""")
+    check newIdeForm(settingsFile = f).windowState == wsMaximized
 
   test "the docking layout is saved and restored":
     check ide.openProject(projectFile)
