@@ -637,6 +637,20 @@ suite "editor tabs":
     check ide.editors.len == 1 and ide.editors[0].unitName == "third"
     check ide.activeEditor.unitName == "third"
 
+  test "closing a tab before the active one keeps the active unit":
+    check ide.closeAllEditors()
+    discard ide.openUnit("unit1")
+    discard ide.openUnit("third")
+    check ide.openMain() != nil                      # three tabs, the last one active
+    check ide.activeEditor.unitName == ide.project.name
+    check ide.closeEditor(ide.editors[0])
+    check ide.activeEditor.unitName == ide.project.name
+    ide.pages.activePageIndex = 0                    # "third"; close the one behind it
+    ide.bindActive()
+    check ide.closeEditor(ide.editors[1])
+    check ide.activeEditor.unitName == "third"
+    check ide.closeAllEditors()
+
   test "a click on the tab itself selects it and does not close it":
     check ide.closeAllEditors()
     discard ide.openUnit("unit1")

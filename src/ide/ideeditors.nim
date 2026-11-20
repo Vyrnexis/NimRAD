@@ -469,13 +469,15 @@ proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
     if ed.isForm: ed.designer.cancelCreate()
     ed.unbindInspector()
     ide.bound = nil
+  let keep = if ide.activeIndex == i: nil else: ide.activeEditor  # a background tab stays active
   let sheet = ide.sheets[i]
   ide.editors.delete i
   ide.sheets.delete i
   ed.dispose()
   sheet.free()
   if ide.editors.len > 0:
-    ide.pages.activePageIndex = min(i, ide.editors.len - 1)
+    let k = if keep != nil: ide.editors.find(keep) else: -1
+    ide.pages.activePageIndex = if k >= 0: k else: min(i, ide.editors.len - 1)
   ide.bindActive()
   true
 
