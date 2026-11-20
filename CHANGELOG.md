@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Opening a project that cannot be read (corrupt, made by a newer version, no permission)
+  no longer removes it from File > Reopen; only a project whose file is gone is dropped.
 - Add to Project checks first that the file exists and is a `.nim` file, takes a relative
   path from the project's folder, and refuses a form whose `.nfm` cannot be read (it used
   to add a form unit without a form type).

@@ -56,9 +56,10 @@ proc openProject*(ide: IdeForm, path: string): bool =
     p = loadProject(path)
   except CatchableError as e:
     let gone = not fileExists(path)
-    ide.settings.removeRecent(path)
-    ide.saveSettings()
-    ide.rebuildRecentMenu()
+    if gone:                           # a project that is only unreadable or too new stays in the list
+      ide.settings.removeRecent(path)
+      ide.saveSettings()
+      ide.rebuildRecentMenu()
     ide.fail(if gone: "The project " & path & " no longer exists; it was removed from the Reopen list."
              else: "Cannot open " & path & ": " & e.msg)
     return false

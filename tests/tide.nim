@@ -164,6 +164,17 @@ suite "projects":
     check errors.len == 1
     check ide.project != nil              # the open project stays open
 
+  test "a project that cannot be read stays in the recent list, a missing one goes":
+    let bad = root / "corrupt.nimproj"
+    writeFile(bad, "{ not json")
+    ide.settings.addRecent(bad)
+    check not ide.openProject(bad)
+    check bad in ide.settings.recentProjects
+    removeFile bad
+    check not ide.openProject(bad)
+    check bad notin ide.settings.recentProjects
+    errors.setLen 1
+
   test "New Form and Remove from Project":
     let ed = ide.newForm()
     check ed != nil
