@@ -61,8 +61,8 @@ proc showProjectOptions*(ide: IdeForm) =
   let cancel = newButton(d, "Cancel", 416, 366, 84, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
-  d.modal(r):
-    if r == mrOk:
+  withModal(d):
+    if dlgResult == mrOk:
       ide.applyOptions ProjectOptions(outputDir: outDir.text, flags: flags.text,
                                       defines: defs.text, title: title.text, version: version.text,
                                       autoImports: autoImp.checked, importAll: impAll.checked)

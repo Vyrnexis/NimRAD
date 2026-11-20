@@ -19,8 +19,8 @@ proc askSaveDefault*(unitName: string): SaveChoice =
   let cancel = newButton(d, "Cancel", 320, 90, 96, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
-  d.modal(r):
-    result = case r
+  withModal(d):
+    result = case dlgResult
              of mrYes: scSave
              of mrNo: scDiscard
              else: scCancel
@@ -41,8 +41,8 @@ proc pickItemDefault*(title: string, items: seq[string], selected: int): int =
   cancel.modalResult = mrCancel
   cancel.isCancel = true
   d.activeControl = lb
-  d.modal(r):
-    result = if r == mrOk: lb.itemIndex else: -1
+  withModal(d):
+    result = if dlgResult == mrOk: lb.itemIndex else: -1
 
 proc askTextDefault*(caption, prompt: string, value: var string): bool =
   inputQuery(caption, prompt, value)
@@ -86,8 +86,8 @@ proc askAlignDefault*(o: var AlignOptions): bool =
   let cancel = newButton(d, "Cancel", 336, 252, 84, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
-  d.modal(r):
-    if r == mrOk:
+  withModal(d):
+    if dlgResult == mrOk:
       for i, b in hs:
         if b.checked: o.horizontal = HorzAlign(i)
       for i, b in vs:
@@ -115,8 +115,8 @@ proc askSizeDefault*(o: var SizeOptions): bool =
   let cancel = newButton(d, "Cancel", 336, 200, 84, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
-  d.modal(r):
-    if r == mrOk:
+  withModal(d):
+    if dlgResult == mrOk:
       for i, b in ws:
         if b.checked: o.widthMode = SizeMode(i)
       for i, b in hs:
@@ -154,8 +154,8 @@ proc askOrderDefault*(title: string, items: seq[string]): seq[int] =
   cancel.modalResult = mrCancel
   cancel.isCancel = true
   d.activeControl = lb
-  d.modal(r):
-    if r == mrOk: result = order
+  withModal(d):
+    if dlgResult == mrOk: result = order
 
 proc askEditorOptionsDefault*(o: var EditorOptions): bool =
   let d = newForm(nil, 440, 290)
@@ -187,8 +187,8 @@ proc askEditorOptionsDefault*(o: var EditorOptions): bool =
   let cancel = newButton(d, "Cancel", 336, 230, 84, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
-  d.modal(r):
-    if r == mrOk:
+  withModal(d):
+    if dlgResult == mrOk:
       let t = family.text.strip
       o.fontFamily = if t == family.items[0] or t.len == 0: "" else: t
       o.fontSize = size.value
@@ -216,8 +216,8 @@ proc askFindInFilesDefault*(o: var FindOptions): bool =
   cancel.modalResult = mrCancel
   cancel.isCancel = true
   d.activeControl = text
-  d.modal(r):
-    if r == mrOk:
+  withModal(d):
+    if dlgResult == mrOk:
       o.text = text.text
       o.caseSensitive = cs.checked
       o.wholeWord = ww.checked
