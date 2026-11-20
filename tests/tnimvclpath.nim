@@ -27,6 +27,12 @@ suite "nimvcl source resolution":
   test "nothing found":
     check resolveNimvclSrc("", "", nil) == ""
     check resolveNimvclSrc("", empty, proc(): string = empty) == ""
+  test "an empty nimble answer is not `src`, a relative env path becomes absolute":
+    let old = getCurrentDir()
+    setCurrentDir root / "a"                 # has src/nimvcl.nim
+    defer: setCurrentDir old
+    check resolveNimvclSrc("", "", proc(): string = "") == ""
+    check resolveNimvclSrc("src", "", nil) == a
   test "this build knows where nimvcl was":
     check isNimvclSrc(compiledAgainst)
     check detectNimvclSrc().len > 0

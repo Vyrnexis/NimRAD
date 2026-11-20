@@ -417,12 +417,6 @@ proc openMain*(ide: IdeForm): UnitEditor =
 proc mainEditor*(ide: IdeForm): UnitEditor =
   if ide.project == nil: nil else: ide.editorOf(ide.project.name)
 
-proc beforeMainEdit*(ide: IdeForm): UnitEditor =
-  ## Call before the project edits the main file on disk: an open editor of it
-  ## is saved first, so no change of the user is lost, and returned for `afterMainEdit`.
-  result = ide.mainEditor
-  if result != nil: result.save()
-
 proc afterMainEdit*(ide: IdeForm, ed: UnitEditor) =
   if ed != nil: ed.reloadFromDisk()
 
@@ -450,6 +444,14 @@ proc trySave*(ide: IdeForm, ed: UnitEditor): bool =
     result = true
   except CatchableError as e:
     ide.fail "Cannot save " & ed.unitName & ": " & e.msg
+
+proc beforeMainEdit*(ide: IdeForm): UnitEditor =
+  ## Call before the project edits the main file on disk: an open editor of it
+  ## is saved first, so no change of the user is lost, and returned for `afterMainEdit`.
+  ## When the save fails (reported) nil comes back: the editor keeps its unsaved
+  ## text and is not reloaded from the changed file.
+  let ed = ide.mainEditor
+  if ed != nil and ide.trySave(ed): result = ed
 
 proc closeEditor*(ide: IdeForm, ed: UnitEditor): bool =
   ## Closes a unit's tab; asks what to do with unsaved changes (false = the

@@ -509,6 +509,23 @@ suite "main program file":
     check mainText() == bare
     writeFile(ide.project.mainPath, orig)
 
+  test "a main file that cannot be saved before an edit is reported, its text is kept":
+    let ed = ide.openMain()
+    ed.typeAtEnd "\n# unsaved\n"
+    let path = ide.project.mainPath
+    let good = readFile(path)
+    removeFile path
+    createDir path                       # a directory in the way: the save fails
+    let n = errors.len
+    check ide.beforeMainEdit() == nil
+    check errors.len == n + 1 and ed.modified and "# unsaved" in ed.code.text
+    removeDir path
+    writeFile(path, good)
+    ed.reloadFromDisk()
+    check not ed.modified
+    errors.setLen n
+    check ide.closeEditor(ed)
+
 suite "save as":
   setup:
     errors.setLen 0
@@ -999,6 +1016,12 @@ suite "reopen and startup":
     check "gone12" in ide.recentMenu[0].caption
     check "gone3" in ide.recentMenu[9].caption
     check ide.recentMenu[0].caption.startsWith("&1")
+    let saved = ide.settings.recentProjects
+    ide.settings.recentProjects = @[root / "a&b" / "x.nimproj"]
+    ide.rebuildRecentMenu()
+    check "a&&b" in ide.recentMenu[0].caption             # a literal &, not a mnemonic
+    ide.settings.recentProjects = saved
+    ide.rebuildRecentMenu()
 
   test "clicking an entry whose project is gone removes it":
     ide.recentMenu[0].click()
@@ -1031,6 +1054,16 @@ suite "reopen and startup":
     check projectArg(@["--project"]) == ""
     check projectArg(@[]) == ""
     check projectArg(@["--shots", "dir"]) == ""
+    check projectArg(@["a.nimproj"]) == "a.nimproj"                # a file association
+    check projectArg(@["a.NIMPROJ", "--project", "b.nimproj"]) == "b.nimproj"
+    check projectArg(@["notes.txt"]) == ""
+
+  test "command line problems are listed":
+    check commandLineProblems(@["--project", "a.nimproj"]).len == 0
+    check commandLineProblems(@["a.nimproj"]).len == 0
+    check commandLineProblems(@["--project"]) == @["--project needs a project file"]
+    check commandLineProblems(@["--project="]).len == 1
+    check commandLineProblems(@["--bogus", "x.txt"]).len == 2
 
   test "startup opens the project given by --project":
     check ide.closeProject()

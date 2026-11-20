@@ -84,6 +84,14 @@ suite "project file":
     let p = Project(filePath: root / "x.nimproj", nimvclPath: "../elsewhere/src")
     check p.nimvclSrc == root.parentDir / "elsewhere" / "src"
 
+suite "duplicate units":
+  test "a project listing a unit name twice (Nim style equality) is refused":
+    createDir root / "dup"
+    for (n, second) in [("a", "unit1"), ("b", "unit_1")]:
+      writeFile(root / "dup" / (n & ".nimproj"), """{"name": "d", "units": [
+        {"name": "unit1", "nim": "unit1.nim"}, {"name": """" & second & """", "nim": "x.nim"}]}""")
+      expect ProjectError: discard loadProject(root / "dup" / (n & ".nimproj"))
+
 suite "unknown keys in records":
   test "unit and font records keep the keys this version does not know":
     createDir root / "keep2"

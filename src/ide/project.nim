@@ -296,7 +296,12 @@ proc loadProject*(path: string): Project =
                           ancestor: unixPath(e.str("ancestor", "")),
                           extra: e.unknownKeys(UnitKeys))
       u.isForm = e.hasKey("isForm") and e["isForm"].kind == JBool and e["isForm"].getBool
-      if u.name.len > 0 and u.nimPath.len > 0: result.units.add u
+      if u.name.len > 0 and u.nimPath.len > 0:
+        for o in result.units:
+          if o.name.styleKey == u.name.styleKey:
+            raise newException(ProjectError, abs & " lists the unit " & u.name &
+                               (if o.name == u.name: " twice" else: " and " & o.name & ", the same name to Nim"))
+        result.units.add u
   if j.hasKey("classImports") and j["classImports"].kind == JObject:
     for c, m in j["classImports"]:
       if m.kind == JString and c.len > 0 and m.getStr.len > 0: result.classImports.add (c, m.getStr)

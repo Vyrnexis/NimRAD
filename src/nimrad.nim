@@ -4,6 +4,7 @@
 ##
 ##     nimrad                 start the IDE (opens the last project)
 ##     nimrad --project FILE  start the IDE with the project FILE (.nimproj)
+##     nimrad FILE.nimproj    the same (what a file association passes)
 ##     nimrad --nimvcl-path   print the nimvcl source folder projects are built with
 ##
 ## The scripted session that makes the screenshots of the documentation is not
@@ -16,6 +17,7 @@ import ide/[mainform, nimvclpath, ideconfig]
 const usage = """NimRAD
   nimrad              start the IDE
   nimrad --project F  start the IDE and open the project F (.nimproj)
+  nimrad F.nimproj    the same
   nimrad --nimvcl-path  print where nimvcl's source is found"""
 
 proc main() =
@@ -29,6 +31,7 @@ proc main() =
       quit 1
     echo p
   else:
+    for problem in commandLineProblems(args): stderr.writeLine "nimrad: " & problem
     discard migrateLegacySettings()
     Application.init()
     let ide = newIdeForm()

@@ -31,12 +31,13 @@ proc nimblePathOfNimvcl(): string =
 proc resolveNimvclSrc*(env, baked: string, nimblePath: proc(): string): string =
   ## The first of `env`, `baked`, `nimblePath()` that holds `nimvcl.nim`.
   for c in [env, baked]:
-    if isNimvclSrc(c): return normalizedPath(c)
+    if isNimvclSrc(c): return normalizedPath(absolutePath(c))
   if nimblePath != nil:
     # `nimble path` gives the package folder; nimvcl keeps its code in `src/`.
     let n = nimblePath()
-    for c in [n / "src", n]:
-      if isNimvclSrc(c): return normalizedPath(c)
+    if n.len > 0:                          # "" would make `src` a path relative to the cwd
+      for c in [n / "src", n]:
+        if isNimvclSrc(c): return normalizedPath(absolutePath(c))
 
 var cache: tuple[env, path: string, at: float]   ## the last answer (UI thread only)
 

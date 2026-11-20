@@ -37,6 +37,7 @@ type
     palIndex*: Table[string, int]
     menu*: MainMenu
     recentMenu*: MenuItem
+    settingsFailed: bool       ## the last write of the settings file failed (said once)
     palette*: ComponentPalette
     site*: DockSite
     pnlTree*, pnlInspector*, pnlProject*, pnlMessages*, pnlEditors*: DockPanel
@@ -122,7 +123,15 @@ proc editorOf*(ide: IdeForm, unitName: string): UnitEditor =
 proc busy*(ide: IdeForm): bool = buildState() != bsIdle
 
 proc saveSettings*(ide: IdeForm) =
-  discard ideconfig.saveSettings(ide.settings, ide.settingsFile)
+  ## Writes the settings file. A failure is said once in the status bar (and on
+  ## stderr), not in a dialog: settings are written all the time.
+  if ideconfig.saveSettings(ide.settings, ide.settingsFile):
+    ide.settingsFailed = false
+  elif not ide.settingsFailed:
+    ide.settingsFailed = true
+    let text = "Cannot save the settings file " & ide.settingsFile
+    ide.say text
+    stderr.writeLine "nimrad: " & text
 
 proc isDark*(ide: IdeForm): bool = ide.settings.theme == "dark"
 

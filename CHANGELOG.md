@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Smaller fixes: a main file that cannot be saved before the IDE edits it is reported and
+  its text kept; Save As / Save Project As stop when a file cannot be saved first;
+  a path from `$NIMVCL_SRC` is made absolute and `nimble path` giving nothing no longer
+  yields a relative `src`; a project listing the same unit twice is refused; `&` in a
+  project name no longer becomes a mnemonic in File > Reopen; `nimrad FILE.nimproj`
+  opens the project, and unknown options or `--project` without a file are reported on
+  stderr; a settings file that cannot be written is reported once in the status bar.
 - Opening a project that cannot be read (corrupt, made by a newer version, no permission)
   no longer removes it from File > Reopen; only a project whose file is gone is dropped.
 - Add to Project checks first that the file exists and is a `.nim` file, takes a relative

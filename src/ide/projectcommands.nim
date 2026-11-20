@@ -44,7 +44,8 @@ proc rebuildRecentMenu*(ide: IdeForm) =
     return
   for i, path in ide.settings.recentProjects:
     let num = if i < 9: "&" & $(i + 1) else: "1&0"
-    ide.recentMenu.addItem(num & "  " & path.extractFilename.changeFileExt("") & "   " & path.parentDir,
+    let label = path.extractFilename.changeFileExt("") & "   " & path.parentDir
+    ide.recentMenu.addItem(num & "  " & label.replace("&", "&&"),   # `&&` is a literal `&`, not a mnemonic
                            openHandler(ide, path))
 
 proc openProject*(ide: IdeForm, path: string): bool =
@@ -373,7 +374,7 @@ proc renameUnit*(ide: IdeForm, oldName, newName: string): bool =
     ide.fail oldName & " is not a unit of the project"
     return false
   if name == oldName: return true
-  ide.saveAll()
+  if not ide.saveAll(): return false      # a file that cannot be saved is reported; nothing is renamed
   let ed = ide.editorOf(oldName)
   let wasOpen = ed != nil
   let wasDesigner = ed != nil and ed.designerVisible
@@ -399,7 +400,7 @@ proc renameProject*(ide: IdeForm, newName: string): bool =
   if ide.project == nil: return false
   let name = newName.strip
   if name == ide.project.name: return true
-  ide.saveAll()
+  if not ide.saveAll(): return false      # a file that cannot be saved is reported; nothing is renamed
   let oldPath = ide.project.filePath
   let mainEd = ide.mainEditor
   if mainEd != nil and not ide.closeEditor(mainEd): return false
@@ -430,7 +431,9 @@ proc saveAs*(ide: IdeForm, newName = ""): bool =
   if isMain: ide.renameProject(v) else: ide.renameUnit(ed.unitName, v)
 
 proc saveProjectAs*(ide: IdeForm, newName = ""): bool =
-  if ide.project == nil: return false
+  if ide.project == nil:
+    ide.fail "No project is open"
+    return false
   var v = newName
   if v.len == 0:
     v = ide.project.name

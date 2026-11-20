@@ -109,13 +109,37 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide
 
 proc projectArg*(args: openArray[string]): string =
-  ## The path after `--project` (or of `--project=path`) on the command line,
-  ## "" when there is none.
-  for i, a in args:
+  ## The project on the command line: the path after `--project` (or of
+  ## `--project=path`), else the first plain argument ending in `.nimproj` (what
+  ## a file association passes). "" when there is none.
+  var positional = ""
+  var i = 0
+  while i < args.len:
+    let a = args[i]
     if a == "--project":
       if i + 1 < args.len: return args[i + 1]
     elif a.startsWith("--project="):
       return a["--project=".len .. ^1]
+    elif positional.len == 0 and not a.startsWith("-") and a.toLowerAscii.endsWith(ProjectExt):
+      positional = a
+    inc i
+  positional
+
+proc commandLineProblems*(args: openArray[string]): seq[string] =
+  ## What is wrong with the command line: unknown options, a `--project` without
+  ## a file, arguments that are not a `.nimproj`. One line each, for stderr.
+  var i = 0
+  while i < args.len:
+    let a = args[i]
+    if a == "--project":
+      if i + 1 < args.len: inc i
+      else: result.add "--project needs a project file"
+    elif a.startsWith("--project="):
+      if a.len == "--project=".len: result.add "--project needs a project file"
+    elif a in ["-h", "--help", "--nimvcl-path"]: discard
+    elif a.startsWith("-"): result.add "unknown option " & a
+    elif not a.toLowerAscii.endsWith(ProjectExt): result.add "ignored argument " & a & " (not a " & ProjectExt & " file)"
+    inc i
 
 proc startup*(ide: IdeForm, defaultDir = "", project = "") =
   ## Opens `project` when given (`--project path`), else the last project,
