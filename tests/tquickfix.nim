@@ -375,4 +375,28 @@ suite "classes of the project":
     check picked == @["badge"]
     check "import badge" in ed.code.text
     check errors.len == 0
+
+  test "a rename is refused when the line changed since the build":
+    let ed = ide.openUnit("unit1")
+    ed.showCode()
+    ed.code.text = ed.code.text & "\nlet zz = edit1\n"
+    ide.saveAll()
+    let line = ed.code.lineCount - 1
+    let file = ide.project.dir / "unit1.nim"
+    ide.messages.clear()
+    ide.messages.feed(file & "(" & $line & ", 10) Error: undeclared identifier: 'edit1'")
+    ide.messages.finish()
+    check ide.messages.fixesOf(0).len == 1 and ide.messages.fixesOf(0)[0].kind == fkRename
+    ed.code.text = ed.code.text.replace("let zz = edit1", "let zz = 1 + edit1")
+    check ide.applyFix(0) == foNone
+    check ide.status.panels[ord spMessage].text.contains("changed since the build")
+    check "1 + edit1" in ed.code.text
+
+  test "an import for a file outside the project says so":
+    ide.messages.clear()
+    ide.messages.feed(root / "other.nim" & "(1, 1) Error: undeclared identifier: 'newTrackBar'")
+    ide.messages.finish()
+    check ide.messages.fixesOf(0).len == 1
+    check ide.applyFix(0) == foNone
+    check ide.status.panels[ord spMessage].text.contains("not a unit of the project")
     removeDir root

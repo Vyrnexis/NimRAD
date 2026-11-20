@@ -22,6 +22,7 @@ type
     ident*: string              ## the name the compiler did not know
     modules*: seq[string]       ## fkAddImport: the candidates
     replacement*: string        ## fkRename: the component's name
+    lineText*: string           ## fkRename: the source line as the build saw it
 
 func quoted(text, key: string): string =
   ## `'name'` after `key` in the first line of the message.

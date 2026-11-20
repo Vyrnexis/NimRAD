@@ -11,23 +11,54 @@ type FixOutcome* = enum
   foApplied              ## changed in place
   foAddedImport          ## an import was added: the build that failed should run again
 
-proc editUnitFile*(ide: IdeForm, file: string, change: proc(src: string): string): bool =
+type EditResult* = enum
+  erChanged              ## the text changed
+  erUnchanged            ## `change` had nothing to do
+  erNoUnit               ## the file is not a unit of the project
+  erFailed               ## the file could not be read or written
+
+proc editUnitFile*(ide: IdeForm, file: string, change: proc(src: string): string): EditResult =
   ## Applies `change` to the unit's text: in its editor when it is open (the
-  ## edit is then unsaved, one undo step), else in the file. True when it changed.
+  ## edit is then unsaved, one undo step), else in the file.
   let name = ide.unitOfFile(file)
-  if name.len == 0: return false
+  if name.len == 0: return erNoUnit
   let ed = ide.editorOf(name)
-  if ed != nil: return ed.editCode(change)
+  if ed != nil: return if ed.editCode(change): erChanged else: erUnchanged
   try:
     let src = readFile(file)
     let res = change(src)
-    if res == src: return false
+    if res == src: return erUnchanged
     writeFileAtomic(file, res)
-    result = true
-  except CatchableError: discard
+    erChanged
+  except CatchableError: erFailed
+
+proc addImportResult*(ide: IdeForm, file, module: string): EditResult =
+  ide.editUnitFile(file, proc(src: string): string = addUserImport(src, module))
 
 proc addImportTo*(ide: IdeForm, file, module: string): bool =
-  ide.editUnitFile(file, proc(src: string): string = addUserImport(src, module))
+  ide.addImportResult(file, module) == erChanged
+
+proc importProblem(r: EditResult, file, module: string): string =
+  ## What to tell when the import was not added.
+  case r
+  of erNoUnit: extractFilename(file) & " is not a unit of the project: add the import there yourself"
+  of erFailed: "Could not change " & extractFilename(file)
+  else: module & " is already imported"
+
+proc lineOfFile(file: string, line: int): string =
+  ## Line `line` (1-based) of the file on disk, without its line ending; "" when
+  ## it cannot be read.
+  try:
+    let ls = readFile(file).split('\n')
+    if line >= 1 and line <= ls.len: result = ls[line - 1].strip(leading = false, chars = {'\r'})
+  except CatchableError: discard
+
+proc currentLine(ide: IdeForm, file: string, line: int): string =
+  ## The same line as the user would see it now (the editor's text when open).
+  let ed = ide.editorOf(ide.unitOfFile(file))
+  if ed == nil: return lineOfFile(file, line)
+  let ls = ed.code.text.split('\n')
+  if line >= 1 and line <= ls.len: ls[line - 1].strip(leading = false, chars = {'\r'}) else: ""
 
 proc componentsOf(ide: IdeForm, file: string): seq[string] =
   ## The names of the components of the form of the unit `file` (empty for the
@@ -59,6 +90,8 @@ proc fixesOfMessage*(ide: IdeForm, m: Message): seq[QuickFix] =
   result = ide.userClassFix(m)
   if result.len > 0: return
   result = fixesFor(m, proc(): seq[string] = ide.componentsOf(m.file))
+  for fx in result.mitems:
+    if fx.kind == fkRename: fx.lineText = lineOfFile(m.file, m.line)
   if ide.project.importAll:             # everything is imported already
     result = result.filterIt(it.kind != fkAddImport)
 
@@ -77,15 +110,22 @@ proc applyFix*(ide: IdeForm, msgIndex: int, fixIndex = 0): FixOutcome =
       let i = ide.pickItem("Add import for " & fix.ident, fix.modules, 0)
       if i < 0 or i >= fix.modules.len: return foNone
       module = fix.modules[i]
-    if not ide.addImportTo(m.file, module):
-      ide.say module & " is already imported"
+    let r = ide.addImportResult(m.file, module)
+    if r != erChanged:
+      ide.say importProblem(r, m.file, module)
       return foNone
     ide.say "Added import " & module & " to " & ide.unitOfFile(m.file)
     foAddedImport
   of fkRename:
-    let done = ide.editUnitFile(m.file, proc(src: string): string =
+    if ide.currentLine(m.file, m.line) != fix.lineText:
+      ide.say "The file changed since the build; compile again"
+      ide.messages.fixes[msgIndex] = @[]    # the position is stale
+      return foNone
+    let r = ide.editUnitFile(m.file, proc(src: string): string =
       renameAt(src, m.line, m.col, fix.ident, fix.replacement))
+    let done = r == erChanged
     if done: ide.say "Replaced " & fix.ident & " with " & fix.replacement
+    elif r == erNoUnit: ide.say extractFilename(m.file) & " is not a unit of the project"
     else: ide.say "Could not find " & fix.ident & " at that place"
     if done:
       ide.messages.fixes[msgIndex] = @[]    # the position is stale; the next build lists it again
@@ -148,8 +188,16 @@ proc findUnitImport*(ide: IdeForm): bool {.discardable.} =
       let k = ide.project.findUnit(ed.unitName)
       if k < 0: return false
       ide.project.nimPathOf(ide.project.units[k])
-  result = ide.addImportTo(target, mods[i])
-  ide.say(if result: "Added import " & mods[i] else: mods[i] & " is already imported")
+  let r = ide.addImportResult(target, mods[i])
+  result = r == erChanged
+  ide.say(if result: "Added import " & mods[i] else: importProblem(r, target, mods[i]))
+
+func worthImporting(ident: string): bool =
+  ## The symbol index has no kinds, and many names in it are noise (`caption`,
+  ## `add`, `text`): only types (`Badge`) and constructors (`newBadge`) are
+  ## imported without asking. A Nim keyword never starts with a capital.
+  ident.len > 0 and (ident[0] in {'A'..'Z'} or
+    (ident.len > 3 and ident.startsWith("new") and ident[3] in {'A'..'Z'}))
 
 proc autoAddImports*(ide: IdeForm): seq[string] =
   ## Project option "Add missing nimvcl imports automatically": adds every import
@@ -159,6 +207,7 @@ proc autoAddImports*(ide: IdeForm): seq[string] =
   for k in 0 ..< ide.messages.msgs.len:
     let fx = ide.messages.fixesOf(k)
     if fx.len == 0 or fx[0].kind != fkAddImport or fx[0].modules.len != 1: continue
+    if not worthImporting(fx[0].ident): continue
     let m = ide.messages.msgs[k]
     let module = fx[0].modules[0]
     let unit = ide.unitOfFile(m.file)

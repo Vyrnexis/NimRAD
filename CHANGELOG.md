@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Quick fixes: "Did you mean ...?" is refused ("compile again") when its line has changed
+  since the build instead of editing the wrong place; an import for a file outside
+  the project says so instead of "already imported"; the automatic import option
+  only adds types and `newXxx` constructors, not noise names like `caption` or `add`.
 - Stopping a build or program can no longer hit an unrelated process (a reaped pid or
   a reused job handle), and a program started elsewhere at the same moment cannot
   keep a build's output open (the pipe is close-on-exec from the start).
