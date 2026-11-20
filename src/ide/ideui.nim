@@ -57,11 +57,11 @@ proc showProjectOptions*(ide: IdeForm) =
   let cancel = newButton(d, "Cancel", 416, 366, 84, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
-  if d.showModal() == mrOk:
-    ide.applyOptions ProjectOptions(outputDir: outDir.text, flags: flags.text,
-                                    defines: defs.text, title: title.text, version: version.text,
-                                    autoImports: autoImp.checked, importAll: impAll.checked)
-  d.freeWindow()
+  d.modal(r):
+    if r == mrOk:
+      ide.applyOptions ProjectOptions(outputDir: outDir.text, flags: flags.text,
+                                      defines: defs.text, title: title.text, version: version.text,
+                                      autoImports: autoImp.checked, importAll: impAll.checked)
 
 proc connectActions*(ide: IdeForm) =
   let a = ide.acts

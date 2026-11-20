@@ -18,12 +18,11 @@ proc askSaveDefault*(unitName: string): SaveChoice =
   let cancel = newButton(d, "Cancel", 320, 90, 96, 32)
   cancel.modalResult = mrCancel
   cancel.isCancel = true
-  let r = d.showModal()
-  d.freeWindow()
-  case r
-  of mrYes: scSave
-  of mrNo: scDiscard
-  else: scCancel
+  d.modal(r):
+    result = case r
+             of mrYes: scSave
+             of mrNo: scDiscard
+             else: scCancel
 
 proc pickItemDefault*(title: string, items: seq[string], selected: int): int =
   let d = newForm(nil, 380, 380)
@@ -41,8 +40,8 @@ proc pickItemDefault*(title: string, items: seq[string], selected: int): int =
   cancel.modalResult = mrCancel
   cancel.isCancel = true
   d.activeControl = lb
-  result = if d.showModal() == mrOk: lb.itemIndex else: -1
-  d.freeWindow()
+  d.modal(r):
+    result = if r == mrOk: lb.itemIndex else: -1
 
 proc askTextDefault*(caption, prompt: string, value: var string): bool =
   inputQuery(caption, prompt, value)

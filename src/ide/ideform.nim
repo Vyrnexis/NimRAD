@@ -110,6 +110,16 @@ proc fail*(ide: IdeForm, text: string) =
   ide.say text
   ide.showError text
 
+template modal*(d: Form, r, body: untyped) =
+  ## Runs `d` modally: `r` is the modal result inside `body` (which can still read
+  ## the dialog's controls). The window is freed afterwards even when `body` or the
+  ## dialog's own handlers raise.
+  try:
+    let r = d.showModal()
+    body
+  finally:
+    d.freeWindow()
+
 proc trySaveProject*(ide: IdeForm): bool =
   ## Saves the project file; a failure is reported and gives false.
   if ide.project == nil: return true
