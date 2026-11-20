@@ -20,7 +20,7 @@ import std/[os, strutils]
 import nimvcl
 from sdl3 import Rect, getDisplayForRect, getDisplayUsableBounds
 import ./[project, ideconfig, icons, actions, palette, uniteditor]
-import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, codecmds, outlinecmds, ideui]
+import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, outlinecmds, ideui]
 export ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, findcmds, outlinecmds, ideui
 
 proc rememberWindow*(ide: IdeForm) =

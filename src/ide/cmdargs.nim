@@ -8,7 +8,7 @@
 ##   quotes and inside single quotes a backslash is itself.
 ## * `quoteArg` is the inverse: `splitArgs(quoteArg(a)) == @[a]` for every `a`.
 
-import std/[strutils, sequtils]
+import std/sequtils
 
 proc splitArgs*(text: string): seq[string] =
   var cur = ""

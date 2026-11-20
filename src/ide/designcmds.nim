@@ -5,7 +5,7 @@
 ## Size and Tab Order use the designer's `sizeSelection` and `setTabOrder`:
 ## each is one undo step.
 
-import std/[sequtils, strutils]
+import std/sequtils
 import nimvcl
 import ./[ideform, uniteditor]
 

@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import std/[os, tables, strutils]
 import ./[project, builder, ideconfig, actions, palette, projecttree,
-          messagespanel, uniteditor, findinfiles, todopanel, codeexplorer, codeoutline]
+          messagespanel, uniteditor, findinfiles, todopanel, codeexplorer]
 
 proc versionOf(nimble: string): string {.compileTime.} =
   ## The `version = "..."` line of nimrad.nimble.

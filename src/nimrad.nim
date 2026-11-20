@@ -10,7 +10,7 @@
 ## The scripted session that makes the screenshots of the documentation is not
 ## part of the program: see `scripts/docshots.nim`.
 
-import std/[os, strutils]
+import std/os
 import nimvcl
 import ide/[mainform, nimvclpath, ideconfig]
 

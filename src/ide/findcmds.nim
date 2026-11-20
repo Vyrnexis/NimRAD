@@ -2,9 +2,9 @@
 ## is `findinfiles`, the result goes to the Messages window (one row per line
 ## found: file, line, text; a double click or F8 opens the place).
 
-import std/[os, strutils]
+import std/strutils
 import nimvcl
-import ./[project, findinfiles, messagespanel, uniteditor, icons, ideform, ideeditors]
+import ./[project, findinfiles, messagespanel, uniteditor, icons, ideform]
 
 proc wordAt(line: string, col: int): string =
   proc isIdent(c: char): bool = c in IdentChars

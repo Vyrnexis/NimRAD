@@ -12,7 +12,7 @@
 ## Everything here is single threaded UI code; build the editor after
 ## `Application.init()`.
 
-import std/[os, strutils, tables, sets, sequtils, times, algorithm]
+import std/[os, strutils, tables, sets, times, algorithm]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]

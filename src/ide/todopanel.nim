@@ -3,7 +3,6 @@
 ## `onJump(file, line)`; the button calls `onRefresh`. The scan is `todoscan`
 ## and the wiring is in `outlinecmds`.
 
-import std/strutils
 import nimvcl
 import ./todoscan
 

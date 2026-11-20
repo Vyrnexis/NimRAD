@@ -14,7 +14,7 @@
 
 import std/[os, times]
 import nimvcl
-import ./[project, findinfiles, todoscan, todopanel, codeoutline, codeexplorer,
+import ./[findinfiles, todoscan, todopanel, codeoutline, codeexplorer,
           uniteditor, ideform, ideeditors]
 
 proc collectTodos*(ide: IdeForm): seq[TodoEntry] =

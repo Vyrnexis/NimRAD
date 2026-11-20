@@ -27,7 +27,10 @@
 ## as a change by the next check; files of the compiler's list that were
 ## modified since the build started are checked by hash only.
 
-import std/[os, json, times, sha1, strutils, sequtils, algorithm, tables]
+import std/[os, json, times, strutils, sequtils, algorithm, tables]
+{.push warning[Deprecated]: off.}
+import std/sha1   # file content stamps; std/sha1 is deprecated in favour of the checksums package, kept to avoid a dependency
+{.pop.}
 import ./project
 
 const

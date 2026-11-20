@@ -8,7 +8,7 @@
 import std/[strutils, sequtils]
 import nimvcl
 import nimvcl/dsl/props
-import ./[ideconfig, nimsource, uniteditor, ideform, ideeditors, codeinsight, codepicker]
+import ./[ideconfig, nimsource, uniteditor, ideform, codeinsight, codepicker]
 
 proc activeCode(ide: IdeForm): UnitEditor =
   ## The active editor when its code view is showing.

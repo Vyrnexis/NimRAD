@@ -9,7 +9,6 @@
 ## (`classifyLines`), so they never count.
 
 import std/strutils
-import nimvcl/controls/nimlexer
 import ./nimsource
 
 type
