@@ -33,6 +33,21 @@ static: doAssert AppVersion.len > 0, "no version found in nimrad.nimble"
 type
   SaveChoice* = enum scSave, scDiscard, scCancel
 
+  HorzAlign* = enum
+    haNoChange, haLeftSides, haCenters, haRightSides, haSpaceEqually, haCenterInWindow
+  VertAlign* = enum
+    vaNoChange, vaTops, vaCenters, vaBottoms, vaSpaceEqually, vaCenterInWindow
+  AlignOptions* = object
+    ## The Edit > Align dialog (Delphi's Alignment dialog).
+    horizontal*: HorzAlign
+    vertical*: VertAlign
+
+  SizeMode* = enum smNoChange, smShrinkToSmallest, smGrowToLargest, smExact
+  SizeOptions* = object
+    ## The Edit > Size dialog; `width` and `height` count with `smExact`.
+    widthMode*, heightMode*: SizeMode
+    width*, height*: int
+
   WatchedState* = tuple[msgs, panels, units: int, state: BuildState, prop: string]
 
   BuildPhase* = enum
@@ -90,6 +105,13 @@ type
     pickFile*: proc(title: string, filters: seq[(string, string)]): string
     pickItem*: proc(title: string, items: seq[string], selected: int): int
       ## A list to choose from; the index, or -1 when cancelled.
+    askAlign*: proc(o: var AlignOptions): bool
+      ## The Align dialog; false when cancelled.
+    askSize*: proc(o: var SizeOptions): bool
+      ## The Size dialog; false when cancelled.
+    askOrder*: proc(title: string, items: seq[string]): seq[int]
+      ## A list the user puts in order (Move Up, Move Down): the indexes of
+      ## `items` in the new order, or empty when cancelled.
 
   ProjectOptions* = object
     ## The fields of the Project Options dialog (text as typed).

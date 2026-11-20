@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Edit > Align... and Edit > Size... (Delphi's dialogs): left sides, centers, right sides, space
+  equally or center in window, horizontally and vertically; shrink to smallest, grow to
+  largest or an exact width and height. Edit > Tab Order... lists the controls of the selected
+  control's parent in tab order with Move Up and Move Down and saves it as `tabOrder` in the form.
 - Save removes an event handler that is still the generated stub (its body is only `discard`)
   and clears the events bound to it, as Delphi does. A handler with any code of yours, one
   that other code calls, one an inherited component uses, or one a descendant form uses stays.

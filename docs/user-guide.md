@@ -112,6 +112,13 @@ Clearing the text (or `Esc`) brings back the tabs exactly as they were.
   work on the text.
 * **Component** has Bring to Front, Send to Back, alignment and centering for
   the selection.
+* **Edit > Align...** aligns the selected controls to the first one selected (left sides,
+  centers, right sides, tops, bottoms), spaces three or more equally, or centers them in
+  their parent. **Edit > Size...** shrinks them to the smallest, grows them to the largest,
+  or gives an exact width and height. **Edit > Tab Order...** lists the controls Tab visits
+  among the siblings of the selected control (the form's own controls when the form is
+  selected) with Move Up and Move Down; the order is saved as `tabOrder`. These changes of
+  geometry undo with Edit > Undo; the tab order does not.
 * Non-visual components (Timer, ImageList, ActionList, MainMenu, PopupMenu)
   appear as small tiles on the form.
 * **File > New Form** adds `unitN.nim` / `unitN.nfm` to the project and to the

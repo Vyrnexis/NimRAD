@@ -21,8 +21,8 @@ import nimvcl
 from sdl3 import getWindowFlags, maximizeWindow, WINDOW_MAXIMIZED, Rect,
   getDisplayForRect, getDisplayUsableBounds
 import ./[project, ideconfig, icons, actions, palette, uniteditor]
-import ./[ideform, idedialogs, ideeditors, projectcommands, buildcontroller, quickfixes, ideui]
-export ideform, idedialogs, ideeditors, projectcommands, buildcontroller, quickfixes, ideui
+import ./[ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, ideui]
+export ideform, idedialogs, ideeditors, designcmds, projectcommands, buildcontroller, quickfixes, ideui
 
 proc rememberWindow*(ide: IdeForm) =
   ## Puts the window's position and size (and whether it is maximized) into the
@@ -70,6 +70,9 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide.showError = showErrorDefault
   ide.askText = askTextDefault
   ide.pickItem = pickItemDefault
+  ide.askAlign = askAlignDefault
+  ide.askSize = askSizeDefault
+  ide.askOrder = askOrderDefault
   ide.pickFile = pickFileDefault(ide)
   Application.theme = if ide.isDark: themeDark() else: themeLight()
 

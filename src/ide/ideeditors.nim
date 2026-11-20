@@ -275,6 +275,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aPaste].enabled = ed != nil
   a[aDelete].enabled = ed != nil and (not designer or hasSel)
   a[aSelectAll].enabled = ed != nil
+  for id in [aAlignDlg, aSizeDlg, aTabOrder]: a[id].enabled = hasSel
   a[aRevertProp].enabled = designer and ide.canRevertProperty      # the Inspector's selected row differs
   a[aRevertComponent].enabled = designer and ide.canRevertComponent
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil

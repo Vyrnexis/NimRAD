@@ -11,7 +11,7 @@ import ./icons
 type
   ActId* = enum
     aNewApp, aNewForm, aNewInheritedForm, aOpenProject, aSave, aSaveAs, aSaveProjectAs, aSaveAll, aClose, aExit,
-    aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll, aRevertProp, aRevertComponent,
+    aUndo, aRedo, aCut, aCopy, aPaste, aDelete, aSelectAll, aRevertProp, aRevertComponent, aAlignDlg, aSizeDlg, aTabOrder,
     aFind, aReplace, aFindNext, aGotoLine, aFindUnit, aQuickFix,
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
@@ -47,6 +47,9 @@ const defs: array[ActId, ActDef] = [
   (aSelectAll, "Select &All", "Select all", "Ctrl+A", -1),
   (aRevertProp, "Revert to &Inherited", "Put the selected property of an inherited component back to the ancestor form's value", "", -1),
   (aRevertComponent, "Revert Component to Inherited", "Put every property of the selected inherited component back to the ancestor form's values", "", -1),
+  (aAlignDlg, "&Align...", "Align the selected controls: sides, centers, equal spacing, centered in the window", "", -1),
+  (aSizeDlg, "&Size...", "Give the selected controls the same width and height, or an exact size", "", -1),
+  (aTabOrder, "Ta&b Order...", "Set the order in which Tab visits the controls of the selected control's parent", "", -1),
   (aFind, "&Find...", "Find text", "Ctrl+F", icFind),
   (aReplace, "&Replace...", "Find and replace text", "Ctrl+H", -1),
   (aFindNext, "Find &Next", "Find the next match", "F3", -1),

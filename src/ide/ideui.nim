@@ -6,7 +6,7 @@ import std/[strutils, tables]
 import nimvcl/dsl/[props, props_std]
 import ./[project, messages, ideconfig, icons, actions, palette,
           projecttree, messagespanel, uniteditor, editortabs, quickfix,
-          ideform, ideeditors, projectcommands, buildcontroller,
+          ideform, ideeditors, designcmds, projectcommands, buildcontroller,
           quickfixes]
 
 proc setDark*(ide: IdeForm, dark: bool) =
@@ -98,6 +98,9 @@ proc connectActions*(ide: IdeForm) =
   on aSelectAll: ide.editSelectAll()
   on aRevertProp: ide.revertProperty()
   on aRevertComponent: ide.revertComponent()
+  on aAlignDlg: ide.alignDialog()
+  on aSizeDlg: ide.sizeDialog()
+  on aTabOrder: ide.tabOrderDialog()
   on aFind: ide.findText(false)
   on aReplace: ide.findText(true)
   on aFindUnit: ide.findUnitImport()
@@ -185,6 +188,8 @@ proc buildMenu*(ide: IdeForm) =
   edit.addSeparator()
   edit.addAct a[aRevertProp]
   edit.addAct a[aRevertComponent]
+  edit.addSeparator()
+  for id in [aAlignDlg, aSizeDlg, aTabOrder]: edit.addAct a[id]
   let search = m.addItem("&Search")
   for id in [aFind, aReplace, aFindNext]: search.addAct a[id]
   search.addSeparator()

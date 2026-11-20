@@ -13,12 +13,13 @@ that makes the documentation pictures (`src/ide/session.nim`, used by
 `mainform` builds the window and re-exports the parts. Everything the user can
 do is a proc on `IdeForm`, so the menu, the scripted session and the tests drive
 the same code. The few modal dialogs are hooks (`askSave`, `showError`,
-`askText`, `pickFile`, `pickItem`) that tests replace.
+`askText`, `pickFile`, `pickItem`, `askAlign`, `askSize`, `askOrder`) that tests replace.
 
 | Module | Holds |
 |---|---|
 | `ideform` | The `IdeForm` object and the helpers every part shares |
 | `ideeditors` | Editor tabs, the Object TreeView, the state of the actions, `sync`, the Edit and Search commands that go to the active editor, Revert to Inherited |
+| `designcmds` | Edit > Align..., Size... and Tab Order...: the dialog hooks (`askAlign`, `askSize`, `askOrder`) and the work on the designer |
 | `projectcommands` | Opening, creating and changing projects and units; fonts; options; rename |
 | `buildcontroller` | Compile, Run and Stop as one state machine (`BuildPhase`: idle, compiling, compiling for run, retrying after an automatic import, running) |
 | `quickfixes` | Quick Fix and Find Unit applied to the editors or the files |

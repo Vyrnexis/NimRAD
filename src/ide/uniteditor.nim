@@ -12,7 +12,7 @@
 ## Everything here is single threaded UI code; build the editor after
 ## `Application.init()`.
 
-import std/[os, strutils, tables, sets, sequtils, times]
+import std/[os, strutils, tables, sets, sequtils, times, algorithm]
 import nimvcl
 import nimvcl/dsl/[props, props_std, nfm]
 import nimvcl/controls/[inspector, propeditors]
@@ -218,6 +218,37 @@ proc selection*(e: UnitEditor): seq[Component] =
   for c in e.fDesigner.selection:
     let x = e.componentOf(c)
     if x != nil and x notin result: result.add x
+
+# ------------------------------------------------------------------ tab order
+
+proc tabControls*(e: UnitEditor): seq[Component] =
+  ## The controls Tab visits among the children of the selected control's
+  ## parent (the form's own children when the form, a tile or nothing is
+  ## selected), in tab order: by `tabOrder`, then by position among the siblings.
+  if e.fDesigner == nil: return
+  var scope: Container = e.fBody
+  let sel = e.fDesigner.selection
+  if sel.len > 0 and sel[0] != Control(e.fBody) and not (sel[0] of NonVisualTile) and
+     sel[0].parent != nil:
+    scope = sel[0].parent
+  var order: seq[(int, int)]
+  for i, c in scope.children:
+    if c.canFocus: order.add (c.tabOrder, i)
+  order.sort()
+  for (_, i) in order: result.add Component(scope.children[i])
+
+proc setTabOrder*(e: UnitEditor, order: seq[Component]) =
+  ## Numbers `order` 0, 1, 2... as their `tabOrder` (the first control gets the
+  ## focus first). The form is marked modified; the values go to the `.nfm`.
+  ## Not part of the designer's undo history (nimvcl records geometry only).
+  var changed = false
+  for i, c in order:
+    if c of Control and Control(c).tabOrder != i:
+      Control(c).tabOrder = i
+      changed = true
+  if changed:
+    e.touchDesign()
+    if e.fInsp != nil: e.fInsp.refresh()
 
 # ------------------------------------------------------------------- code edits
 

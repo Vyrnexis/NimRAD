@@ -1098,6 +1098,121 @@ suite "the idle hook only refreshes what changed":
       if n.hasChildren and not n.expanded: again = true
     check again
 
+suite "Align, Size and Tab Order":
+  var ed: UnitEditor
+  var a, b, c: Control
+
+  proc dropped(cls: string, x, y, w, h: float32): Control =
+    check ide.dropComponent(cls)
+    result = Control(ed.selection[0])
+    result.setBounds(x, y, w, h)
+
+  proc pick(cs: varargs[Control]) = ed.designer.select(@cs)
+
+  test "setup: three buttons":
+    check ide.closeAllEditors()
+    ed = ide.openUnit("unit1")
+    ide.settle
+    a = dropped("Button", 20, 20, 100, 30)
+    b = dropped("Button", 60, 80, 140, 24)
+    c = dropped("Button", 150, 140, 80, 40)
+    pick(a, b, c)
+    ide.refreshActions()
+    for id in [aAlignDlg, aSizeDlg, aTabOrder]: check ide.acts[id].enabled
+
+  test "Align: the hook gives the options, the first selected control is the model":
+    var seen = AlignOptions()
+    ide.askAlign = proc(o: var AlignOptions): bool =
+      seen = o
+      o.horizontal = haLeftSides
+      o.vertical = vaTops
+      true
+    pick(a, b, c)
+    check ide.alignDialog()
+    check seen.horizontal == haNoChange and seen.vertical == vaNoChange
+    check b.left == a.left and c.left == a.left
+    check b.top == a.top and c.top == a.top
+    check ide.activeEditor.designer.undo()               # one undo step per direction
+    check ide.activeEditor.designer.undo()
+    check b.left == 60 and c.top == 140
+
+  test "Align: centers, space equally, center in window, cancel":
+    ide.askAlign = proc(o: var AlignOptions): bool =
+      o.horizontal = haCenters
+      o.vertical = vaSpaceEqually
+      true
+    pick(a, b, c)
+    check ide.alignDialog()
+    check abs((b.left + b.width / 2) - (a.left + a.width / 2)) <= 1
+    check abs((c.left + c.width / 2) - (a.left + a.width / 2)) <= 1
+    let gap1 = b.top - (a.top + a.height)
+    let gap2 = c.top - (b.top + b.height)
+    check abs(gap1 - gap2) <= 1
+    ide.askAlign = proc(o: var AlignOptions): bool =
+      o.horizontal = haCenterInWindow
+      o.vertical = vaCenterInWindow
+      true
+    pick(b)
+    check ide.alignDialog()
+    check abs(b.left - (b.parent.width - b.width) / 2) <= 1
+    check abs(b.top - (b.parent.height - b.height) / 2) <= 1
+    let l = b.left
+    ide.askAlign = proc(o: var AlignOptions): bool = false
+    pick(a, b, c)
+    check not ide.alignDialog()
+    check b.left == l
+
+  test "Size: shrink to smallest, grow to largest":
+    a.setBounds(20, 20, 100, 30)
+    b.setBounds(60, 80, 140, 24)
+    c.setBounds(150, 140, 80, 40)
+    ide.askSize = proc(o: var SizeOptions): bool =
+      o.widthMode = smShrinkToSmallest
+      o.heightMode = smGrowToLargest
+      true
+    pick(a, b, c)
+    check ide.sizeDialog()
+    for x in [a, b, c]:
+      check x.width == 80
+      check x.height == 40
+    check ed.designer.selection == @[a, b, c]            # the selection stays as it was
+
+  test "Size: an exact size, and the dialog starts with the primary control's size":
+    var seen = SizeOptions()
+    ide.askSize = proc(o: var SizeOptions): bool =
+      seen = o
+      o.widthMode = smExact
+      o.width = 120
+      o.heightMode = smExact
+      o.height = 33
+      true
+    pick(b, a, c)
+    check ide.sizeDialog()
+    check seen.width == 80 and seen.height == 40
+    for x in [a, b, c]:
+      check x.width == 120
+      check x.height == 33
+    check ed.modified
+
+  test "Tab Order: the hook reorders, the values are saved":
+    var listed: seq[string]
+    ide.askOrder = proc(title: string, items: seq[string]): seq[int] =
+      listed = items
+      @[items.high] & toSeq(0 ..< items.high)         # the last one first
+    pick(b)
+    let before = ed.tabControls.mapIt(it.name)
+    check before.len >= 3
+    check ide.tabOrderDialog()
+    check listed == before
+    let after = ed.tabControls.mapIt(it.name)
+    check after == @[before[^1]] & before[0 .. ^2]
+    ed.save()
+    let nfm = readFile(ide.project.dir / "unit1.nfm")
+    check "tabOrder = 1" in nfm
+    ide.askOrder = proc(title: string, items: seq[string]): seq[int] = @[]
+    check not ide.tabOrderDialog()
+    check ed.tabControls.mapIt(it.name) == after
+
 suite "reopen and startup":
   setup:
     errors.setLen 0
