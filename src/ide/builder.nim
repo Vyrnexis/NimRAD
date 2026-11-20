@@ -63,6 +63,7 @@ proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
   result.add "-d:nimBetterRun"
   result.add "--nimcache:" & (p.outputPath / "nimcache")
   if not opts.hints: result.add "--hints:off"
+  result.add "--errorMax:100"             # list all the errors, as Delphi does (nimFlags may override)
   result.add p.nimFlags
   for d in p.defines:
     result.add "-d:" & d

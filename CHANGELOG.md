@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A build lists up to 100 errors in Messages (`--errorMax:100`), not just the first;
+  a project's own `--errorMax` flag still wins.
 - Messages: the gcc/ld lines that follow `Error: execution of an external compiler
   program ... failed` are kept in that message instead of being dropped.
 - A new handler stub of an inherited event puts the caret on its `discard`, not on

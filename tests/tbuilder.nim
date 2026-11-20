@@ -97,7 +97,7 @@ suite "sync":
     p.nimFlags = @["-d:release"]
     let a = p.compileArgs()
     check a[0] == "c"
-    for x in ["--colors:off", "--listFullPaths:on", "--hints:off", "-d:release",
+    for x in ["--colors:off", "--listFullPaths:on", "--hints:off", "-d:release", "--errorMax:100",
               "--outdir:" & p.outputPath]:
       check x in a
     check a[^1] == p.mainPath
