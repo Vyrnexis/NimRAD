@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-11-21
+
+A full audit of the IDE and of nimvcl, Delphi-style features and the switch to the new nimvcl APIs; requires nimvcl 0.4.0.
+
+- Two bookmarked lines swapped with Alt+Up/Down swap their bookmark numbers with them (nimvcl `onLinesMove`).
 - Numbered bookmarks follow the gutter markers: a deleted bookmark line frees its slot (undo brings it back) and a line moved with Alt+Up/Down keeps its bookmark.
 - Double click on the form creates `FormCreate` (its `onCreate`, like Delphi) instead of `FormShow`; the default events come from nimvcl.
 - Designer: changes made in the Object Inspector (a rename and a handler change included) are undo steps of the form designer (Ctrl+Z), and Edit > Size and Tab Order are one undo step each.
