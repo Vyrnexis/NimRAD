@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-11-21
+
+- The IDE builds without compiler warnings (unused imports removed), so `nimble install` is quiet.
+
 ## 0.3.0 - 2026-11-21
 
 A full audit of the IDE and of nimvcl, Delphi-style features and the switch to the new nimvcl APIs; requires nimvcl 0.4.0.
