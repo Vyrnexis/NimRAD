@@ -105,13 +105,22 @@ proc firstWithFix*(p: MessagesPanel): int =
     if p.fixes[i].len > 0: return i
   -1
 
+template bulk*(p: MessagesPanel, body: untyped) =
+  ## Rows added in `body` cost one layout and one repaint of the list.
+  p.list.beginUpdate()
+  try:
+    body
+  finally:
+    p.list.endUpdate()
+
 func showHints*(p: MessagesPanel): bool = p.fShowHints
 proc `showHints=`*(p: MessagesPanel, v: bool) =
   ## Shows or hides the hint rows (rebuilds the list).
   if v == p.fShowHints: return
   p.fShowHints = v
-  p.list.items.clear()
-  for r in p.rows: p.addItem r
+  p.bulk:
+    p.list.items.clear()
+    for r in p.rows: p.addItem r
 
 proc wanted(m: Message): bool =
   ## Plain output lines (`CC: x.nim`, config hints) stay in the Output tab only.
@@ -194,10 +203,11 @@ proc addOutput*(p: MessagesPanel, line: string) =
 proc feedLines*(p: MessagesPanel, lines: openArray[string]) =
   ## Lines of compiler output: to the Output tab and to the parser.
   p.addOutputLines lines
-  for line in lines:
-    p.parser.feed line
-    for m in p.parser.take():
-      if m.wanted: p.addRow m
+  p.bulk:
+    for line in lines:
+      p.parser.feed line
+      for m in p.parser.take():
+        if m.wanted: p.addRow m
 
 proc feed*(p: MessagesPanel, line: string) =
   ## One line of compiler output: to the Output tab and to the parser.
@@ -208,10 +218,11 @@ proc feedRuntimeLines*(p: MessagesPanel, lines: openArray[string]) =
   ## traceback (frames, the unhandled exception) also as messages, so a double
   ## click or F8 opens the place in the project.
   p.addOutputLines lines
-  for line in lines:
-    for m in p.runtime.feedRuntime(line, p.isOwnFile):
-      p.addRow m
-      if m.kind == MessageKind.mkError: inc p.runtimeErrors
+  p.bulk:
+    for line in lines:
+      for m in p.runtime.feedRuntime(line, p.isOwnFile):
+        p.addRow m
+        if m.kind == MessageKind.mkError: inc p.runtimeErrors
 
 proc finish*(p: MessagesPanel) =
   ## The output ended: completes the message that was still open.

@@ -67,8 +67,12 @@ proc setEntries*(p: TodoPanel, entries: seq[TodoEntry]) =
       for i, e in entries:
         if e.file == old.file and e.item.line == old.item.line and e.item.text == old.item.text: keep = i
   p.entries = entries
-  p.list.items.clear()
-  for i, e in entries:
-    let it = p.list.items.add(if e.item.priority > 0: $e.item.priority else: "", e.captionOf, e.unitName, $e.item.line)
-    it.tag = i
+  p.list.beginUpdate()
+  try:
+    p.list.items.clear()
+    for i, e in entries:
+      let it = p.list.items.add(if e.item.priority > 0: $e.item.priority else: "", e.captionOf, e.unitName, $e.item.line)
+      it.tag = i
+  finally:
+    p.list.endUpdate()
   if keep >= 0: p.list.itemIndex = keep

@@ -53,7 +53,8 @@ proc findInFilesRun*(ide: IdeForm, o: FindOptions): FindResult =
     return
   m.addNote("Find in Files: " & what & " in " & (if o.scope == fsUnits: "the units of " else: "the folder of ") &
             ide.project.name & " (" & $result.scanned & " files)", icInfo)
-  for h in result.hits: m.addMatch(h.file, h.line, h.col, h.text)
+  m.bulk:
+    for h in result.hits: m.addMatch(h.file, h.line, h.col, h.text)
   var summary = $result.hits.len & " lines in " & $result.files & " files"
   if result.truncated: summary = "The first " & $MaxHits & " lines (there are more); narrow the search"
   if result.skipped > 0: summary.add "; " & $result.skipped & " files skipped (too big or unreadable)"
