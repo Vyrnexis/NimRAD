@@ -32,7 +32,8 @@ suite "nimvcl source resolution":
     setCurrentDir root / "a"                 # has src/nimvcl.nim
     defer: setCurrentDir old
     check resolveNimvclSrc("", "", proc(): string = "") == ""
-    check resolveNimvclSrc("src", "", nil) == a
+    # the current folder comes back resolved (macOS: /var is /private/var)
+    check resolveNimvclSrc("src", "", nil).expandFilename == a.expandFilename
   test "this build knows where nimvcl was":
     check isNimvclSrc(compiledAgainst)
     check detectNimvclSrc().len > 0
