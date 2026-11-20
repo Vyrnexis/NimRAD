@@ -238,3 +238,13 @@ suite "stub placement and line endings":
     let crlf = unit.replace("\n", "\r\n")
     let c = ensureHandler(crlf, "Form1", "f", "").text
     check c.count("\n") == c.count("\r\n")
+
+suite "the parsed procs of the last text are remembered":
+  test "hasProc and ensureHandler follow the text, not the cache":
+    check hasProc(unit, "okButtonClick")
+    check ensureHandler(unit, "Form1", "okButtonClick", "sender: Control").inserted == false
+    let changed = unit.replace("okButtonClick", "otherClick")
+    check not hasProc(changed, "okButtonClick")      # a different text is parsed again
+    check hasProc(changed, "otherClick")
+    check ensureHandler(changed, "Form1", "okButtonClick", "sender: Control").inserted
+    check hasProc(unit, "okButtonClick")

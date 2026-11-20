@@ -53,6 +53,7 @@ type
     fPasteCount: int
     fAnc: Obj                      ## cached read-only copy of the ancestor form (see `ancestorCopy`)
     fAncStamp: string              ## path, size and time of the file `fAnc` was read from
+    fAncChecked: float             ## when the stamp was last compared with the file (`epochTime`)
     fBusy: bool                    ## ignore designer callbacks while rebuilding
 
   DesignTitle = ref object of Panel
@@ -601,11 +602,15 @@ proc dropAncestor(e: UnitEditor) =
   e.fAnc = nil
   e.fAncStamp = ""
 
-proc ancestorCopy(e: UnitEditor): Obj =
+proc ancestorCopy(e: UnitEditor, recheckAfter = 0.0): Obj =
   ## A read-only copy of the ancestor's form, as its file says now (nil when the
   ## form does not inherit or the file cannot be read). It is kept for as long
   ## as the ancestor file is unchanged (path, size, time), so repeated checks do
-  ## not load the form again; never change or free it.
+  ## not load the form again; never change or free it. The file is looked at
+  ## again unless the last look was less than `recheckAfter` seconds ago (the
+  ## Object Inspector asks once per row).
+  if recheckAfter > 0 and e.fAnc != nil and epochTime() - e.fAncChecked < recheckAfter:
+    return e.fAnc
   if e.fForm == nil or e.fForm.ancestorPath.len == 0 or not fileExists(e.fForm.ancestorPath):
     e.dropAncestor()
     return nil
@@ -613,6 +618,7 @@ proc ancestorCopy(e: UnitEditor): Obj =
   var stamp: string
   try: stamp = path & "|" & $getFileSize(path) & "|" & $getLastModificationTime(path).toUnixFloat
   except OSError: return nil
+  e.fAncChecked = epochTime()
   if e.fAnc != nil and stamp == e.fAncStamp: return e.fAnc
   e.dropAncestor()
   try:
@@ -644,14 +650,14 @@ proc sameValue(info: PropInfo, a, b: Obj): bool =
 proc revertible(info: PropInfo): bool =
   info != nil and info.name != "name" and info.kind != pkCollection and info.stored
 
-proc canRevert*(e: UnitEditor, c: Component, prop: string): bool =
+proc canRevert*(e: UnitEditor, c: Component, prop: string, recheckAfter = 0.0): bool =
   ## Whether the property differs from what the ancestor form says (and can be
   ## put back). False for a component of this form's own and for an unknown property.
   if c == nil or c != Component(e.fForm) and not c.inherited: return false
   let ci = classOf(Obj(c))
   let info = if ci == nil: nil else: ci.findProp(prop)
   if not info.revertible: return false
-  let anc = e.ancestorCopy
+  let anc = e.ancestorCopy(recheckAfter)
   if anc == nil: return false
   let o = e.counterpart(anc, c)
   o != nil and not sameValue(info, Obj(c), o)
@@ -660,7 +666,7 @@ proc overridden*(e: UnitEditor, prop: string): bool =
   ## The single selected inherited component's property differs from the
   ## ancestor form's (what the Object Inspector draws bold).
   let sel = e.selection
-  sel.len == 1 and e.isInherited and e.canRevert(sel[0], prop)
+  sel.len == 1 and e.isInherited and e.canRevert(sel[0], prop, 0.25)  # one stat per refresh, not per row
 
 proc refreshAfterRevert(e: UnitEditor, c: Component) =
   if c == Component(e.fForm): e.syncGeometry()

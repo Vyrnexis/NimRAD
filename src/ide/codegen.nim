@@ -173,6 +173,21 @@ proc findProc(procs: seq[ProcInfo], name: string): int =
     if sameIdent(p.name, name): return i
   -1
 
+var
+  procsText: string                ## the text `procsCache` was parsed from
+  procsCache: seq[ProcInfo]
+  procsValid = false
+
+proc parseProcsCached(src: string, s: Src): seq[ProcInfo] =
+  ## `parseProcs(s)` for `s = split(src)`, remembered for the last text: one property
+  ## change asks `hasProc` and `ensureHandler` about the same text, and lexing is the
+  ## cost. (The IDE runs this on the UI thread only.)
+  if not (procsValid and procsText == src):
+    procsCache = parseProcs(s)
+    procsText = src
+    procsValid = true
+  procsCache
+
 proc handlerNames*(src, formType: string): seq[string] =
   ## Names of the top-level procs whose first parameter has type `formType`,
   ## in source order.
@@ -180,7 +195,7 @@ proc handlerNames*(src, formType: string): seq[string] =
     if sameIdent(p.firstType, formType): result.add p.name
 
 proc hasProc*(src, name: string): bool =
-  parseProcs(split(src)).findProc(name) >= 0
+  parseProcsCached(src, split(src)).findProc(name) >= 0
 
 proc firstBodyCol(s: Src, p: ProcInfo): int =
   if p.bodyLine <= p.last:
@@ -197,7 +212,7 @@ proc ensureHandler*(src, formType, handlerName, eventParams: string,
   ## `loadForm` line, else after the imports, else at the end. The caret is on
   ## the first body line (column of the indentation).
   var s = split(src)
-  let procs = parseProcs(s)
+  let procs = parseProcsCached(src, s)
   let ex = procs.findProc(handlerName)
   if ex >= 0:
     return StubResult(text: src, line: min(procs[ex].bodyLine, procs[ex].last),
