@@ -2,11 +2,8 @@
 ## each is a dialog hook of `IdeForm` (`askAlign`, `askSize`, `askOrder`) and a
 ## proc that does the work on the designer, so tests drive both.
 ##
-## nimvcl's `FormDesigner` has no command for shrinking or growing to the
-## smallest or largest control or for an exact size: those reorder the selection
-## so the right control is the primary one (`makeSameSize` copies the primary's
-## size), or resize one control at a time with `nudge`. Each step is one undo
-## step.
+## Size and Tab Order use the designer's `sizeSelection` and `setTabOrder`:
+## each is one undo step.
 
 import std/[sequtils, strutils]
 import nimvcl
@@ -32,34 +29,29 @@ proc applyAlign*(d: FormDesigner, o: AlignOptions) =
   of vaSpaceEqually: d.spaceEvenly(false)
   of vaCenterInWindow: d.centerInParent(false, true)
 
-proc sameExtent(d: FormDesigner, free: seq[Control], width: bool, grow: bool) =
-  ## Every control of `free` gets the smallest (or largest) width or height.
-  if free.len < 2: return
-  var pick = free[0]
-  for c in free:
-    let (v, best) = if width: (c.width, pick.width) else: (c.height, pick.height)
-    if (grow and v > best) or (not grow and v < best): pick = c
-  d.select(@[pick] & free.filterIt(it != pick))     # the primary one is the model
-  d.makeSameSize(width, not width)
-
 proc applySize*(d: FormDesigner, o: SizeOptions) =
+  ## The free controls of the selection get the smallest or largest extent, or
+  ## the exact size, as one undo step (`sizeSelection`).
   let before = d.selection
   let free = d.freeControls
-  if free.len > 0:
-    for (width, mode) in [(true, o.widthMode), (false, o.heightMode)]:
-      case mode
-      of smNoChange: discard
-      of smShrinkToSmallest: d.sameExtent(free, width, false)
-      of smGrowToLargest: d.sameExtent(free, width, true)
-      of smExact: discard
-    if smExact in [o.widthMode, o.heightMode]:
-      for c in free:
-        let dx = if o.widthMode == smExact: o.width.float32 - c.width else: 0'f32
-        let dy = if o.heightMode == smExact: o.height.float32 - c.height else: 0'f32
-        if dx != 0 or dy != 0:
-          d.select(c)
-          d.nudge(dx, dy, resize = true)
-    d.select(before)
+  if free.len == 0: return
+  proc extent(width, grow: bool): float32 =
+    result = if width: free[0].width else: free[0].height
+    for c in free:
+      let v = if width: c.width else: c.height
+      if (grow and v > result) or (not grow and v < result): result = v
+  proc pick(mode: SizeMode, exact: int, width: bool): float32 =
+    case mode
+    of smNoChange: -1'f32
+    of smShrinkToSmallest: (if free.len < 2: -1'f32 else: extent(width, false))
+    of smGrowToLargest: (if free.len < 2: -1'f32 else: extent(width, true))
+    of smExact: exact.float32
+  let w = pick(o.widthMode, o.width, true)
+  let h = pick(o.heightMode, o.height, false)
+  if w < 0 and h < 0: return
+  d.select(free)
+  d.sizeSelection(w, h)
+  d.select(before)
 
 proc hasDesignSelection*(ide: IdeForm): bool =
   let ed = ide.activeEditor
@@ -98,5 +90,5 @@ proc tabOrderDialog*(ide: IdeForm): bool {.discardable.} =
     return false
   let order = ide.askOrder("Tab Order", comps.mapIt(it.name))
   if order.len != comps.len: return false
-  ed.setTabOrder(order.mapIt(comps[it]))
+  ed.designer.setTabOrder(order.mapIt(comps[it]).filterIt(it of Control).mapIt(Control(it)))
   true

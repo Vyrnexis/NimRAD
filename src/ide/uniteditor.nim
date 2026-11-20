@@ -51,7 +51,6 @@ type
     fLastModified: bool
     fNames: Table[Component, string]
     fExtra: Component              ## selected through the tree, outside the designer
-    fOldHandler: tuple[target: Obj, event, name: string]
       ## the handler an event had before the Object Inspector changes it
     fPasteCount: int
     fAnc: Obj                      ## cached read-only copy of the ancestor form (see `ancestorCopy`)
@@ -239,19 +238,6 @@ proc tabControls*(e: UnitEditor): seq[Component] =
     if c.canFocus: order.add (c.tabOrder, i)
   order.sort()
   for (_, i) in order: result.add Component(scope.children[i])
-
-proc setTabOrder*(e: UnitEditor, order: seq[Component]) =
-  ## Numbers `order` 0, 1, 2... as their `tabOrder` (the first control gets the
-  ## focus first). The form is marked modified; the values go to the `.nfm`.
-  ## Not part of the designer's undo history (nimvcl records geometry only).
-  var changed = false
-  for i, c in order:
-    if c of Control and Control(c).tabOrder != i:
-      Control(c).tabOrder = i
-      changed = true
-  if changed:
-    e.touchDesign()
-    if e.fInsp != nil: e.fInsp.refresh()
 
 # ------------------------------------------------------------------- code edits
 
@@ -604,7 +590,7 @@ proc handlerUsed(e: UnitEditor, name: string, but: Component, butEvent: string):
       if h == name and not (c == but and ev == butEvent): hit = true)
   hit
 
-proc propertyChanged(e: UnitEditor, target: Obj, prop: string) =
+proc propertyChanged(e: UnitEditor, target: Obj, prop: string, oldHandler = "") =
   if not (target of Component): return
   let c = Component(target)
   if prop == "name":
@@ -613,9 +599,7 @@ proc propertyChanged(e: UnitEditor, target: Obj, prop: string) =
     # a handler named by hand: its proc follows the new name (as Delphi renames
     # it) when nothing else uses the old one, else a stub is made
     let h = handlerNameOf(target, prop)
-    let old = if e.fOldHandler.target == target and e.fOldHandler.event == prop: e.fOldHandler.name
-              else: ""
-    e.fOldHandler = (nil, "", "")
+    let old = oldHandler
     if h.len > 0 and not hasProc(e.codeOf, h):
       if old.len > 0 and old != h and hasProc(e.codeOf, old) and not e.handlerUsed(old, c, prop):
         e.setCodeText(renameHandler(e.codeOf, old, h))
@@ -857,10 +841,16 @@ proc bindInspector*(e: UnitEditor, insp: ObjectInspector) =
     if prop == "name" and t of Component and v.kind == pkString:
       message = e.nameProblem(Component(t), v.s)
       accept = message.len == 0
-    elif v.kind == pkEvent and t of Component:
-      e.fOldHandler = (t, prop, handlerNameOf(t, prop))
-  insp.onPropertyChanged = proc(s: Control, t: Obj, prop: string) =
-    e.propertyChanged(t, prop)
+  # edits go through the designer (undoable); it reports every change, undo
+  # and redo included, with the old value (the old handler name of an event)
+  insp.designer = e.fDesigner
+  if e.fDesigner != nil:
+    e.fDesigner.onPropertyChanged = proc(f: FormDesigner, t: Obj, prop: string,
+                                         oldValue, newValue: PropValue) =
+      e.propertyChanged(t, prop, if oldValue.kind == pkEvent: oldValue.handler else: "")
+  else:
+    insp.onPropertyChangedEx = proc(s: Control, t: Obj, prop: string, oldValue, newValue: PropValue) =
+      e.propertyChanged(t, prop, if oldValue.kind == pkEvent: oldValue.handler else: "")
   insp.onCreateHandler = proc(s: Control, t: Obj, event: string): string =
     if not (t of Component): return ""
     let c = Component(t)
@@ -888,7 +878,9 @@ proc unbindInspector*(e: UnitEditor) =
   if insp == nil: return
   e.fInsp = nil
   insp.onPropertyChanging = nil
-  insp.onPropertyChanged = nil
+  insp.onPropertyChangedEx = nil
+  insp.designer = nil
+  if e.fDesigner != nil: e.fDesigner.onPropertyChanged = nil
   insp.onCreateHandler = nil
   insp.onGetHandlers = nil
   insp.onEditExtra = nil

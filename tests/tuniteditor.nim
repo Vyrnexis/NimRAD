@@ -184,12 +184,27 @@ suite "unit editor":
     check r.insp.lastError.contains("already used")
     check not r.insp.setValue("name", pvString("2bad"))
     check e1.name == "Edit1"
-    check r.insp.lastError.contains("valid identifier")
+    check r.insp.lastError.contains("valid component name")
     check not r.insp.setValue("name", pvString("proc"))
     check e1.name == "Edit1"
     check r.insp.setValue("name", pvString("Edit9"))
     check e1.name == "Edit9"
     check r.insp.lastError == ""
+
+  test "an edit in the Object Inspector is one undo step of the designer, a rename too":
+    let r = rig("appundo")
+    let b = r.dropButton()
+    check r.insp.setValue("caption", pvString("Hello"))
+    check b.caption == "Hello"
+    check r.ed.designer.undo()
+    check b.caption != "Hello"
+    check r.ed.designer.redo()
+    check b.caption == "Hello"
+    let old = b.name
+    check r.insp.setValue("name", pvString("Renamed1"))
+    check b.name == "Renamed1"
+    check r.ed.designer.undo()
+    check b.name == old
 
   test "copy and paste gives a unique name":
     let r = rig("app3")
