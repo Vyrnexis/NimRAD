@@ -30,7 +30,7 @@
 ##
 ## Pure string functions plus the class table; no UI.
 
-import std/[strutils, algorithm, sets, sequtils, os]
+import std/[strutils, algorithm, sets, sequtils, os, options]
 import nimvcl/dsl/nfmsyntax
 import ./[mainfile, nimsource]
 
@@ -112,14 +112,15 @@ proc collectClasses(root: NfmNode, baseDir: string, classes: var HashSet[string]
       collectClasses(parseNfm(readFile(apath)), apath.parentDir, classes, depth + 1)
     except CatchableError: discard
 
-proc importsFor*(nfmText: string, baseDir = "", user: UserClasses = []): seq[string] =
-  ## The module paths (sorted, no duplicates) of the classes a form file uses.
-  ## A form file that does not parse needs none. `baseDir` (the folder of the
+proc tryImportsFor*(nfmText: string, baseDir = "", user: UserClasses = []): Option[seq[string]] =
+  ## The module paths (sorted, no duplicates) of the classes a form file uses;
+  ## `none` when the form file does not parse. `baseDir` (the folder of the
   ## file) lets an inherited form count the classes of its ancestors' files too.
   ## `user` names the modules of classes that are not nimvcl's.
   var root: NfmNode
   try: root = parseNfm(nfmText)
-  except NfmError: return
+  except NfmError: return none(seq[string])
+  var modules: seq[string]
   var classes = initHashSet[string]()
   collectClasses(root, baseDir, classes)
   var seen = initHashSet[string]()
@@ -127,8 +128,13 @@ proc importsFor*(nfmText: string, baseDir = "", user: UserClasses = []): seq[str
     let m = moduleOf(c, user)
     if m.len > 0 and m notin seen:
       seen.incl m
-      result.add m
-  result.sort
+      modules.add m
+  modules.sort
+  some(modules)
+
+proc importsFor*(nfmText: string, baseDir = "", user: UserClasses = []): seq[string] =
+  ## `tryImportsFor`, where a form file that does not parse needs none.
+  tryImportsFor(nfmText, baseDir, user).get(@[])
 
 func managedPath(line: string, owned: openArray[string]): string =
   ## `nimvcl/controls/button` for the line `import nimvcl/controls/button`, the
@@ -172,10 +178,12 @@ proc syncFromNfm*(src, nfmText: string, baseDir = "", importAll = false,
                   user: UserClasses = []): string =
   ## `syncImports` for the classes of a form file; with `importAll` the block
   ## holds only the modules of the user's classes (the unit imports all of
-  ## nimvcl).
+  ## nimvcl). Returns `src` unchanged when the form file does not parse.
   var owned: seq[string]
   for (_, m) in user: owned.add m
-  let wanted = importsFor(nfmText, baseDir, user)
+  let found = tryImportsFor(nfmText, baseDir, user)
+  if found.isNone: return src
+  let wanted = found.get
   syncImports(src, if importAll: wanted.filterIt(it in owned) else: wanted, owned)
 
 proc collectNames(root: NfmNode, dir: string, seen: var HashSet[string],

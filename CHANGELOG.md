@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- A form file that does not parse no longer makes the unit lose its control
+  imports.
+
 ## 0.2.1 - 2026-11-20
 
 - Editor tabs leave room for the close button again (nimvcl 0.2.1).

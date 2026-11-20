@@ -1069,8 +1069,12 @@ proc syncLoadedImports(e: UnitEditor) =
   ## (it may have been edited outside the designer).
   ## A form the designer cannot show (a class of the user's that the IDE does
   ## not know) gets its imports too.
+  ## A form file that cannot be read or parsed leaves the imports alone.
   if e.fUnit.isForm and e.fUnit.nfmPath.len > 0 and fileExists(e.project.nfmPathOf(e.fUnit)):
-    e.setCodeText(syncFromNfm(e.codeOf, readFile(e.project.nfmPathOf(e.fUnit)), e.nfmDir,
+    var nfm: string
+    try: nfm = readFile(e.project.nfmPathOf(e.fUnit))
+    except IOError: return
+    e.setCodeText(syncFromNfm(e.codeOf, nfm, e.nfmDir,
                               e.project.importAll, e.project.userClassImports(e.unitName)))
 
 proc refreshUnit(e: UnitEditor) =

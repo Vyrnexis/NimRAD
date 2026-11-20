@@ -2,7 +2,7 @@
 ## and (the real check) that a unit with every class of the registry, every
 ## enum property and every event handler compiles with only those imports.
 
-import std/[unittest, strutils, os, osproc, sequtils, times]
+import std/[options, unittest, strutils, os, osproc, sequtils, times]
 import nimvcl/dsl/[props, props_std, nfmsyntax]
 import ide/[unitimports, codegen, project, nimsource]
 
@@ -51,6 +51,8 @@ suite "importsFor":
     let t = "object Form1: Form\n  object p: Panel\n    object b: Button\n    end\n    object c: Custom\n    end\n  end\nend\n"
     check importsFor(t) == @["nimvcl/controls/button", "nimvcl/controls/panel"]
     check importsFor("not a form file") == newSeq[string]()
+    check tryImportsFor("not a form file").isNone
+    check tryImportsFor(formWith("Button")).isSome
 
   test "a Frame root needs its module":
     check importsFor("object Frame1: Frame\nend\n") == @["nimvcl/controls/frame"]
@@ -97,9 +99,9 @@ suite "syncImports":
     check t.count("\r\n") == t.count("\n")
     check syncFromNfm(t, formWith()) == s
 
-  test "a form file that does not parse removes the managed imports only":
+  test "a form file that does not parse leaves the source alone":
     let a = syncFromNfm(unitText, formWith("Button"))
-    check syncFromNfm(a, "broken") == unitText
+    check syncFromNfm(a, "broken") == a
 
 # ------------------------------------------------ compile with every class
 
