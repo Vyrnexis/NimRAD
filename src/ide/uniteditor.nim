@@ -1115,34 +1115,53 @@ proc refreshUnit(e: UnitEditor) =
   let i = e.project.findUnit(e.unitName)
   if i >= 0: e.fUnit = e.project.units[i]
 
+proc rebuildDesign(e: UnitEditor, text: string, fromFile, tolerant: bool,
+                   dropped: var bool): bool =
+  ## Tears the designed form down and builds it again from `text` (or from the
+  ## `.nfm` file), then restores the selection and which view is visible. A
+  ## `tolerant` build retries without strict checks and sets `dropped`. False
+  ## when the form could not be built: the code view only.
+  var selName = ""
+  let sel = e.selection
+  if sel.len == 1: selName = sel[0].name
+  let wasDesigner = e.designerVisible
+  e.teardownDesign()
+  let madeScroll = e.ensureScroll()          # the form could not be loaded at first
+  proc fail(ex: ref CatchableError) =
+    e.loadError = ex.msg
+    e.say "cannot load " & e.fUnit.nfmPath & ": " & ex.msg
+    if madeScroll: e.dropScroll()
+  try:
+    e.buildDesign(if fromFile: e.readNfm() else: text)
+    result = true
+  except CatchableError as ex:
+    if not tolerant: fail(ex)
+    else:
+      try:
+        e.buildDesign(text, strict = false)
+        result = true
+        dropped = true
+        e.say "The ancestor form no longer has something this form changed; that change was dropped"
+      except CatchableError as ex2: fail(ex2)
+  if result:
+    e.loadError = ""
+    var target: Component = nil
+    if selName.len > 0:
+      for (c, _) in e.componentTree:
+        if c.name == selName: target = c
+    if target != nil: e.selectComponent(target) else: e.fDesigner.select(Control(e.fBody))
+    e.fScroll.visible = wasDesigner
+    e.fCode.visible = not wasDesigner
+  else:
+    e.fCode.visible = true
+
 proc reloadFromDisk*(e: UnitEditor) =
   ## Re-reads the `.nim` and the `.nfm`, dropping every unsaved change.
   e.refreshUnit()
   e.loadCode()
   if e.fUnit.isForm and fileExists(e.project.nfmPathOf(e.fUnit)):
-    let sel = e.selection
-    var selName = ""
-    if sel.len == 1: selName = sel[0].name
-    let wasDesigner = e.designerVisible
-    e.teardownDesign()
-    let madeScroll = e.ensureScroll()          # the form could not be loaded at first
-    try:
-      e.buildDesign(e.readNfm())
-      e.loadError = ""
-    except CatchableError as ex:
-      e.loadError = ex.msg
-      e.say "cannot load " & e.fUnit.nfmPath & ": " & ex.msg
-      if madeScroll: e.dropScroll()
-    if e.fDesigner != nil:
-      var target: Component = nil
-      if selName.len > 0:
-        for (c, _) in e.componentTree:
-          if c.name == selName: target = c
-      if target != nil: e.selectComponent(target) else: e.fDesigner.select(Control(e.fBody))
-      e.fScroll.visible = wasDesigner
-      e.fCode.visible = not wasDesigner
-    else:
-      e.fCode.visible = true
+    var dropped = false
+    discard e.rebuildDesign("", true, false, dropped)
   e.syncLoadedImports()
   e.fDesignDirty = false
   e.fExtra = nil
@@ -1170,38 +1189,9 @@ proc rebaseOnAncestor*(e: UnitEditor, pending = ""): bool {.discardable.} =
   if pending.len == 0 and not fileExists(e.project.nfmPathOf(e.fUnit)): return false
   var text = pending
   if text.len == 0: text = e.readNfm()
-  var selName = ""
-  let sel = e.selection
-  if sel.len == 1: selName = sel[0].name
-  let wasDesigner = e.fScroll != nil and e.designerVisible
-  var dirty = pending.len > 0
-  e.teardownDesign()
-  let madeScroll = e.ensureScroll()
-  var built = false
-  try:
-    e.buildDesign(text)
-    built = true
-  except CatchableError:
-    try:
-      e.buildDesign(text, strict = false)
-      built = true
-      dirty = true
-      e.say "The ancestor form no longer has something this form changed; that change was dropped"
-    except CatchableError as ex:
-      e.loadError = ex.msg
-      e.say "cannot load " & e.fUnit.nfmPath & ": " & ex.msg
-      if madeScroll: e.dropScroll()
-  if built:
-    e.loadError = ""
-    var target: Component = nil
-    if selName.len > 0:
-      for (c, _) in e.componentTree:
-        if c.name == selName: target = c
-    if target != nil: e.selectComponent(target) else: e.fDesigner.select(Control(e.fBody))
-    e.fScroll.visible = wasDesigner
-    e.fCode.visible = not wasDesigner
-  else:
-    e.fCode.visible = true
+  var dropped = false
+  let built = e.rebuildDesign(text, false, true, dropped)
+  let dirty = pending.len > 0 or dropped
   e.fDesignDirty = dirty and built
   e.fExtra = nil
   e.syncLoadedImports()
