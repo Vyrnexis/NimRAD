@@ -42,7 +42,7 @@ the same code. The few modal dialogs are hooks (`askSave`, `showError`,
 | `buildcheck` | The up-to-date check behind Run: a snapshot of the project folder before the compiler starts, a stamp (`nimrad-build.json`) after a successful build, and `isUpToDate`. Any doubt builds. Limits: 4000 files, 4 MB per hashed file, 64 MB hashed per check |
 | `sdllink` | The SDL link flags for macOS, one definition shared by `config.nims` (the IDE), `builder` (the projects) and the `nim.cfg` of new projects |
 | `nimvclpath` | Finding nimvcl's `src` folder: `$NIMVCL_SRC`, the folder the IDE was compiled against, `nimble path nimvcl` |
-| `messages` | Parsing compiler and program output into messages |
+| `messages` | Parsing compiler output (`MessageParser`) and the tracebacks of the running program (`RuntimeParser`) into messages |
 | `cmdargs` | Splitting and quoting command line text (compiler flags, run parameters) |
 
 ## The project and its sources

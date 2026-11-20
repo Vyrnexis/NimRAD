@@ -36,6 +36,9 @@ type
     onJump*: proc(file: string, line, col: int)
     fixProvider*: proc(m: Message): seq[QuickFix]
     onQuickFix*: proc(msgIndex: int)
+    isOwnFile*: proc(file: string): bool
+      ## the files of the project (a runtime error is placed in one of them)
+    runtimeErrors*: int        ## unhandled exceptions found in the program's output
     msgs*: seq[Message]        ## every message that has a row, hidden hints too (item.tag = index)
     fixes*: seq[seq[QuickFix]]  ## parallel to `msgs`
     errorCount*, warningCount*: int
@@ -43,6 +46,7 @@ type
     fShowHints: bool
     rows: seq[Row]
     parser: MessageParser
+    runtime: RuntimeParser
 
 proc iconOfKind(m: Message): int =
   case m.kind
@@ -111,7 +115,7 @@ proc `showHints=`*(p: MessagesPanel, v: bool) =
 
 proc wanted(m: Message): bool =
   ## Plain output lines (`CC: x.nim`, config hints) stay in the Output tab only.
-  m.hasLocation or m.isTrace or m.kind in {MessageKind.mkError, MessageKind.mkWarning}
+  m.hasLocation or m.isTrace or m.isTraceHead or m.kind in {MessageKind.mkError, MessageKind.mkWarning}
 
 proc newMessagesPanel*(parent: Container, images: ImageList): MessagesPanel =
   ## `images` is the IDE icon list (`makeIdeIcons`).
@@ -168,6 +172,8 @@ proc clear*(p: MessagesPanel) =
   p.errorCount = 0
   p.warningCount = 0
   p.parser = MessageParser()
+  p.runtime = RuntimeParser()
+  p.runtimeErrors = 0
 
 proc addOutputLines*(p: MessagesPanel, lines: openArray[string]) =
   ## Raw text for the Output tab, which scrolls to the end once for the whole
@@ -196,6 +202,16 @@ proc feedLines*(p: MessagesPanel, lines: openArray[string]) =
 proc feed*(p: MessagesPanel, line: string) =
   ## One line of compiler output: to the Output tab and to the parser.
   p.feedLines([line])
+
+proc feedRuntimeLines*(p: MessagesPanel, lines: openArray[string]) =
+  ## Lines of the running program: to the Output tab, and the ones of a Nim
+  ## traceback (frames, the unhandled exception) also as messages, so a double
+  ## click or F8 opens the place in the project.
+  p.addOutputLines lines
+  for line in lines:
+    for m in p.runtime.feedRuntime(line, p.isOwnFile):
+      p.addRow m
+      if m.kind == MessageKind.mkError: inc p.runtimeErrors
 
 proc finish*(p: MessagesPanel) =
   ## The output ended: completes the message that was still open.

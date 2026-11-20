@@ -15,6 +15,12 @@
 ##   `mkInfo` for lines without a kind, `mkHint`/`mkError`/`mkWarning` for
 ##   location-less `Hint:`/`Error:`/`Warning:` lines.
 ##
+## * the output of a running program: `RuntimeParser` recognises a Nim
+##   traceback (`Traceback (most recent call last)`, the frames, the
+##   `Error: unhandled exception: text [Type]` line) and gives messages for it
+##   only; the error gets the place of the innermost frame in the project's own
+##   files. Any other line of the program is no message.
+##
 ## Use `MessageParser` for a stream of lines, `parseMessages` for a whole text.
 
 import std/[strutils, parseutils]
@@ -29,6 +35,11 @@ type
     text*: string          ## the text after `Error:` etc.; may span lines
     notes*: seq[Message]   ## instantiation stack, innermost call last
     isTrace*: bool         ## a runtime traceback entry (`text` is the proc)
+    isTraceHead*: bool     ## the `Traceback (most recent call last)` line
+
+  RuntimeParser* = object
+    inTrace: bool
+    frames: seq[Message]
 
   MessageParser* = object
     done: seq[Message]
@@ -175,6 +186,38 @@ proc parseMessages*(text: string): seq[Message] =
   var p: MessageParser
   for l in text.splitLines: p.feed l
   p.flush()
+
+const TraceHeader* = "Traceback (most recent call last)"
+
+proc feedRuntime*(p: var RuntimeParser, line: string,
+                  own: proc(file: string): bool = nil): seq[Message] =
+  ## One output line of a running program: the messages it completes (none for
+  ## ordinary output). `own` tells the files of the project; the unhandled
+  ## exception is placed at the innermost frame in such a file (any frame when
+  ## `own` is nil, none when no frame is in one).
+  let line = line.strip(leading = false, chars = {'\r', '\n'})
+  if line.startsWith(TraceHeader):
+    p.inTrace = true
+    p.frames = @[]
+    return @[Message(kind: mkInfo, text: TraceHeader, isTraceHead: true)]
+  if not p.inTrace: return
+  if line.startsWith("[[reraised from:") or line == "]]": return
+  let m = parseLine(line)
+  if m.isTrace:
+    p.frames.add m
+    return @[m]
+  p.inTrace = false
+  var k: MessageKind
+  var text: string
+  if line.startsWith("Error: ") and splitKind(line, k, text):
+    var e = Message(kind: mkError, text: text)
+    for i in countdown(p.frames.high, 0):
+      if own == nil or own(p.frames[i].file):
+        e.file = p.frames[i].file
+        e.line = p.frames[i].line
+        break
+    p.frames = @[]
+    return @[e]
 
 func `$`*(m: Message): string =
   let loc = if m.file.len > 0: m.file & (if m.line > 0: "(" & $m.line & (if m.col > 0: ", " & $m.col else: "") & ")" else: "") & " " else: ""

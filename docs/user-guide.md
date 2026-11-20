@@ -287,7 +287,10 @@ and the `Output` tab shows what the program writes to stdout and stderr, line
 by line as it happens. When the program ends (or you stop it with
 `Ctrl+F2`; this ends the whole process tree: a process group on Linux and
 macOS, a job object on Windows), `Messages` gets a line `Program ended with exit
-code N`. A program started by Run sees the end of its input at once instead of
+code N`. When the program dies with a Nim traceback, its frames and the
+`unhandled exception` line are also listed in Messages; double click one (or
+press `F8`) to open the place, for files of the project. The exception sits at
+the innermost frame in your own files. A program started by Run sees the end of its input at once instead of
 waiting for a keyboard.
 
 ## Projects

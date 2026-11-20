@@ -47,7 +47,8 @@ proc startProgram(ide: IdeForm) =
   let p = ide.project
   ide.messages.addOutput "--- running " & p.exePath.extractFilename & " ---"
   # the program's stdout and stderr arrive line by line while it runs
-  let onLines = proc(lines: seq[string]) = ide.messages.addOutputLines(lines)
+  ide.messages.isOwnFile = proc(file: string): bool = ide.unitOfFile(file).len > 0
+  let onLines = proc(lines: seq[string]) = ide.messages.feedRuntimeLines(lines)
   let onExit = proc(code: int) =
     ide.buildPhase = bpIdle
     ide.lastExitCode = code
@@ -55,6 +56,8 @@ proc startProgram(ide: IdeForm) =
     let how = if stopped: "stopped" else: "ended"
     ide.messages.addNote("Program " & how & " with exit code " & $code,
                          if code == 0: icSuccess elif stopped: icInfo else: icError)
+    if ide.messages.runtimeErrors > 0:
+      ide.messages.showMessages()    # the traceback is there to click
     ide.setPart(spState, "Ready")
     ide.say "Program " & how & " (exit code " & $code & ")"
     ide.updateCaption()

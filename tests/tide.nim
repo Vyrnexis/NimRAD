@@ -976,6 +976,22 @@ suite "running":
     check ide.status.panels[0].text == "Ready"
     check "Program ended" in ide.status.panels[4].text
 
+  test "a traceback in the output of the program is clickable":
+    let m = ide.messages
+    m.clear()
+    let f = ide.project.dir / "unit1.nim"
+    m.isOwnFile = proc(file: string): bool = ide.unitOfFile(file).len > 0
+    m.feedRuntimeLines(["plain", "Traceback (most recent call last)",
+                        f & "(2) unit1", "/nim/lib/system/fatal.nim(53) sysFatal",
+                        "Error: unhandled exception: boom [ValueError]"])
+    check m.msgs.len == 4 and m.runtimeErrors == 1
+    check m.msgs[^1].kind == MessageKind.mkError and m.msgs[^1].file == f and m.msgs[^1].line == 2
+    check ide.closeAllEditors()
+    m.jump m.msgs.high
+    check ide.activeEditor != nil and ide.activeEditor.unitName == "unit1"
+    check ide.activeEditor.code.caretPos.line == 1
+    m.clear()
+
   test "a program that ends well says exit code 0":
     ide.setRunParameters "--smoke"
     check ide.run()

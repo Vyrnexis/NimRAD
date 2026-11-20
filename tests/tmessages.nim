@@ -99,6 +99,37 @@ suite "captured compiler output":
     check traces[^1].text == "inner" and traces[^1].line == 2
     check "boom" in err.text
 
+suite "runtime output":
+  proc runAll(lines: seq[string], own: proc(f: string): bool = nil): seq[Message] =
+    var p: RuntimeParser
+    for l in lines: result.add p.feedRuntime(l, own)
+
+  test "ordinary program output gives no message":
+    check runAll(@["hello", "/a/b.nim(3) looks like a frame", "Error: not after a traceback"]).len == 0
+
+  test "a traceback: header, frames, the exception at the innermost own frame":
+    let own = proc(f: string): bool = f.startsWith("/proj/")
+    let ms = runAll(@["Traceback (most recent call last)",
+                      "/proj/main.nim(9) main", "/proj/unit1.nim(4) inner",
+                      "/nim/lib/system/fatal.nim(53) sysFatal",
+                      "Error: unhandled exception: boom [ValueError]", "after"], own)
+    check ms.len == 5
+    check ms[0].isTraceHead and ms[0].text == TraceHeader
+    check ms[1].isTrace and ms[1].file == "/proj/main.nim" and ms[1].line == 9
+    check ms[3].file == "/nim/lib/system/fatal.nim"
+    check ms[4].kind == mkError and ms[4].text == "unhandled exception: boom [ValueError]"
+    check ms[4].file == "/proj/unit1.nim" and ms[4].line == 4 and ms[4].hasLocation
+
+  test "no own frame: the exception has no place; no predicate: the last frame":
+    let lines = @["Traceback (most recent call last)", "/x/a.nim(2) f", "Error: unhandled exception: e [IOError]"]
+    check not runAll(lines, proc(f: string): bool = false)[^1].hasLocation
+    check runAll(lines)[^1].file == "/x/a.nim"
+
+  test "reraised sections stay in the traceback; other lines end it":
+    let ms = runAll(@["Traceback (most recent call last)", "/a.nim(1) a", "[[reraised from:", "/a.nim(2) b", "]]",
+                      "/a.nim(3) c", "oops", "/a.nim(4) d"])
+    check ms.len == 4          # header, a, b, c; the line after "oops" is plain output
+
 suite "parser":
   test "a location-less error keeps the lines after it":
     let ms = parseMessages("Error: execution of an external compiler program 'gcc -c x.c' failed with exit code: 1\n\nx.c:3:1: error: boom\n/usr/bin/ld: cannot find -lfoo\nHint: next\n")

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Clickable runtime tracebacks: a Nim traceback in the output of the running program (frames and
+  the `unhandled exception` line) is listed in Messages; double click or `F8` opens the file and
+  line of a project unit. Messages is shown when the program ended with one.
 - Edit > Parameter Hints (`Shift+Ctrl+Space`): inside `name(` on the current line, a hint over
   the line shows the parameters of the proc, func, method, template, iterator or macro called
   `name` that the unit declares. It closes when the caret leaves the call.
