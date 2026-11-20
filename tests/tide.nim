@@ -1446,6 +1446,30 @@ suite "Editor Options":
     check ide.closeAllEditors()
 
 suite "Bookmarks":
+  test "Alt+Up/Down swaps the slots of two bookmarked lines with their lines":
+    check ide.closeAllEditors()
+    let ed = ide.openUnit("unit1")
+    ed.showCode()
+    ide.activeControl = ed.code
+    let c = ed.code
+    c.text = "l0\nl1\nl2\nl3\nl4\n"
+    c.caretPos = (1, 0)
+    check ide.toggleBookmark(1)
+    c.caretPos = (2, 0)
+    check ide.toggleBookmark(2)
+    c.moveLineUp()                                      # l2 above l1
+    check c.model.line(1) == "l2"
+    check ed.bookmarks.lineOf(2) == 1 and ed.bookmarks.lineOf(1) == 2
+    c.moveLineDown()
+    check ed.bookmarks.lineOf(1) == 1 and ed.bookmarks.lineOf(2) == 2
+    c.caretPos = (3, 0)                                 # a two-line block over a bookmarked line
+    check ide.toggleBookmark(3)
+    c.select((1, 0), (2, 2))                            # l1, l2 move below l3
+    c.moveLineDown()
+    check c.model.line(1) == "l3"
+    check ed.bookmarks.lineOf(3) == 1 and ed.bookmarks.lineOf(1) == 2 and
+          ed.bookmarks.lineOf(2) == 3
+
   test "numbered bookmarks follow the lines, move, and work across editors":
     check ide.closeAllEditors()
     let ed = ide.openUnit("unit1")

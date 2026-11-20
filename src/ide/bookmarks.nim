@@ -55,6 +55,18 @@ proc newBookmarks*(code: CodeEdit): Bookmarks =
   for i in 0 ..< BookmarkSlots:
     b.lines[i] = -1
     b.lost[i] = -1
+  code.onLinesMove = proc(e: CodeEdit, first, last, nbFirst, nbLast: int, up: bool) =
+    ## Alt+Up/Down: the slots swap with their lines (before the markers do, so
+    ## that `reconcile` finds them in place).
+    let blk = last - first + 1
+    let nb = nbLast - nbFirst + 1
+    proc moved(l: int): int =
+      if l in first .. last: l + (if up: -nb else: nb)
+      elif l in nbFirst .. nbLast: l + (if up: blk else: -blk)
+      else: l
+    for i in 0 ..< BookmarkSlots:
+      if b.lines[i] >= 0: b.lines[i] = moved(b.lines[i])
+      if b.lost[i] >= 0: b.lost[i] = moved(b.lost[i])
   discard code.model.addChangeListener(proc(first, oldN, newN: int) =
     for i in 0 ..< BookmarkSlots:
       if b.lines[i] >= 0: b.lines[i] = shifted(b.lines[i], first, oldN, newN)
