@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Saving keeps the permissions of the file (an executable script stays executable) and
+  writes through a symbolic link instead of replacing it.
 - The window comes back where it was (position, size, maximized). A saved docking layout
   that cannot be used no longer fails silently: the default layout is shown and the
   status bar says so. Component search also finds a class by other words (`tabs` finds
