@@ -150,7 +150,7 @@ proc feed*(p: var MessageParser, line: string) =
     p.done.add p.pending
     p.pending = @[]
   elif m.kind == mkError and m.file.len == 0:
-    p.open = false
+    p.open = true      # `execution of an external compiler program failed`: the C compiler's lines follow
   p.done.add m
 
 proc take*(p: var MessageParser): seq[Message] =

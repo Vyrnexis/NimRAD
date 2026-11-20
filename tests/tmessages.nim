@@ -100,6 +100,12 @@ suite "captured compiler output":
     check "boom" in err.text
 
 suite "parser":
+  test "a location-less error keeps the lines after it":
+    let ms = parseMessages("Error: execution of an external compiler program 'gcc -c x.c' failed with exit code: 1\n\nx.c:3:1: error: boom\n/usr/bin/ld: cannot find -lfoo\nHint: next\n")
+    check ms.len == 2
+    check ms[0].kind == mkError
+    check "x.c:3:1: error: boom" in ms[0].text and "cannot find -lfoo" in ms[0].text
+    check ms[1].kind == mkHint
   test "streaming equals whole-text parsing":
     let text = nimOut("stream", "proc foo[T](x: T) =\n  let z = x + \"a\"\nfoo(3)\n")
     var p: MessageParser

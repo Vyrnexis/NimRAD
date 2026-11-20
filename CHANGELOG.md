@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Messages: the gcc/ld lines that follow `Error: execution of an external compiler
+  program ... failed` are kept in that message instead of being dropped.
 - A new handler stub of an inherited event puts the caret on its `discard`, not on
   the hint comment; the fallback placement after the imports skips the lines of
   a multi-line `import a,\n  b`; a unit with mixed line endings is no longer
