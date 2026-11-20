@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New Form refuses a unit name whose form type would hide a nimvcl class (`button`
+  gives `Button`).
 - Add Font File refuses a second file with the same family and style (the program would
   not compile).
 - Saving a project keeps the keys this version does not know inside unit and font

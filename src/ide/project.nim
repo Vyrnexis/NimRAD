@@ -60,7 +60,7 @@
 
 import std/[json, os, strutils, sequtils, tables, times]
 import nimvcl/graphics/[font, context]
-import nimvcl/dsl/nfmsyntax
+import nimvcl/dsl/[nfmsyntax, props]
 import ./[codegen, fileio, mainfile, nimsource, nimvclpath, sdllink, unitimports]
 
 const
@@ -738,6 +738,9 @@ proc unitAndForm(p: Project, name: string): tuple[unit, form: string] =
     if not validName(unit): raise newException(ProjectError, "bad unit name " & unit)
     form = unit.capitalizeAscii
     if form == unit: form &= "Form"
+    if form.moduleOf.len > 0 or classByName(form) != nil:
+      raise newException(ProjectError, "the form type " & form & " would hide the nimvcl class " &
+                         form & "; choose another unit name")
   if p.findUnit(unit) >= 0 or fileExists(p.dir / unit & ".nim") or
      fileExists(p.dir / unit & ".nfm"):
     raise newException(ProjectError, "unit " & unit & " already exists")

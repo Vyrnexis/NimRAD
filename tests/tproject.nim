@@ -288,6 +288,13 @@ suite "units and forms: names and invariants":
     check msg.len > 0
     check p.units.filterIt(it.formType == "BarForm").len == 1
 
+  test "a unit name that would give a form the name of a nimvcl class is refused":
+    let p = loadProject(root / "nums" / "nums.nimproj")
+    for n in ["button", "label", "form"]:
+      expect ProjectError: discard p.newFormUnit(n)
+    expect ProjectError: discard p.newFormUnit("proc")           # a keyword
+    check p.findUnit("button") < 0 and not fileExists(root / "nums" / "button.nim")
+
   test "a new application does not overwrite files that are there":
     createDir root / "taken"
     writeFile(root / "taken" / "taken.nim", "echo 1\n")
