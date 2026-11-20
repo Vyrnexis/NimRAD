@@ -98,6 +98,17 @@ suite "main file blocks":
     check s.count("\n") == s.count("\r\n")                          # no bare \n
     check s.removeUnit("unit2", "Form2") == crlf
 
+  test "CRLF is found when the first line has none":
+    let mixed = "## demo\n" & base["## demo\n".len .. ^1].replace("\n", "\r\n")
+    let s = mixed.addUnit("unit2", "Form2")
+    check "import unit2\r\n" in s and "newForm2()\r\n" in s
+
+  test "a commented-out create line is not a create line":
+    let s = base.replace("  let mainForm = newForm1()", "  # let mainForm = newForm1()   # old")
+    check not s.isMainForm("Form1")
+    check "let mainForm = newForm1()" in s.addForm("Form1")
+    check s.removeForm("Form1") == s
+
   test "indent of the forms block, and tabs":
     let s = base.replace("  # nimrad: forms begin", "\t# nimrad: forms begin")
     check "\n\tlet form2 {.used.} = newForm2()\n" in s.addForm("Form2")

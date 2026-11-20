@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The program file: a commented-out `# let x = newForm1()` is not taken for the
+  form's create line, and a file whose first line has no CRLF but others do keeps
+  its CRLF endings when units are added.
 - Handler and component names are compared the way Nim does (case after the first
   letter and underscores ignored): `button1click` is the handler `button1Click`
   and no second stub is added.

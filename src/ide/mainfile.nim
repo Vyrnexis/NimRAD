@@ -37,7 +37,7 @@
 ## source unchanged. Line endings (`\n` or `\r\n`) and the indent of the
 ## `forms` block are kept. Pure string functions, no UI.
 
-import std/strutils
+import std/[strutils, sequtils]
 import ./nimsource
 
 const
@@ -80,12 +80,14 @@ proc hasBlock*(src, name: string): bool =
 func isIdentCh(c: char): bool = c in IdentChars
 
 func callsCtor(line, formType: string): bool =
-  ## `new<formType>(` as a whole word.
+  ## `new<formType>(` as a whole word, outside a comment.
+  let hash = line.find('#')
+  let code = if hash >= 0: line[0 ..< hash] else: line
   let key = "new" & formType & "("
-  var i = line.find(key)
+  var i = code.find(key)
   while i >= 0:
-    if i == 0 or not line[i - 1].isIdentCh: return true
-    i = line.find(key, i + 1)
+    if i == 0 or not code[i - 1].isIdentCh: return true
+    i = code.find(key, i + 1)
 
 func formVar*(formType: string): string =
   ## The variable of a secondary form: `Form2` -> `form2`.
@@ -94,7 +96,7 @@ func formVar*(formType: string): string =
   if cmpIgnoreStyle(result, MainFormVar) == 0: result.add "Created"
 
 func crlf*(lines: seq[string]): bool =
-  lines.len > 1 and lines[0].endsWith('\r')
+  lines.len > 1 and lines.anyIt(it.endsWith('\r'))
 
 proc insertBefore*(lines: var seq[string], at: int, text: string, indent: string) =
   let tail = if lines.crlf: "\r" else: ""
