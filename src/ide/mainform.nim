@@ -51,7 +51,7 @@ proc onSomeDisplay(x, y, w, h: int): bool =
 proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): IdeForm =
   ## Builds the window (no project yet; see `startup`). `Application.init()`
   ## must have run. The settings are read from (and saved to) `settingsFile`.
-  let ide = IdeForm()
+  let ide = IdeForm(outlineDelay: 0.3)
   ide.initForm()
   ide.settingsFile = settingsFile
   ide.settings = loadSettings(settingsFile)
@@ -128,8 +128,10 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   if ide.settings.layout.len > 0 and not ide.site.loadLayout(ide.settings.layout):
     ide.resetLayout()
     ide.say "The saved window layout could not be used; the default layout is shown (Reset Layout)"
-  elif ide.settings.layout.len > 0 and "\"todo\"" notin ide.settings.layout:
-    ide.pnlTodo.hide()                   # a layout saved before the To-Do List existed
+  elif ide.settings.layout.len > 0:
+    # a layout saved before the To-Do List and the Code Explorer existed
+    if "\"todo\"" notin ide.settings.layout: ide.pnlTodo.hide()
+    if "\"explorer\"" notin ide.settings.layout: ide.pnlExplorer.hide()
 
   ide.onCloseQuery = proc(sender: Form, canClose: var bool) =
     # ask for every modified unit first (Cancel keeps the window open), then

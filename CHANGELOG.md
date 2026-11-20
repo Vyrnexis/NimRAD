@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- View > Code Explorer: a docked tree (a tab of Object TreeView, closed at first) of the active
+  unit's top-level declarations: Types, Procs, Constants, Variables, Imports. Double click or
+  Enter jumps to the line; it follows the active editor and the text after a short pause in typing.
 - View > To-Do List: a docked list (a tab of Messages, closed at first) of the `# TODO`, `# FIXME`,
   `# NOTE`, `# HACK` and `# XXX` comments of the project's units: priority (`# TODO 1: ...`), text,
   unit, line; owner and category (`(me)`, Delphi's `-oMe -cUI`) are read too. Unsaved text of open

@@ -436,6 +436,79 @@ suite "To-Do List":
     check ide.pnlTodo.state == dpHidden
     discard ide.closeProject()
 
+suite "Code Explorer":
+  proc itemIndexOf(name: string): int =
+    for i, it in ide.explorer.items:
+      if it.name == name: return i
+    -1
+
+  test "hidden at first; View shows the declarations of the active unit in groups":
+    check ide.openProject(projectFile)
+    check ide.closeAllEditors()
+    let u = ide.project.units[0].name
+    let ed = ide.openUnit(u)
+    ide.outlineDelay = 0
+    ide.resetLayout()
+    check ide.pnlExplorer.state == dpHidden
+    ide.acts[aViewExplorer].execute()
+    check ide.pnlExplorer.state != dpHidden
+    ide.refreshActions()
+    check ide.acts[aViewExplorer].checked
+    check ide.outlineEd == ed
+    check ide.explorer.items.len > 0
+    var groups: seq[string]
+    for n in ide.explorer.tree.items.topNodes: groups.add n.text
+    check groups.len == 3 and groups[0].startsWith("Procs (") and groups[2].startsWith("Imports (")
+    check itemIndexOf("Button1Click") >= 0 and itemIndexOf("nimvcl/prelude") >= 0
+
+  test "edits show up after the delay, only when the text changed":
+    let ed = ide.activeEditor
+    ed.typeAtEnd "\nproc brandNew*() = discard\n"
+    ide.outlineDelay = 60
+    ide.flushOutline()
+    check itemIndexOf("brandNew") < 0                   # waiting for the typing to stop
+    ide.outlineDelay = 0
+    ide.flushOutline()
+    check itemIndexOf("brandNew") >= 0
+    let items = ide.explorer.items
+    ide.flushOutline()                                  # nothing changed: nothing rebuilt
+    check ide.outlineVersion == ed.code.model.version
+    check ide.explorer.items == items
+
+  test "double click and Enter go to the declaration; the active editor is followed":
+    let ed = ide.activeEditor
+    let k = itemIndexOf("brandNew")
+    var node: TreeNode
+    for g in ide.explorer.tree.items.topNodes:
+      for i in 0 ..< g.childCount:
+        if g.child(i).tag == k: node = g.child(i)
+    check node != nil
+    ed.code.caretPos = (0, 0)
+    ide.explorer.tree.selected = node
+    ide.explorer.tree.onDblClick(ide.explorer.tree)
+    check ed.code.caretPos.line + 1 == ide.explorer.items[k].line
+    check ide.activeControl == Control(ed.code)
+    ed.code.caretPos = (0, 0)
+    var key = keyEnter
+    ide.explorer.tree.onKeyDown(ide.explorer.tree, key, {})
+    check ed.code.caretPos.line + 1 == ide.explorer.items[k].line
+    # an other editor: the tree follows at the next idle moment
+    let m = ide.openMain()
+    ide.flushOutline()
+    check ide.outlineEd == m
+    check itemIndexOf("brandNew") < 0
+    check ide.closeAllEditors()
+    ide.flushOutline()
+    check ide.explorer.items.len == 0 and ide.explorer.tree.items.topCount == 0
+
+  test "closed again, and Reset Layout keeps it closed":
+    ide.acts[aViewExplorer].execute()
+    check ide.pnlExplorer.state == dpHidden
+    ide.acts[aViewExplorer].execute()
+    ide.resetLayout()
+    check ide.pnlExplorer.state == dpHidden
+    discard ide.closeProject()
+
 # ------------------------------------------------------------ the main file
 
 proc mainText(): string = readFile(ide.project.mainPath)

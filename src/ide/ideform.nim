@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/controls/inspector
 import std/[os, tables, strutils]
 import ./[project, builder, ideconfig, actions, palette, projecttree,
-          messagespanel, uniteditor, editortabs, findinfiles, todopanel]
+          messagespanel, uniteditor, editortabs, findinfiles, todopanel, codeexplorer, codeoutline]
 
 proc versionOf(nimble: string): string {.compileTime.} =
   ## The `version = "..."` line of nimrad.nimble.
@@ -75,12 +75,18 @@ type
     settingsFailed: bool       ## the last write of the settings file failed (said once)
     palette*: ComponentPalette
     site*: DockSite
-    pnlTree*, pnlInspector*, pnlProject*, pnlMessages*, pnlEditors*, pnlTodo*: DockPanel
+    pnlTree*, pnlInspector*, pnlProject*, pnlMessages*, pnlEditors*, pnlTodo*, pnlExplorer*: DockPanel
     objTree*: TreeView
     inspector*: ObjectInspector
     projectTree*: ProjectTree
     messages*: MessagesPanel
     todo*: TodoPanel
+    explorer*: CodeExplorer
+    outlineEd*: UnitEditor      ## whose declarations the Code Explorer shows
+    outlineVersion*: int        ## the text version it was made from
+    outlineSeen*: int           ## the last version noticed (a change restarts the delay)
+    outlineChanged*: float      ## when `outlineSeen` was noticed (`epochTime`)
+    outlineDelay*: float        ## seconds without edits before the Code Explorer follows (0.3)
     todoDirty*: bool            ## the To-Do List is out of date (shown again at the next idle)
     pages*: EditorPages
     status*: StatusBar

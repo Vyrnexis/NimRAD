@@ -5,7 +5,7 @@ import nimvcl/controls/inspector
 import std/[strutils, tables]
 import nimvcl/dsl/[props, props_std]
 import ./[bookmarks, project, messages, ideconfig, icons, actions, palette,
-          projecttree, messagespanel, todopanel, uniteditor, editortabs, quickfix,
+          projecttree, messagespanel, todopanel, codeexplorer, uniteditor, editortabs, quickfix,
           ideform, ideeditors, designcmds, projectcommands, buildcontroller,
           quickfixes, findcmds, codecmds, outlinecmds]
 
@@ -127,6 +127,7 @@ proc connectActions*(ide: IdeForm) =
   on aViewTree: ide.toggleDockPanel(ide.pnlTree)
   on aViewMessages: ide.toggleDockPanel(ide.pnlMessages)
   on aViewTodo: ide.toggleTodo()
+  on aViewExplorer: ide.toggleExplorer()
   on aToggleView: ide.toggleView()
   on aTheme:
     ide.setDark(not ide.isDark)
@@ -224,7 +225,7 @@ proc buildMenu*(ide: IdeForm) =
     toggles.addAct a[ActId(ord(aToggleBookmark0) + i)]
     gotos.addAct a[ActId(ord(aGotoBookmark0) + i)]
   let view = m.addItem("&View")
-  for id in [aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aViewTodo]: view.addAct a[id]
+  for id in [aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aViewTodo, aViewExplorer]: view.addAct a[id]
   view.addSeparator()
   view.addAct a[aToggleView]
   view.addSeparator()
@@ -329,6 +330,9 @@ proc buildDocking*(ide: IdeForm) =
   ide.todo.onJump = proc(file: string, line: int) = discard ide.jumpTo(file, line, 1)
   ide.todo.onRefresh = proc() = ide.refreshTodos()
 
+  ide.explorer = newCodeExplorer(nil, ide.ideIcons)
+  ide.explorer.onJump = proc(line: int) = ide.explorerJump(line)
+
   ide.pnlTree = mk("tree", "Object TreeView", ide.objTree, icTreeIc)
   ide.pnlInspector = mk("inspector", "Object Inspector", ide.inspector, icInspectorIc)
   ide.pnlEditors = mk("editors", "Editor", ide.pages, icUnit, closable = false)
@@ -343,5 +347,8 @@ proc buildDocking*(ide: IdeForm) =
   ide.pnlTodo = mk("todo", "To-Do List", ide.todo.root, icHint)
   site.dock(ide.pnlTodo, ide.pnlMessages)
   ide.pnlTodo.hide()
+  ide.pnlExplorer = mk("explorer", "Code Explorer", ide.explorer.tree, icUnit)
+  site.dock(ide.pnlExplorer, ide.pnlTree)
+  ide.pnlExplorer.hide()
   ide.pnlEditors.activate()
   ide.defaultLayout = site.saveLayout()

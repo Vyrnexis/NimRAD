@@ -243,7 +243,7 @@ proc showPanel*(ide: IdeForm, p: DockPanel) =
 proc resetLayout*(ide: IdeForm) =
   discard ide.site.loadLayout(ide.defaultLayout)
   for p in ide.site.panels:
-    if p.state == dpHidden and p != ide.pnlTodo: p.show()   # the To-Do List stays closed until asked for
+    if p.state == dpHidden and p notin [ide.pnlTodo, ide.pnlExplorer]: p.show()   # these stay closed until asked for
 
 proc saveLayout*(ide: IdeForm) =
   ## Stores the docking layout in the settings (and writes them).
@@ -340,6 +340,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aViewTree].checked = ide.pnlTree.state != dpHidden
   a[aViewMessages].checked = ide.pnlMessages.state != dpHidden
   a[aViewTodo].checked = ide.pnlTodo.state != dpHidden
+  a[aViewExplorer].checked = ide.pnlExplorer.state != dpHidden
   a[aTheme].checked = ide.isDark
 
 proc sync*(ide: IdeForm) =
@@ -357,7 +358,7 @@ proc sync*(ide: IdeForm) =
 
 proc watchedState(ide: IdeForm): WatchedState =
   ## The few things the action states depend on that nobody tells us about.
-  for p in [ide.pnlProject, ide.pnlInspector, ide.pnlTree, ide.pnlMessages, ide.pnlTodo]:
+  for p in [ide.pnlProject, ide.pnlInspector, ide.pnlTree, ide.pnlMessages, ide.pnlTodo, ide.pnlExplorer]:
     result.panels = result.panels * 2 + (if p.state != dpHidden: 1 else: 0)
   result.msgs = ide.messages.msgs.len
   result.units = if ide.project == nil: -1 else: ide.project.units.len
