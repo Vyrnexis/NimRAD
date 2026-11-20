@@ -7,7 +7,7 @@ import nimvcl/controls/inspector
 import std/[os, strutils, algorithm]
 import nimvcl/dsl/[props, props_std]
 import ./[bookmarks, project, builder, ideconfig, icons, actions, palette,
-          projecttree, messagespanel, uniteditor, ideform]
+          projecttree, messagespanel, uniteditor, ideform, codeinsight, codepicker]
 
 
 # object tree -----------------------------------------------------------
@@ -308,7 +308,7 @@ proc refreshActions*(ide: IdeForm) =
   a[aRevertProp].enabled = designer and ide.canRevertProperty      # the Inspector's selected row differs
   a[aRevertComponent].enabled = designer and ide.canRevertComponent
   for id in [aFind, aReplace, aFindNext, aGotoLine]: a[id].enabled = ed != nil
-  for id in [aCodeComplete, aCodeTemplate]: a[id].enabled = ed != nil and not designer
+  for id in [aCodeComplete, aCodeTemplate, aParamHints]: a[id].enabled = ed != nil and not designer
   a[aFindUnit].enabled = ed != nil
   a[aFindInFiles].enabled = hasProject
   for i in 0 ..< BookmarkSlots:
@@ -421,7 +421,10 @@ proc hookEditor(ide: IdeForm, ed: UnitEditor) =
     ide.updateTabs()
   ed.onStructureChanged = proc(e: UnitEditor) = ide.treeDirty = true   # components added, removed, renamed, moved
   ed.onMessage = proc(e: UnitEditor, msg: string) = ide.say msg
-  ed.code.onCaretMove = proc(s: Control, line, col: int) = ide.updateStatus()
+  ed.code.onCaretMove = proc(s: Control, line, col: int) =
+    ide.updateStatus()
+    if tipOpen() and (line >= ed.code.lineCount or callAt(ed.code.lineAt(line), col).name != tipKey()):
+      hideTip()                  # the caret left the call the parameter hint is about
 
 proc openUnit*(ide: IdeForm, unitName: string): UnitEditor =
   ## Opens (or activates) the editor tab of a unit; nil when there is no such unit.

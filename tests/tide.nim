@@ -1465,6 +1465,8 @@ suite "Code insight":
     check ide.acts[aCodeComplete].shortcut == shortcut("Ctrl+Space")
     check ide.acts[aCodeComplete].shortcut != noShortcut
     check ide.acts[aCodeTemplate].shortcut == shortcut("Ctrl+J")
+    check ide.acts[aParamHints].shortcut == shortcut("Shift+Ctrl+Space")
+    check ide.acts[aParamHints].shortcut != ide.acts[aCodeComplete].shortcut
 
   test "completion: one candidate is inserted, several are listed and narrowed by typing":
     check ide.closeAllEditors()
@@ -1579,6 +1581,27 @@ suite "Code insight":
     check ed.lastLine == "echo \"\""
     check ed.code.caretPos.col == 6
     ide.settings.codeTemplates = @[]
+
+  test "parameter hints: the signature over the line, until the caret leaves the call":
+    let ed = ide.activeEditor
+    ed.toEnd
+    ide.typeText "\nproc zzAdd(a, b: int): int = a + b\nlet zzSum = zzAdd(1, "
+    ctrl(keySpace, {ssCtrl, ssShift})
+    check tipOpen()
+    check tipText() == "proc zzAdd(a, b: int): int"
+    ide.typeText "2"
+    check tipOpen()
+    ide.typeText ")"
+    check not tipOpen()
+    ctrl(keySpace, {ssCtrl, ssShift})
+    check not tipOpen()                                   # no call at the caret
+    ed.code.caretPos = (ed.code.lineCount - 1, ed.lastLine.len - 3)
+    ctrl(keySpace, {ssCtrl, ssShift})
+    check tipOpen()
+    hideTip()
+    ide.typeText "\nunknownProc("
+    ctrl(keySpace, {ssCtrl, ssShift})
+    check not tipOpen()
     check ide.closeAllEditors()
 
 suite "reopen and startup":

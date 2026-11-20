@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Edit > Parameter Hints (`Shift+Ctrl+Space`): inside `name(` on the current line, a hint over
+  the line shows the parameters of the proc, func, method, template, iterator or macro called
+  `name` that the unit declares. It closes when the caret leaves the call.
 - Edit > Insert Template (`Ctrl+J`): code templates (`proc`, `func`, `if`, `ife`, `for`, `fori`,
   `while`, `case`, `try`, `tryf`, `when`, `block`, `obj`, `echo`, `discard`). When the word before
   the caret is a template's name it is expanded, indented like the line, with the caret at the

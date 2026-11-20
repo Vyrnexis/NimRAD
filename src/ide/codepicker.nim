@@ -39,8 +39,13 @@ type
     popup: PopupWindow
     done: bool
 
+  TipPanel = ref object of Container
+    text: string
+
 var
   current: PickPanel
+  tip: PopupWindow
+  tipOf: string              ## what the hint is about (`codecmds` closes it when the caret leaves it)
 
 # ------------------------------------------------------------------- the list
 
@@ -179,4 +184,48 @@ proc showPicker*(owner: Form, code: CodeEdit, start: CodePos, items: seq[string]
     panel.removeControl list
     list.free()
   panel.popup.ui.focusControl(list)
+  true
+
+# ------------------------------------------------------------------ the hint
+
+method paint*(t: TipPanel, c: Canvas) =
+  let th = t.theme
+  c.fillRect(t.clientRect, th.tooltipBg)
+  c.frameRect(t.clientRect, th.tooltipBorder, 1)
+  c.textRect(t.text, t.font, t.clientRect.inflate(-6), th.tooltipText, taLeft, vaCenter)
+
+proc tipOpen*(): bool = tip != nil and tip.isOpen
+
+proc tipKey*(): string = tipOf
+
+proc tipText*(): string =
+  if tipOpen(): TipPanel(tip.content).text else: ""
+
+proc hideTip*() =
+  tipOf = ""
+  if tip != nil:
+    let p = tip
+    tip = nil
+    if p.isOpen: closePopup(p)
+
+proc showTip*(owner: Form, code: CodeEdit, at: CodePos, text, key: string): bool {.discardable.} =
+  ## The one line `text` over the line of `at`; `key` is what it is about.
+  hideTip()
+  if text.len == 0 or owner == nil or not owner.hasWindow or not owner.visible: return false
+  let t = TipPanel(text: text)
+  t.initContainer()
+  t.font = Control(owner).font
+  let w = min(textWidth(owner, text) + 16, 900'f32)
+  let h = rowHeight(owner) + 4
+  t.setBounds(0, 0, w, h)
+  let pt = code.pointOfPos(at)
+  let anchor = code.clientToForm(rectF(pt.x, pt.y, 1, code.rowHeight))
+  try:
+    tip = showPopup(owner, t, anchor, plAbove, pkTooltip)
+  except CatchableError:
+    tip = nil
+    return false
+  tip.onClosed = proc(q: PopupWindow) =
+    if tip == q: tip = nil
+  tipOf = key
   true

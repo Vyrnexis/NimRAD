@@ -548,6 +548,11 @@ first one; none: the end), and each pair of leading spaces in `code` is one inde
 "codeTemplates": [{"name": "log", "description": "echo a line", "code": "echo \"|\""}]
 ```
 
+**Parameter hints** (`Shift+Ctrl+Space`, Edit menu). With the caret inside `name(` (on the
+same line), a hint over the line shows the declaration of `name` in the current unit, one per
+overload; it goes away when the caret leaves the call. Only procedures declared in the unit
+itself are known, not those of imported modules.
+
 **Bookmarks.** `Shift+Ctrl+0` to `Shift+Ctrl+9` put bookmark 0 to 9 on the line of the
 caret (on the line already: it is removed); `Ctrl+0` to `Ctrl+9` jump to it, opening the
 unit that holds it. Each number exists once, so setting it in another unit moves it. The
@@ -590,6 +595,7 @@ close the project. The same commands are in **Search > Toggle Bookmarks** and
 | `Shift+Ctrl+F` | Find in Files |
 | `Ctrl+Space` | Complete Code |
 | `Ctrl+J` | Insert Template |
+| `Shift+Ctrl+Space` | Parameter Hints |
 | `Ctrl+F9` | Compile |
 | `Shift+F9` | Build (compile everything again) |
 | `F9` | Run |

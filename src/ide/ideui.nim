@@ -109,6 +109,7 @@ proc connectActions*(ide: IdeForm) =
   on aSelectAll: ide.editSelectAll()
   on aCodeComplete: ide.completeCode()
   on aCodeTemplate: ide.insertTemplate()
+  on aParamHints: ide.parameterHints()
   on aRevertProp: ide.revertProperty()
   on aRevertComponent: ide.revertComponent()
   on aAlignDlg: ide.alignDialog()
@@ -203,7 +204,7 @@ proc buildMenu*(ide: IdeForm) =
   edit.addSeparator()
   edit.addAct a[aSelectAll]
   edit.addSeparator()
-  for id in [aCodeComplete, aCodeTemplate]: edit.addAct a[id]
+  for id in [aCodeComplete, aCodeTemplate, aParamHints]: edit.addAct a[id]
   edit.addSeparator()
   edit.addAct a[aRevertProp]
   edit.addAct a[aRevertComponent]

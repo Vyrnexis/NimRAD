@@ -93,3 +93,24 @@ suite "templates":
     for t in all:
       check t.code.count(CaretMark) == 1
       check CaretMark notin t.expand("", "  ").text
+
+suite "parameter hints":
+  test "the call at the caret":
+    check callAt("foo(a, b", 8) == ("foo", 1)
+    check callAt("foo(", 4) == ("foo", 0)
+    check callAt("x.foo(bar(1, 2), ", 17) == ("foo", 1)
+    check callAt("foo(bar(1, ", 11) == ("bar", 1)
+    check callAt("foo(a) + 1", 10).name == ""
+    check callAt("echo \"foo(a", 11).name == ""
+    check callAt("if (a", 5).name == ""        # a keyword is not a call
+    check callAt("a[1, 2", 6).name == ""
+
+  test "signatures of the unit":
+    let src = "proc add*(a, b: int): int =\n  a + b\nproc add(s: string; t: string) =\n  discard\n" &
+              "proc long(\n    x: int,\n    y: seq[int]\n): bool =\n  true\n# proc add(z: int)\n"
+    let a = signaturesOf(src, "add")
+    check a.mapIt(it.text) == @["proc add(a, b: int): int", "proc add(s: string; t: string)"]
+    check a[0].params == @["a", "b: int"]
+    check signaturesOf(src, "long")[0].text == "proc long(x: int, y: seq[int]): bool"
+    check signaturesOf(src, "nosuch").len == 0
+    check signaturesOf("proc foo[T](x: T): T =\n  x\n", "foo")[0].text == "proc foo(x: T): T"

@@ -56,6 +56,10 @@ type
     caretLine*: int          ## the caret, relative to the start of `text`
     caretCol*: int           ## (column counted from the line start; for line 0 from the insert point)
 
+  Signature* = object
+    text*: string            ## `proc foo(a: int, b: string): bool`
+    params*: seq[string]
+
 func isIdentByte(c: char): bool = c in IdentChars or ord(c) >= 0x80
 
 # ------------------------------------------------------------------ words
@@ -229,3 +233,103 @@ proc expand*(t: CodeTemplate, baseIndent, unit: string): Expansion =
     caretCol = out0[^1].len
   result.caretLine = caretLine
   result.caretCol = caretCol
+
+# --------------------------------------------------------- parameter hints
+
+func callAt*(line: string, col: int): tuple[name: string, argIndex: int] =
+  ## The call the caret is inside, on this line: the name before the
+  ## innermost unclosed `(` and the number of commas before the caret in it.
+  ## The name is "" when there is none.
+  var depth = 0
+  var commas: seq[int] = @[0]
+  var i = min(col, line.len) - 1
+  var inStr = false
+  # walk back; quotes are not tracked precisely, an odd number before the caret
+  # means the caret is inside a string
+  var quotes = 0
+  for j in 0 ..< min(col, line.len):
+    if line[j] == '"': inc quotes
+  inStr = quotes mod 2 == 1
+  if inStr: return
+  while i >= 0:
+    let c = line[i]
+    case c
+    of ')', ']', '}':
+      inc depth
+      commas.add 0
+    of '(', '[', '{':
+      if depth == 0:
+        if c != '(': return
+        var e = i
+        while e > 0 and line[e - 1] == ' ': dec e
+        var a = e
+        while a > 0 and isIdentByte(line[a - 1]): dec a
+        let name = line[a ..< e]
+        if name.len == 0 or name[0] notin IdentStartChars or name in NimKeywords: return
+        return (name, commas[0])
+      dec depth
+      discard commas.pop
+    of ',':
+      if depth == 0: inc commas[0]
+    else: discard
+    dec i
+
+proc signaturesOf*(src, name: string): seq[Signature] =
+  ## The declarations of `name` in `src` (proc, func, method, template,
+  ## iterator, macro, converter), as `kind name(params): result`.
+  if name.len == 0: return
+  let lines = src.split('\n')
+  let classes = classifyLines(lines)
+  const Kinds = ["proc", "func", "method", "template", "iterator", "macro", "converter"]
+  for ln in 0 ..< lines.len:
+    if classes[ln] != lcCode: continue
+    let s = lines[ln].strip(chars = {'\r'}, leading = false).strip(trailing = false)
+    var kind = ""
+    for k in Kinds:
+      if s.startsWith(k & " "): kind = k
+    if kind.len == 0: continue
+    var p = kind.len
+    while p < s.len and s[p] == ' ': inc p
+    let a = p
+    while p < s.len and isIdentByte(s[p]): inc p
+    if not s[a ..< p].sameIdent(name): continue
+    if p < s.len and s[p] == '*': inc p
+    # the rest of the declaration up to the end of the parameter list, over a few lines
+    var rest = s[p .. ^1]
+    var extra = 1
+    while rest.count('(') > rest.count(')') and ln + extra < lines.len and extra < 6:
+      rest.add " " & lines[ln + extra].strip
+      inc extra
+    var open = rest.find('(')
+    if open < 0 or rest[0 ..< open].strip.len > 0 and not rest[0 ..< open].strip.startsWith("["):
+      continue
+    open = rest.find('(')
+    var depth = 0
+    var close = -1
+    var params: seq[string]
+    var cur = ""
+    for i in open ..< rest.len:
+      let c = rest[i]
+      if c in {'(', '[', '{'}:
+        inc depth
+        if depth == 1: continue
+      elif c in {')', ']', '}'}:
+        dec depth
+        if depth == 0:
+          close = i
+          break
+      if depth == 1 and c == ',':
+        params.add cur.strip
+        cur = ""
+      else: cur.add c
+    if close < 0: continue
+    if cur.strip.len > 0: params.add cur.strip
+    var res = ""
+    let tail = rest[close + 1 .. ^1].strip
+    if tail.startsWith(":"):
+      var e = tail.find(" =")
+      if e < 0: e = tail.find("{.")
+      if e < 0: e = tail.len
+      res = ": " & tail[1 ..< e].strip
+    result.add Signature(text: kind & " " & s[a ..< p].strip(chars = {'*'}) & "(" & params.join(", ") & ")" & res,
+                         params: params)

@@ -116,3 +116,23 @@ proc insertTemplate*(ide: IdeForm): bool {.discardable.} =
     accept = proc(r: int, a, b: CodePos) =
       if r in 0 ..< shown.len: expandTemplate(c, shown[r], a, b))
   true
+
+proc parameterHints*(ide: IdeForm): bool {.discardable.} =
+  ## Shift+Ctrl+Space: the parameters of the procedure of the unit that is
+  ## called at the caret (the call must be on this line), over the line. It
+  ## goes away when the caret leaves the call.
+  let ed = ide.activeCode
+  if ed == nil: return false
+  let c = ed.code
+  let pos = c.caretPos
+  let (name, _) = callAt(c.lineAt(pos.line), pos.col)
+  if name.len == 0:
+    hideTip()
+    ide.say "No call at the caret"
+    return false
+  let sigs = signaturesOf(c.text, name)
+  if sigs.len == 0:
+    hideTip()
+    ide.say "No parameter list for '" & name & "' in this unit"
+    return false
+  showTip(ide, c, pos, sigs.mapIt(it.text).join("    "), name)
