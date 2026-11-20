@@ -279,12 +279,25 @@ proc gotoLine*(e: UnitEditor, line, col: int) =
 
 # ---------------------------------------------------------------- handlers
 
-const PreferredEvents = ["onClick", "onChange", "onTimer", "onExecute", "onShow"]
+const
+  PreferredEvents = ["onClick", "onChange", "onTimer", "onExecute", "onShow"]
+    ## The order tried for a class that is not in `ClassDefaultEvents`.
+  ClassDefaultEvents = [
+    # Delphi's default event of the class: what a double click on it creates.
+    # The Form gets onShow: nimvcl's Form has no onCreate.
+    ("Form", "onShow"), ("Edit", "onChange"), ("Memo", "onChange"),
+    ("ComboBox", "onChange"), ("TrackBar", "onChange"), ("ScrollBar", "onChange"),
+    ("SpinEdit", "onChange"), ("CheckBox", "onChange"), ("ListBox", "onChange"),
+    ("RadioButton", "onChange"), ("Timer", "onTimer"), ("Button", "onClick")]
 
-proc defaultEvent(c: Component): string =
+proc defaultEvent*(c: Component): string =
   ## The event a double click creates a handler for.
   let ci = classOf(Obj(c))
   if ci == nil: return ""
+  for (cls, ev) in ClassDefaultEvents:
+    if cls == ci.name:
+      let p = ci.findProp(ev)
+      if p != nil and p.kind == pkEvent: return ev
   for ev in PreferredEvents:
     let p = ci.findProp(ev)
     if p != nil and p.kind == pkEvent: return ev

@@ -101,6 +101,9 @@ Clearing the text (or `Esc`) brings back the tabs exactly as they were.
 * Select components by clicking, with a rubber band, or in the Object
   TreeView. Move and size them with the mouse (grid and guide lines snap), or
   with the arrow keys (`Shift` resizes, `Ctrl` moves by the grid).
+* Double click a component to create the handler of its default event and jump to it:
+  `onChange` for Edit, Memo, ComboBox, TrackBar, ScrollBar, SpinEdit, CheckBox, ListBox and
+  RadioButton, `onTimer` for Timer, `onShow` for the form, `onClick` for the rest.
 * **Edit** and the toolbar work on whatever you are editing: in the form
   designer they undo, copy, cut, paste and delete components; in the code they
   work on the text.

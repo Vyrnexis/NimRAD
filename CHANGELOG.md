@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A double click in the designer creates the default event of the class, as in Delphi:
+  `onChange` for Edit, Memo, ComboBox, TrackBar, ScrollBar, SpinEdit, CheckBox, ListBox
+  and RadioButton, `onTimer` for Timer, `onShow` for the form, `onClick` otherwise.
 - Stop (Program Reset) asks the program and the processes it started to end first
   (SIGTERM on Linux and macOS) and kills what is still running after 0.3 s.
 - Saving keeps the permissions of the file (an executable script stays executable) and

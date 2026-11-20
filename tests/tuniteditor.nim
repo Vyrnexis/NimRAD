@@ -334,6 +334,21 @@ suite "unit editor":
     e.save()                          # does not touch the .nfm
     check readFile(p.dir / "unit1.nfm").contains("nonsense")
 
+  test "double click makes the default event of the class":
+    let r = rig("defev")
+    r.ed.beginCreate "Edit"
+    let body = r.ed.designedForm
+    r.host.click(pointF(body.formOrigin.x + 40, body.formOrigin.y + 40))
+    let edit = r.ed.find("Edit1")
+    check edit != nil
+    r.host.click(edit.center, 2)
+    check r.ed.code.text.contains("proc Edit1Change(self: Form1, sender: Control) =")
+    check not r.ed.code.text.contains("Edit1Click")
+    check defaultEvent(r.ed.componentTree[0][0]) == "onShow"     # the form
+    check defaultEvent(newCheckBox(nil, "x")) == "onChange"
+    check defaultEvent(newButton(nil, "x")) == "onClick"
+    check defaultEvent(newTimer(nil)) == "onTimer"
+
   test "a handler stub is one undo step and the caret stays":
     let r = rig("undo1")
     let b = r.dropButton()
