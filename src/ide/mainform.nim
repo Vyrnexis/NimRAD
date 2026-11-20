@@ -18,9 +18,22 @@
 
 import std/[os, strutils]
 import nimvcl
+from sdl3 import getWindowFlags, maximizeWindow, WINDOW_MAXIMIZED
 import ./[project, ideconfig, icons, actions, palette, uniteditor]
 import ./[ideform, idedialogs, ideeditors, projectcommands, buildcontroller, quickfixes, ideui]
 export ideform, idedialogs, ideeditors, projectcommands, buildcontroller, quickfixes, ideui
+
+proc rememberWindow*(ide: IdeForm) =
+  ## Puts the window's position and size (and whether it is maximized) into the
+  ## settings. A maximized window keeps the size it had before.
+  let w = ide.win
+  if w == nil: return
+  if (getWindowFlags(w.window) and WINDOW_MAXIMIZED) != 0:
+    ide.settings.window.maximized = true
+  else:
+    let size = w.logicalSize
+    let pos = w.position
+    ide.settings.window = (pos.x, pos.y, int(size.w), int(size.h), false)
 
 proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): IdeForm =
   ## Builds the window (no project yet; see `startup`). `Application.init()`
@@ -31,6 +44,13 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide.settings = loadSettings(settingsFile)
   ide.setBounds(0, 0, width.float32, height.float32)
   ide.position = poScreenCenter
+  let ws = ide.settings.window
+  if ws.w >= MinWindowW and ws.h >= MinWindowH:     # where the window was last time
+    ide.setBounds(ws.x.float32, ws.y.float32, ws.w.float32, ws.h.float32)
+    ide.position = poDesigned
+  if ws.maximized:
+    ide.onShow = proc(sender: Control) =
+      discard maximizeWindow(ide.win.window)
   ide.askSave = askSaveDefault
   ide.askOverwrite = askOverwriteDefault
   ide.showError = showErrorDefault
@@ -86,8 +106,9 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
   ide.refreshActions()
   ide.updateCaption()
 
-  if ide.settings.layout.len > 0:
-    discard ide.site.loadLayout(ide.settings.layout)
+  if ide.settings.layout.len > 0 and not ide.site.loadLayout(ide.settings.layout):
+    ide.resetLayout()
+    ide.say "The saved window layout could not be used; the default layout is shown (Reset Layout)"
 
   ide.onCloseQuery = proc(sender: Form, canClose: var bool) =
     # ask for every modified unit first (Cancel keeps the window open), then
@@ -105,6 +126,7 @@ proc newIdeForm*(settingsFile = settingsPath(), width = 1360, height = 860): Ide
       canClose = false                   # a failed save counts as Cancel
       return
     ide.programReset()
+    ide.rememberWindow()
     ide.saveLayout()
   Application.addIdleHook("ide-sync", proc() = ide.flush())
   ide

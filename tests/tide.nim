@@ -335,6 +335,22 @@ suite "files changed on disk":
     discard ide.closeProject()
 
 suite "layout":
+  test "a saved layout that cannot be used gives the default layout and a note":
+    let f = root / "bad-layout.json"
+    writeFile(f, """{"layout": "not a layout"}""")
+    let other = newIdeForm(settingsFile = f)
+    check other.status.panels[ord spMessage].text.contains("layout")
+    check other.pnlProject.state != dpHidden and other.pnlInspector.state != dpHidden
+
+  test "the window position and size are remembered":
+    ide.rememberWindow()
+    check ide.settings.window.w == 1360 and ide.settings.window.h == 860
+    check not ide.settings.window.maximized
+    let f = root / "bounds.json"
+    writeFile(f, """{"window": {"x": 30, "y": 40, "w": 900, "h": 700, "maximized": false}}""")
+    let other = newIdeForm(settingsFile = f)
+    check other.left == 30 and other.top == 40 and other.width == 900 and other.height == 700
+
   test "the docking layout is saved and restored":
     check ide.openProject(projectFile)
     ide.pnlProject.hide()

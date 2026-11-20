@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The window comes back where it was (position, size, maximized). A saved docking layout
+  that cannot be used no longer fails silently: the default layout is shown and the
+  status bar says so. Component search also finds a class by other words (`tabs` finds
+  PageControl, `multiline` Memo, `interval` Timer); a class without an icon shows its
+  name on its palette button.
 - Save no longer silently overwrites a `.nim` or `.nfm` that another program changed
   since the unit was opened or last saved: it asks "... changed on disk. Overwrite?",
   and Cancel leaves the file alone (the save counts as failed, so closing stays open).

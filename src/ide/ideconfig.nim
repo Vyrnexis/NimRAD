@@ -3,7 +3,8 @@
 ##
 ## ```json
 ## {"recentProjects": ["/home/me/app/app.nimproj"], "theme": "light",
-##  "editorFontSize": 13, "nimPath": "nim", "layout": "", "showHints": false}
+##  "editorFontSize": 13, "nimPath": "nim", "layout": "", "showHints": false,
+##  "window": {"x": 100, "y": 60, "w": 1360, "h": 860, "maximized": false}}
 ## ```
 ##
 ## `loadSettings` never fails: a missing or corrupt file, or a field of the
@@ -16,6 +17,8 @@ import ./fileio
 const
   MaxRecent* = 10
   DefaultFontSize* = 13
+  MinWindowW* = 480              ## smaller saved windows are ignored
+  MinWindowH* = 320
 
 type
   Settings* = object
@@ -25,6 +28,10 @@ type
     nimPath*: string               ## the compiler to run ("nim" = look in PATH)
     layout*: string                ## docking layout string (opaque to this module)
     showHints*: bool               ## compiler hints are requested and listed
+    window*: WindowState           ## where the main window was (w = 0: never saved)
+
+  WindowState* = tuple[x, y, w, h: int, maximized: bool]
+    ## Position and size of the window when it is not maximized, and whether it was.
 
 proc defaultSettings*(): Settings =
   Settings(theme: "light", editorFontSize: DefaultFontSize, nimPath: "nim")
@@ -71,6 +78,17 @@ proc loadSettings*(path = settingsPath()): Settings =
     result.layout = j["layout"].getStr
   if j.hasKey("showHints") and j["showHints"].kind == JBool:
     result.showHints = j["showHints"].getBool
+  if j.hasKey("window") and j["window"].kind == JObject:
+    let w = j["window"]
+    proc num(k: string, lo, hi: int): int =
+      if w.hasKey(k) and w[k].kind == JInt and w[k].getInt in lo .. hi: w[k].getInt
+      else: low(int)
+    let (x, y, ww, hh) = (num("x", -32000, 32000), num("y", -32000, 32000),
+                          num("w", MinWindowW, 20000), num("h", MinWindowH, 20000))
+    if low(int) notin [x, y, ww, hh]:           # all four or nothing
+      result.window = (x, y, ww, hh, false)
+    if w.hasKey("maximized") and w["maximized"].kind == JBool:
+      result.window.maximized = w["maximized"].getBool
 
 proc saveSettings*(s: Settings, path = settingsPath()): bool =
   ## Returns false when the file cannot be written.
@@ -78,7 +96,9 @@ proc saveSettings*(s: Settings, path = settingsPath()): bool =
     createDir(parentDir(path))
     let j = %*{"recentProjects": s.recentProjects, "theme": s.theme,
                "editorFontSize": s.editorFontSize, "nimPath": s.nimPath,
-               "layout": s.layout, "showHints": s.showHints}
+               "layout": s.layout, "showHints": s.showHints,
+               "window": {"x": s.window.x, "y": s.window.y, "w": s.window.w, "h": s.window.h,
+                          "maximized": s.window.maximized}}
     writeFileAtomic(path, j.pretty & "\n")
     true
   except CatchableError:

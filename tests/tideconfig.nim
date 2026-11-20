@@ -19,11 +19,22 @@ suite "settings":
     s.nimPath = "/usr/bin/nim"
     s.layout = "a|b\nc"
     s.showHints = true
+    s.window = (120, 40, 1280, 800, true)
     s.addRecent("/p/one.nimproj")
     check saveSettings(s, path)
     check fileExists(path)
     let q = loadSettings(path)
     check q == s
+
+  test "the window bounds are kept only when they make sense":
+    writeFile(path, """{"window": {"x": -5, "y": 7, "w": 1000, "h": 700, "maximized": true}}""")
+    check loadSettings(path).window == (-5, 7, 1000, 700, true)
+    writeFile(path, """{"window": {"x": 1, "y": 2, "w": 10, "h": 700}}""")        # too small
+    check loadSettings(path).window.w == 0
+    writeFile(path, """{"window": {"x": 1, "w": 1000, "h": 700}}""")             # no y
+    check loadSettings(path).window.w == 0
+    writeFile(path, """{"window": "big"}""")
+    check loadSettings(path).window.w == 0
 
   test "recent projects: front, no duplicates, max 10":
     var s = defaultSettings()

@@ -44,6 +44,34 @@ const paletteTabs*: array[4, PaletteTab] = [
   ("Views", @["TreeView", "ListView", "CodeEdit"]),
   ("System", @["Timer", "ImageList", "ActionList"])]
 
+# Words that find a class in the filter besides its name (the hint is the name).
+const classKeywords* = [
+  ("Label", "text caption static"), ("Edit", "text box input field single line"),
+  ("Memo", "multiline text box multi line"), ("Button", "push click command"),
+  ("CheckBox", "check tick toggle option"), ("RadioButton", "radio option choice"),
+  ("ListBox", "list items choices"), ("ComboBox", "combo dropdown drop down list choice"),
+  ("ScrollBar", "scroll slider"), ("GroupBox", "group frame container caption"),
+  ("Panel", "container group box"), ("MainMenu", "menu bar"),
+  ("PopupMenu", "context menu right click"), ("Bevel", "line border frame"),
+  ("Image", "picture bitmap graphic png"), ("PaintBox", "draw canvas custom paint"),
+  ("SpinEdit", "number spin updown integer"), ("TrackBar", "slider range"),
+  ("ProgressBar", "progress bar percent"), ("ScrollBox", "scroll container"),
+  ("Splitter", "resize divider"), ("StatusBar", "status panels bottom"),
+  ("ToolBar", "tool strip icons"), ("PageControl", "tabs pages notebook tab sheet"),
+  ("StringGrid", "table grid cells rows columns"), ("DrawGrid", "table grid custom cells"),
+  ("TreeView", "tree nodes hierarchy"), ("ListView", "list report icons columns")]
+
+proc keywordsOf*(className: string): string =
+  ## The extra search words of a class ("" when it has none).
+  for (n, k) in classKeywords:
+    if n == className: return k
+  case className
+  of "CodeEdit": "code editor source syntax"
+  of "Timer": "interval tick"
+  of "ImageList": "images icons pictures"
+  of "ActionList": "actions commands"
+  else: ""
+
 proc known*(className: string): bool = classByName(className) != nil
 
 proc classes*(p: ComponentPalette): seq[string] =
@@ -95,7 +123,7 @@ proc highlight(p: ComponentPalette, className: string) =
 
 proc applyFilter*(p: ComponentPalette) =
   ## Shows the classes that contain the filter text (case-insensitive, in the
-  ## class name or its hint), or the tabs again when the text is empty.
+  ## class name or its search words, see `classKeywords`), or the tabs again when the text is empty.
   let q = p.filter.text.strip.toLowerAscii
   if q.len == 0:
     p.results.visible = false
@@ -105,7 +133,7 @@ proc applyFilter*(p: ComponentPalette) =
     return
   var first = ""
   for (n, b) in p.found:
-    let hit = q in n.toLowerAscii or q in b.hint.toLowerAscii
+    let hit = q in n.toLowerAscii or q in n.keywordsOf
     b.visible = hit
     if hit and first.len == 0: first = n
   p.root.visible = false
@@ -178,8 +206,8 @@ proc newComponentPalette*(parent: Container, ide: ImageList, paletteImages: Imag
     for cls in tab.classes:
       if not cls.known: continue
       let b = newToolButton(bar, cls, tbsCheck)
-      b.showCaption = false
       b.imageIndex = index.iconOf(cls)
+      b.showCaption = b.imageIndex < 0       # no icon: the name instead of a blank button
       b.hint = cls
       b.onClick = pickHandler(p, cls)
       p.buttons.add (cls, b)
@@ -187,8 +215,8 @@ proc newComponentPalette*(parent: Container, ide: ImageList, paletteImages: Imag
   # the results group: one button per class, shown or hidden by the filter
   for cls in p.classes:
     let b = newToolButton(p.resBar, cls, tbsCheck)
-    b.showCaption = false
     b.imageIndex = index.iconOf(cls)
+    b.showCaption = b.imageIndex < 0
     b.hint = cls
     b.visible = false
     b.onClick = pickHandler(p, cls)

@@ -37,6 +37,17 @@ suite "palette search":
     filterWith "zzz"
     check pal.matches.len == 0
 
+  test "a word that is not in the class name finds the class":
+    filterWith "tabs"
+    check pal.matches == @["PageControl"]
+    filterWith "multiline"
+    check pal.matches == @["Memo"]
+    filterWith "interval"
+    check pal.matches == @["Timer"]
+    filterWith "text box"
+    check pal.matches == @["Edit", "Memo"]
+    pal.clearFilter()
+
   test "clearing restores the tabs as they were" :
     pal.root.activePageIndex = 1
     filterWith "label"

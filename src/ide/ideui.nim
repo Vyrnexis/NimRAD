@@ -225,21 +225,21 @@ proc buildMenu*(ide: IdeForm) =
 
 proc buildToolbars*(ide: IdeForm, parent: Container) =
   let a = ide.acts
-  proc fill(bar: ToolBar, ids: openArray[ActId]) =
+  proc fill(bar: ToolBar, groups: openArray[seq[ActId]]) =
+    ## One group of buttons after the other, a separator between them.
     bar.images = ide.ideIcons
-    for id in ids:
-      if id == aExit:          # a separator marker
-        newToolButton(bar, kind = tbsSeparator)
-      else:
+    for g, ids in groups:
+      if g > 0: newToolButton(bar, kind = tbsSeparator)
+      for id in ids:
         let b = newToolButton(bar, "", tbsButton)
         b.action = a[id]
         b.showCaption = false
   let bar1 = newToolBar(parent)
-  bar1.fill [aNewApp, aOpenProject, aSave, aSaveAll, aExit, aNewForm, aAddToProject,
-             aRemoveFromProject, aExit, aUndo, aRedo]
+  bar1.fill [@[aNewApp, aOpenProject, aSave, aSaveAll], @[aNewForm, aAddToProject, aRemoveFromProject],
+             @[aUndo, aRedo]]
   let bar2 = newToolBar(parent)
-  bar2.fill [aCompile, aRun, aReset, aExit, aToggleView, aExit, aViewProjectMgr,
-             aViewInspector, aViewTree, aViewMessages]
+  bar2.fill [@[aCompile, aRun, aReset], @[aToggleView], @[aViewProjectMgr, aViewInspector,
+             aViewTree, aViewMessages]]
 
 proc buildDocking*(ide: IdeForm) =
   let site = newDockSite(ide)
