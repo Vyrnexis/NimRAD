@@ -134,6 +134,8 @@ proc connectActions*(ide: IdeForm) =
   on aNextMessage: discard ide.nextMessage()
   on aNextMessageAlt: discard ide.nextMessage()
   on aCompile: discard ide.compile()
+  on aBuild: discard ide.build()
+  on aSyntaxCheck: discard ide.syntaxCheck()
   on aRun: discard ide.run()
   on aReset: ide.programReset()
   on aPointer:
@@ -211,6 +213,9 @@ proc buildMenu*(ide: IdeForm) =
   for id in [aAddToProject, aAddFont, aRemoveFont, aRemoveFromProject, aViewSource]: proj.addAct a[id]
   proj.addSeparator()
   proj.addAct a[aProjectOptions]
+  proj.addSeparator()
+  proj.addAct a[aBuild]
+  proj.addAct a[aSyntaxCheck]
   let run = m.addItem("&Run")
   for id in [aCompile, aRun, aReset]: run.addAct a[id]
   run.addSeparator()

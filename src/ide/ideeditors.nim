@@ -295,6 +295,7 @@ proc refreshActions*(ide: IdeForm) =
     a[id].enabled = ide.messages.nextJumpable() >= 0
   a[aProjectOptions].enabled = hasProject
   a[aCompile].enabled = hasProject and not busy
+  for id in [aBuild, aSyntaxCheck]: a[id].enabled = hasProject and not busy
   a[aRun].enabled = hasProject and not busy
   a[aReset].enabled = busy
   a[aPointer].enabled = designer

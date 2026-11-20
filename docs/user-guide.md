@@ -246,6 +246,8 @@ switching to another one unregisters the project's fonts as well.
 | Command | Shortcut | Notes |
 |---|---|---|
 | Run > Compile | `Ctrl+F9` | Saves all, compiles in the background; always runs the compiler |
+| Project > Build | `Shift+F9` | Like Compile, but compiles everything again (`nim c -f`), ignoring what is up to date; Run still finds the result up to date |
+| Project > Syntax Check | | `nim check` on the program file: errors and warnings are listed in Messages and the error lines marked, but no program is made and nothing is recorded |
 | Run > Run | `F9` | Compiles when something changed (otherwise says `Up to date`), then starts the program (see below) |
 | Run > Program Reset | `Ctrl+F2` | Stops the running program or the compiler, and every process they started (the C compiler, programs your program launched) |
 | Run > Parameters... | | The command line arguments of the program, written like a shell line (`--fast "a b"`) |
@@ -543,6 +545,7 @@ editor has Nim highlighting, folding, bracket matching and auto indent.
 | `Shift+F11` | Add to Project |
 | `Shift+Ctrl+F11` | Project Options |
 | `Ctrl+F9` | Compile |
+| `Shift+F9` | Build (compile everything again) |
 | `F9` | Run |
 | `Ctrl+F2` | Program Reset |
 | `F8` / `Ctrl+Alt+Down` | Next compiler message |

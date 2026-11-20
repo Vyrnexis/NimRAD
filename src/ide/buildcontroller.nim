@@ -3,6 +3,8 @@
 ##
 ##     bpIdle --compile--> bpCompiling --ok--> bpIdle
 ##     bpIdle --run------> bpCompilingForRun --ok--> bpRunning --exit--> bpIdle
+##     bpIdle --syntax check--> bpChecking --done--> bpIdle   (`nim check`: no stamp, no program)
+##     Build is a compile with `-f` (`buildForce`, kept by the automatic retry).
 ##     a failed build with new imports (project option) goes on in bpRetrying /
 ##     bpRetryingForRun, once; a failure or a stop ends in bpIdle.
 
@@ -15,6 +17,8 @@ proc buildOptions(ide: IdeForm): BuildOptions =
   result = defaultBuildOptions()
   result.nimExe = ide.settings.nimPath
   result.hints = ide.settings.showHints
+  result.force = ide.buildForce
+  result.check = ide.buildPhase == bpChecking
 
 proc countLines(ide: IdeForm): int =
   if ide.project == nil: return 0
@@ -65,7 +69,8 @@ proc startProgram(ide: IdeForm) =
   else:
     ide.fail "Cannot start " & p.exePath
   ide.refreshActions()
-proc startBuild(ide: IdeForm, phase: BuildPhase, notes: seq[string] = @[]): bool =
+proc startBuild(ide: IdeForm, phase: BuildPhase, notes: seq[string] = @[],
+                force = false): bool =
   ## Saves everything and starts the compiler; `phase` is where the controller
   ## goes when it started.
   if ide.project == nil or ide.busy: return false
@@ -78,8 +83,9 @@ proc startBuild(ide: IdeForm, phase: BuildPhase, notes: seq[string] = @[]): bool
     ide.messages.addNote(NimvclNotFound, icError)
     ide.say "nimvcl was not found"
     return false
-  ide.setPart(spState, "Compiling...")
-  ide.say "Compiling " & ide.project.name
+  let checking = phase == bpChecking
+  ide.setPart(spState, if checking: "Checking..." else: "Compiling...")
+  ide.say (if checking: "Checking " else: "Compiling ") & ide.project.name
   ide.buildStart = epochTime()
   let onLines = proc(lines: seq[string]) = ide.messages.feedLines(lines)
   let built = ide.project
@@ -89,10 +95,14 @@ proc startBuild(ide: IdeForm, phase: BuildPhase, notes: seq[string] = @[]): bool
       ide.setPart(spState, "Ready")
       ide.refreshActions()
     else: ide.compileDone(ok)
+  # the options read the phase and the force flag
+  let before = (ide.buildPhase, ide.buildForce)
+  ide.buildPhase = phase
+  ide.buildForce = force
   if not compileProject(ide.project, onLines, onDone, ide.buildOptions):
+    (ide.buildPhase, ide.buildForce) = before
     ide.setPart(spState, "Ready")
     return false
-  ide.buildPhase = phase
   ide.refreshActions()
   true
 
@@ -100,6 +110,16 @@ proc compile*(ide: IdeForm): bool =
   ## Project > Compile: saves everything, then runs the compiler in the
   ## background. Returns false when busy or without a project.
   ide.startBuild(bpCompiling)
+
+proc build*(ide: IdeForm): bool =
+  ## Project > Build: like Compile, but the compiler is told to make everything
+  ## again (`-f`).
+  ide.startBuild(bpCompiling, force = true)
+
+proc syntaxCheck*(ide: IdeForm): bool =
+  ## Project > Syntax Check: `nim check` on the program file; the messages
+  ## come like those of a compile, no program is made and nothing is recorded.
+  ide.startBuild(bpChecking)
 
 proc run*(ide: IdeForm): bool =
   ## Run > Run: builds, then starts the program. A program the last build made
@@ -118,9 +138,32 @@ proc run*(ide: IdeForm): bool =
     return true
   ide.startBuild(bpCompilingForRun)
 
+proc checkDone(ide: IdeForm, ok: bool) =
+  ide.messages.finish()
+  ide.setPart(spState, "Ready")
+  let dt = epochTime() - ide.buildStart
+  if wasCancelled():
+    ide.messages.addNote("Syntax check cancelled", icInfo)
+    ide.say "Syntax check cancelled"
+  elif ok:
+    ide.messages.addNote("Syntax check passed: " & ide.project.name & " (" &
+                         $ide.messages.warningCount & " warnings, " & secs(dt) & ")", icSuccess)
+    ide.say "Syntax check passed"
+  else:
+    ide.messages.addNote("Syntax check found " & $ide.messages.errorCount & " errors, " &
+                         $ide.messages.warningCount & " warnings (" & secs(dt) & ")", icError)
+    ide.say "Syntax check failed"
+    ide.markErrors()
+    let first = ide.messages.firstError()
+    if first >= 0: ide.messages.jump first
+  ide.refreshActions()
+
 proc compileDone(ide: IdeForm, ok: bool) =
   let phase = ide.buildPhase
   ide.buildPhase = bpIdle
+  if phase == bpChecking:
+    ide.checkDone(ok)
+    return
   let dt = epochTime() - ide.buildStart
   ide.messages.finish()
   ide.lastBuildOk = ok
@@ -143,7 +186,7 @@ proc compileDone(ide: IdeForm, ok: bool) =
       if added.len > 0:
         ide.saveAll()
         # building again, with the imports it added
-        if ide.startBuild(if phase.forRun: bpRetryingForRun else: bpRetrying, added): return
+        if ide.startBuild(if phase.forRun: bpRetryingForRun else: bpRetrying, added, ide.buildForce): return
     ide.failedPhase = if phase.forRun: bpCompilingForRun else: bpCompiling
     ide.messages.addNote("Build failed: " & $ide.messages.errorCount & " errors, " &
                          $ide.messages.warningCount & " warnings (" & secs(dt) & ")", icError)

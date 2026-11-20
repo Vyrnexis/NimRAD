@@ -54,7 +54,7 @@ type
     ## One state instead of a handful of flags. The `...ForRun` phases start the
     ## program when the build succeeds; the `Retry` ones are the second build
     ## after the automatic import fix (it never runs a third time).
-    bpIdle, bpCompiling, bpCompilingForRun, bpRetrying, bpRetryingForRun, bpRunning
+    bpIdle, bpCompiling, bpCompilingForRun, bpRetrying, bpRetryingForRun, bpChecking, bpRunning
 
   IdeForm* = ref object of Form
     settings*: Settings
@@ -91,6 +91,7 @@ type
     syncingTree*: bool
     buildPhase*: BuildPhase     ## what the build controller is doing (see `buildcontroller`)
     failedPhase*: BuildPhase    ## the phase of the last build that failed (what a fix repeats)
+    buildForce*: bool           ## the build in progress ignores the up-to-date state (`-f`)
     buildStart*: float
     lastExitCode*: int          ## exit code of the program that ran last
     lastBuildOk*: bool

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Project > Build (`Shift+F9`) compiles everything again with `-f`, ignoring the up-to-date
+  check; Project > Syntax Check runs `nim check` and lists the messages like a compile,
+  without making a program or writing the build record. Program Reset stops either.
 - Edit > Align... and Edit > Size... (Delphi's dialogs): left sides, centers, right sides, space
   equally or center in window, horizontally and vertically; shrink to smallest, grow to
   largest or an exact width and height. Edit > Tab Order... lists the controls of the selected

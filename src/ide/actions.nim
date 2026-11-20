@@ -16,7 +16,7 @@ type
     aViewProjectMgr, aViewInspector, aViewTree, aViewMessages, aToggleView, aTheme,
     aViewUnits, aViewForms,
     aAddToProject, aAddFont, aRemoveFont, aRemoveFromProject, aViewSource, aProjectOptions,
-    aCompile, aRun, aReset, aRunParameters, aShowHints, aNextMessage, aNextMessageAlt,
+    aCompile, aBuild, aSyntaxCheck, aRun, aReset, aRunParameters, aShowHints, aNextMessage, aNextMessageAlt,
     aPointer, aFindComponent, aBringToFront, aSendToBack, aAlignLefts, aAlignTops, aCenterH, aCenterV,
     aEditorOptions, aAbout
 
@@ -71,6 +71,8 @@ const defs: array[ActId, ActDef] = [
   (aViewSource, "&View Source", "Show the main program file", "", icProject),
   (aProjectOptions, "&Options...", "Compiler flags and output folder", "Shift+Ctrl+F11", icOptions),
   (aCompile, "&Compile", "Compile the project", "Ctrl+F9", icCompile),
+  (aBuild, "&Build", "Compile the project again from scratch (nim c -f), ignoring what is up to date", "Shift+F9", icCompile),
+  (aSyntaxCheck, "&Syntax Check", "Check the project for errors without making a program (nim check)", "", -1),
   (aRun, "&Run", "Compile (if needed) and run", "F9", icRun),
   (aReset, "Program Re&set", "Stop the running program", "Ctrl+F2", icReset),
   (aRunParameters, "&Parameters...", "Command line arguments of the program", "", icOptions),

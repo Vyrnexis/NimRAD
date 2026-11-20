@@ -1,6 +1,6 @@
 import std/[unittest, os, strutils, times, sequtils]
 import nimvcl
-import ide/[project, builder, messages]
+import ide/[project, builder, messages, buildcheck]
 
 let root = getTempDir() / ("nimrad-build-" & $getCurrentProcessId())
 removeDir root
@@ -123,6 +123,21 @@ suite "sync":
     p.title = ""
     p.version = ""
     check not p.compileArgs().anyIt(it.startsWith("-d:app"))
+
+  test "force and check change the command, not the record's arguments":
+    let p = mkProject("forceargs", okSrc)
+    var o = defaultBuildOptions()
+    check p.commandArgs(o) == p.compileArgs(o)
+    o.force = true
+    check p.commandArgs(o)[0 .. 1] == @["c", "-f"]
+    check p.compileArgs(o) == p.compileArgs()
+    o.force = false
+    o.check = true
+    check p.commandArgs(o)[0] == "check" and "-f" notin p.commandArgs(o)
+    check p.compileArgs(o)[0] == "c"
+    let r = p.compileProjectSync(opts = o)
+    check r.ok and r.exe == ""
+    check not fileExists(p.stampPath(p.compileArgs()))
 
   test "missing compiler":
     let p = mkProject("nocomp", okSrc)

@@ -12,7 +12,7 @@ import nimvcl
 import nimvcl/dsl/props
 import nimvcl/controls/inspector
 import ide/[mainform, session, project, builder, ideconfig, uniteditor, messagespanel,
-            messages, palette, actions, projecttree, mainfile, editortabs, icons]
+            messages, palette, actions, projecttree, mainfile, editortabs, icons, buildcheck]
 
 if not existsEnv("SDL_VIDEO_DRIVER"): putEnv("SDL_VIDEO_DRIVER", "offscreen")
 putEnv("SDL_RENDER_DRIVER", "software")
@@ -1212,6 +1212,59 @@ suite "Align, Size and Tab Order":
     ide.askOrder = proc(title: string, items: seq[string]): seq[int] = @[]
     check not ide.tabOrderDialog()
     check ed.tabControls.mapIt(it.name) == after
+
+suite "Build and Syntax Check":
+  test "Build compiles again with -f and the result still counts as up to date for Run":
+    check ide.closeAllEditors()
+    ide.setRunParameters "--smoke"
+    check ide.compile()
+    check ide.waitIdle(180)
+    check ide.lastBuildOk
+    check ide.acts[aBuild].enabled and ide.acts[aSyntaxCheck].enabled
+    let n = ide.buildCount
+    check ide.build()
+    check ide.buildPhase == bpCompiling
+    check not ide.acts[aBuild].enabled
+    check ide.waitIdle(180)
+    check ide.lastBuildOk
+    check ide.buildCount == n + 1                     # built although nothing changed
+    check ide.run()
+    check ide.waitIdle(120)
+    check ide.buildCount == n + 1                     # Run found the build up to date
+    check ide.messages.list.items[0].caption.startsWith("Up to date")
+
+  test "Syntax Check: no program, no record, errors are listed and marked":
+    let stamp = ide.project.stampPath(ide.project.compileArgs())
+    let stampBefore = readFile(stamp)
+    let n = ide.buildCount
+    let unitFile = ide.project.dir / "unit1.nim"
+    let orig = readFile(unitFile)
+    check ide.syntaxCheck()
+    check ide.buildPhase == bpChecking
+    check ide.waitIdle(180)
+    check ide.buildPhase == bpIdle
+    check ide.messages.errorCount == 0
+    check ide.messages.list.items[ide.messages.list.items.count - 1].caption.startsWith("Syntax check passed")
+    check ide.status.panels[0].text == "Ready"
+    # an error
+    writeFile(unitFile, orig & "\nlet broken: int = \"oops\"\n")
+    check ide.syntaxCheck()
+    check ide.waitIdle(180)
+    check ide.messages.errorCount >= 1
+    check ide.messages.msgs[ide.messages.firstError()].file.extractFilename == "unit1.nim"
+    check ide.messages.list.items[ide.messages.list.items.count - 1].caption.startsWith("Syntax check found")
+    check ide.editorOf("unit1") != nil
+    writeFile(unitFile, orig)
+    check ide.buildCount == n
+    check readFile(stamp) == stampBefore
+    check ide.closeAllEditors()
+
+  test "Program Reset stops a syntax check":
+    check ide.syntaxCheck()
+    check ide.acts[aReset].enabled
+    ide.programReset()
+    check ide.waitIdle(60)
+    check ide.messages.list.items[ide.messages.list.items.count - 1].caption == "Syntax check cancelled"
 
 suite "reopen and startup":
   setup:

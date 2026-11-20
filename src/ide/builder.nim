@@ -31,6 +31,8 @@ type
     nimExe*: string        ## the compiler to run, "nim" = look it up in PATH
     hints*: bool           ## false adds `--hints:off`
     extraArgs*: seq[string]
+    force*: bool           ## `-f`: compile everything again (`commandArgs`)
+    check*: bool           ## `nim check` instead of `nim c`: no program, no stamp
 
   CompileResult* = object
     ok*: bool
@@ -75,6 +77,14 @@ proc compileArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
   result.add "--outdir:" & p.outputPath
   result.add opts.extraArgs
   result.add p.mainPath
+
+proc commandArgs*(p: Project, opts = defaultBuildOptions()): seq[string] =
+  ## What is really run: `compileArgs` with `check` and `force` applied. These
+  ## two are not part of `compileArgs`, so the record of a build (`buildcheck`)
+  ## stays the same for a forced build.
+  result = p.compileArgs(opts)
+  if opts.check: result[0] = "check"
+  if opts.force: result.insert("-f", 1)
 
 # ----------------------------------------------------------- process streams
 
@@ -183,10 +193,10 @@ proc compileProjectSync*(p: Project, onLine: LineProc = nil,
   let lines = new seq[string]
   let args = p.compileArgs(opts)
   let snap = takeSnapshot(p, args, opts.nimExe)
-  let code = streamProcess(opts.nimExe, args, p.dir, collectLines(lines, onLine), nil)
-  if code == 0: recordBuild(p, snap)
+  let code = streamProcess(opts.nimExe, p.commandArgs(opts), p.dir, collectLines(lines, onLine), nil)
+  if code == 0 and not opts.check: recordBuild(p, snap)
   result = CompileResult(ok: code == 0, exitCode: code, lines: lines[],
-                         exe: if code == 0: p.exePath else: "")
+                         exe: if code == 0 and not opts.check: p.exePath else: "")
 
 proc runCapture*(exe: string, args: seq[string] = @[], workDir = "",
                  onLine: LineProc = nil): tuple[exitCode: int, lines: seq[string]] =
@@ -303,10 +313,11 @@ proc compileProject*(p: Project, onLines: LinesProc, onDone: DoneProc,
   createDir p.outputPath
   gState = bsCompiling
   gOnCompileDone = onDone
-  let args = p.compileArgs(opts)
-  gProject = p
-  gSnapshot = takeSnapshot(p, args, opts.nimExe)
-  startJob(jkCompile, JobArgs(kind: jkCompile, exe: opts.nimExe, args: args,
+  gProject = nil                        # `nim check` leaves no stamp
+  if not opts.check:
+    gProject = p
+    gSnapshot = takeSnapshot(p, p.compileArgs(opts), opts.nimExe)
+  startJob(jkCompile, JobArgs(kind: jkCompile, exe: opts.nimExe, args: p.commandArgs(opts),
                               dir: p.dir, outExe: p.exePath), onLines)
   true
 
