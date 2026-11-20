@@ -466,9 +466,14 @@ proc addFontFile*(p: Project, path: string): ProjectFont =
       return f
   if fileExists(dest) and normalizedPath(path) != normalizedPath(dest):
     raise newException(ProjectError, rel & " already exists in the project")
+  let style = styleName(info.style)
+  for f in p.fonts:
+    if f.file != rel and f.family == info.family and f.style == style:
+      raise newException(ProjectError, "the project already has " & info.family & " (" & style &
+                         ") in " & f.file & "; remove it first to use " & path.extractFilename)
   createDir p.dir / "fonts"
   if normalizedPath(path) != normalizedPath(dest): copyFile(path, dest)
-  result = ProjectFont(file: rel, family: info.family, style: styleName(info.style))
+  result = ProjectFont(file: rel, family: info.family, style: style)
   p.fonts = p.fonts.filterIt(it.file != rel)
   p.fonts.add result
 

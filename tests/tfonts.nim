@@ -63,6 +63,13 @@ suite "project fonts":
     check errors.len == 2
     check ide.project.fonts.len == 1
 
+  test "a second file with the same family and style is refused":
+    copyFile(srcFont, root / "Copy.ttf")
+    check not ide.addFontFile(root / "Copy.ttf")
+    check "already has" in errors[^1]
+    check ide.project.fonts.len == 1 and not fileExists(ide.project.dir / "fonts" / "Copy.ttf")
+    errors.setLen 2
+
   test "the Inspector offers Bundled, Project and System families":
     let ed = ide.activeEditor
     check ed != nil

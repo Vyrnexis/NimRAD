@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add Font File refuses a second file with the same family and style (the program would
+  not compile).
 - Saving a project keeps the keys this version does not know inside unit and font
   records (as it already did at the top level).
 - Output: a partial line (a prompt without a newline) shows after 0.2 s instead of
