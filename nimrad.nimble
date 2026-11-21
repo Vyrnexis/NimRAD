@@ -10,10 +10,10 @@ bin           = @["nimrad"]
 # Dependencies
 
 requires "nim >= 2.2.0"
-# nimvcl brings in the SDL3 binding itself. Pinned to a release tag (bump it
-# when nimvcl is released). During development a sibling
+# nimvcl brings in the SDL3 binding itself. A version range, not a #tag:
+# nimble 0.22 leaves a #tag dependency off the compiler path when it is already installed. During development a sibling
 # checkout (../nimvcl) is preferred, see config.nims.
-requires "https://github.com/Vyrnexis/nimvcl#v0.4.0"
+requires "https://github.com/Vyrnexis/nimvcl >= 0.4.1"
 
 task test, "Run the test suite headless":
   exec "bash scripts/test.sh"
