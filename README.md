@@ -21,7 +21,7 @@ runtime. (NimRAD was called nimvcl-ide before 0.2.0; see
 <img src="docs/images/ide-dark.png" width="32%" alt="The dark theme">
 </p>
 
-**Status:** version 0.3.1, built on nimvcl 0.4.1 (`nimrad.nimble` pins the
+**Status:** version 0.3.2, built on nimvcl 0.4.1 (`nimrad.nimble` pins the
 release tag). Linux is the supported platform; Windows and macOS are
 experimental. New to it? Start with the [tutorial](docs/tutorial.md); the
 [user guide](docs/user-guide.md) covers the rest. Source:

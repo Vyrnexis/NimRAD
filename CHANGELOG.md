@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.2 - 2026-11-21
+
+- `nimble install` failed with "cannot open file: sdl3" when nimvcl or the SDL3 binding was already installed: nimvcl is now required by version range (`>= 0.4.1`, which requires SDL3 the same way) instead of a pinned tag.
+
 ## 0.3.1 - 2026-11-21
 
 - The IDE builds without compiler warnings (unused imports removed), so `nimble install` is quiet.
